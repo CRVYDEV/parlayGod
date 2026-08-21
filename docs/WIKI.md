@@ -1215,6 +1215,43 @@ back any time and the money returns; nobody runs it in a day and the money retur
 escrow is cash sitting outside your pocket, so it is NOT a hiding place: you cannot post from a
 safehouse, and a killer takes a quarter of every open favor you were holding.
 
+## 30d. Risk Factors — the honest register
+
+Every promise in this game is a formula you can check; this section is the other half — what can go
+wrong, stated plainly BEFORE you plan around it. It is not legal advice, and it is deliberately
+written the way a careful counterparty would want it written. Figures below are the live levers; if
+a lever moves, this page moves with it (a test enforces that).
+
+- **Thin launch liquidity.** The token's market opens SMALL by design. Ordinary trades move the
+  price, and a round trip pays the sell tax plus slippage. Do not treat the pool as an exit for
+  size.
+- **Selling is taxed.** On a DEX sell, 9% comes off the top (split between the founder, the
+  treasury and the pool's own depth). On top of that, $OMR younger than 48 hours pays an early-exit
+  surcharge — up to an extra 50% that fades to zero over the window. Fresh tokens are expensive to
+  flip; that is the design, not a bug.
+- **Withdrawing pays a toll and can queue.** Every on-chain withdrawal pays a flat 2% toll, and the
+  rail is FULL-RESERVE: the server signs only what the reserve already holds, funded by real
+  revenue. If the reserve is thin your withdrawal QUEUES — debited, safe, and signed when revenue
+  funds it. No timing is promised.
+- **Nothing you hold is safe from the game.** Unstaked principal unbonds for 6 hours and is
+  lootable the whole time. A killer takes up to 50% of a loose balance and 20% of a staked one.
+  When your street falls, the estate burns 25% of the liquid $OMR your heir inherits. Committing a
+  balance makes it cheaper to hold, never safe.
+- **You cannot grind the token.** Nothing in the game mints $OMR to players on a schedule. The
+  earnable surface is small and finite (the mission ladder plus the daily envelope). Plan to EARN
+  in cash and to reach $OMR by playing well against people who hold it — never by farming.
+- **Death is real.** Your street dies, its cash-side holdings die with it, and the account-level
+  survivors are enumerated (they are the exception, not the rule).
+- **The house edge is real.** Every den game is negative expected value for the player and says so
+  on its own card. Gambling here is entertainment priced as entertainment; the expected outcome of
+  a long session is loss.
+- **Extraction is not open yet.** The withdrawal rail is built and devnet-proven, and it opens only
+  when the third-party audit and the launch review clear. Until then $OMR is an in-game balance.
+- **The root of trust is a Safe.** The game is server-authoritative and its chain levers are held
+  by a Safe. That is a disclosed trust assumption, not an apology — the invariants that watch it
+  run nightly, and their alarms reach a human.
+- **The complete list is unwriteable.** Anything not listed here is not therefore safe.
+
 ## 31. Reference
 
 ### Districts
