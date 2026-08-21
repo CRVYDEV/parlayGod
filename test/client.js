@@ -2526,7 +2526,12 @@ if (mark) {
   // action is skipped — which is exactly how two of these fixes survived their own mutation. Pick
   // ones nothing else has claimed, and prove they drove by their line appearing in `said`.
   const owned = new Set((await app.pool.query('SELECT kind FROM businesses WHERE character_id=$1', [charId])).rows.map((r) => r.kind));
-  const front = BUSINESSES.find((b) => !owned.has(b.kind));
+  // ...and a kind ACTIONS does not ALREADY buy. It did: the seed owns the laundromat, so this
+  // resolved to `restaurant` — which the main list buys first — and the row 400'd `exists` and was
+  // skipped, reading on the summary line exactly like a covered action. It was the ONLY skip in the
+  // whole 217-action run, found by instrumenting the loop rather than by reading it.
+  const claimed = new Set(ACTIONS.map(([, u]) => /^\/v1\/business\/([a-z]+)\/buy$/.exec(u)?.[1]).filter(Boolean));
+  const front = BUSINESSES.find((b) => !owned.has(b.kind) && !claimed.has(b.kind));
   const hired = new Set((await app.pool.query(
     'SELECT staff_id FROM estate_staff WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId])).rows.map((r) => r.staff_id));
   const staff = (ESTATE.STAFF || []).find((x) => !hired.has(x.id));
@@ -2539,7 +2544,16 @@ if (mark) {
   addAction(['POST', `/v1/garage/${carId}/melt`, null]);
   if (good) addAction(['POST', '/v1/market', { kind: 'good', goodId: good.id, qty: 3, price: 800 }],
                          ['POST', '/v1/market/order', { goodId: good.id, qty: 4, price: 900 }]);
-  if (front) addAction(['POST', `/v1/business/${front.kind}/buy`, null]);
+  // THE FRONT'S UPGRADE — the racket's story one system over, and found the same way. LAZY, because
+  // the id is created by the row right above it: resolving up front reads a row the drive then
+  // replaces. A resolver returning falsy SKIPS in silence, so the named assertion below is what
+  // actually holds this — it fails if the line never appeared, whatever the reason.
+  if (front) addAction(['POST', `/v1/business/${front.kind}/buy`, null],
+    ['POST', async () => {
+      const row = (await app.pool.query('SELECT id FROM businesses WHERE character_id=$1 AND kind=$2',
+        [charId, front.kind])).rows[0];
+      return row ? `/v1/business/${row.id}/upgrade` : null;
+    }, null]);
   if (staff) addAction(['POST', '/v1/estate/upgrade', null], ['POST', `/v1/estate/staff/${staff.id}`, null]);
   addAction(['POST', '/v1/loans', { amount: 5000, rate: 0.2, hours: 24 }]);
   // THE RACKET UPGRADE. The BUY has read an hourly rate since it shipped; the UPGRADE three lines
@@ -3536,6 +3550,23 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
     `over incomePerHr ${upBody.incomePerHr}`);
   assert(upLine.includes(String(upBody.level)),
     `…and which rung it now stands on. Got: ${JSON.stringify(upLine)} over level ${upBody.level}`);
+}
+// THE FRONT'S UPGRADE — the same story on the personal side, found the same way and worse in one
+// respect: the reply did not carry the price AT ALL, so a $600,000 move read "the Laundromat moves
+// up to tier 2" and the client could not have said otherwise. The pad is the half that matters —
+// it is a PERCENTAGE of income, so a tier raises the recurring bill for good, and the buy line one
+// branch away has said "mind the pad" since it shipped. Crossed against what the SERVER sent, never
+// a literal: a literal passes while the two drift, which is the class this file exists to catch.
+{
+  const upUrl = [...said.keys()].find((u) => /^\/v1\/business\/[0-9a-f-]+\/upgrade$/.test(u));
+  const upLine = said.get(upUrl), upBody = paidBody.get(upUrl);
+  assert(upUrl && upLine && upBody, 'the front upgrade never drove — an upgrade with no front under '
+    + 'it answers 400 and is skipped, which reads on the summary line exactly like a covered action');
+  assert(upLine.includes(asMoney(upBody.cost)),
+    `a six-figure purchase must name its price. Got: ${JSON.stringify(upLine)} over cost ${upBody.cost}`);
+  assert(upLine.includes(asMoney(upBody.upkeepPerHr)) && /pad/i.test(upLine),
+    '…and the pad it just RAISED, which is the recurring bill a tester asked about. Got: '
+    + `${JSON.stringify(upLine)} over upkeepPerHr ${upBody.upkeepPerHr}`);
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
