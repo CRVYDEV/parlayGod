@@ -1626,6 +1626,18 @@ export const LOAN = {
   // damage-adjusted book value). On default the shark SEIZES the car (ownership move, §10.4-neutral —
   // cars conserve by row count) on top of the cash. COLLATERAL_MAX bounds the lender's asking figure.
   COLLATERAL_MAX: 5000000,
+  // Drop 5 (B — $OMR-COLLATERALIZED LOANS, NetNet package): a lender may also demand a $OMR pledge.
+  // The borrower's LIQUID $OMR (never staked — the MADE_LADDER keys on `staked`, and a pledge that
+  // climbed the ladder would be power for free) escrows INTO THE LOAN ROW at take (`loan:pledge`, a
+  // §10.4 transfer — the loans.collateral_omr column doubles as the escrow bucket on active rows),
+  // returns on repay (`loan:pledge:return`), and is SEIZED to the lender on default/grace-forfeit
+  // (`loan:seize:omr`). At the borrower's death the pledge is the lender's security — EXCEPT a
+  // player fire-kill loots OMR_LOOT_IDLE of it first (`loan:pledge:loot`): without that, an alt-ring
+  // "loan" (pledge your hoard to your own alt's offer) would be a loot-proof $OMR vault, the exact
+  // class the market-order/loan-offer audits closed on the cash side. At the flat IDLE rate the
+  // shelter is exactly neutral vs holding loose (the season loot mult deliberately stops at the
+  // body — the vault-closure property needs only the base rate). COLLATERAL_OMR_MAX bounds the ask.
+  COLLATERAL_OMR_MAX: 2000,
   // step 2 audit F1: a SECURED loan left un-collected past `due_at + GRACE_MS` auto-forfeits its
   // collateral car to the lender (the worker sweep) — so a spiteful/absent lender can't freeze the
   // borrower's car forever. The borrower always had the grace window to repay; the lender had it to

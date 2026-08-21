@@ -6,7 +6,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { LOAN, loanVig, loanOwed, carCollateralValue } from '../src/rules.js';
+import { LOAN, M3, loanVig, loanOwed, carCollateralValue } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepLoans, voidLoansAtDeath } from '../src/loans.js';
 import { huntWanted } from '../src/social.js';
@@ -501,6 +501,137 @@ assert.equal((await call('POST', '/v1/loans/house', { token: dodger.token, body:
   'the window is closed to a welsher');
 assert((await check('loan house pool')).ok, 'the pool reconciles after the seizure');
 
+// ══ DROP 5 (B): $OMR-COLLATERALIZED LOANS — the pledge escrow (liquid $OMR into the loan row) ══
+// $OMR is SQL-granted here, which creates baseline `$OMR conservation` drift by construction — so
+// every conservation claim below is a DELTA (the scale/loadtest posture), and the pledge lifecycle
+// itself must move the drift by ZERO (every leg is a transfer in neither the mint nor burn term).
+const omrOf = async (chId) => Number((await pool.query(
+  `SELECT ap.omr FROM account_persistent ap JOIN characters c ON c.account_id = ap.account_id WHERE c.id='${chId}'`)).rows[0].omr);
+const seedOmr = (chId, n) => pool.query(
+  `UPDATE account_persistent SET omr=${n} WHERE account_id=(SELECT account_id FROM characters WHERE id='${chId}')`);
+const omrLedger = async (reason) => Number((await pool.query(
+  `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='${reason}'`)).rows[0].s);
+const consDrift = async () => (await check('$OMR conservation')).drift;
+
+// offer gates + board surfacing
+const pShark = await mk('Pledge Shark');
+const pBob = await mk('Pledge Bob');
+await seedCh(pShark.id, 'cash=1000000');
+await seedCh(pBob.id, 'cash=100000');
+assert.equal((await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 50000, rate: 0.1, hours: 24, collateralOmr: LOAN.COLLATERAL_OMR_MAX + 1 } })).body.error,
+  'collateral_omr', 'a pledge demand over the cap is refused');
+r = await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 50000, rate: 0.1, hours: 24, collateralOmr: 500 } });
+assert.equal(r.code, 200, 'a $OMR-secured offer posts');
+const plgLoan = r.body.id;
+assert.equal(r.body.collateralOmr, 500, 'the response names the demand');
+board = (await call('GET', '/v1/loans', { token: pBob.token })).body;
+const pOffer = board.offers.find((o) => o.id === plgLoan);
+assert.equal(pOffer.collateralOmr, 500, 'the board names the $OMR demand');
+assert.equal(pOffer.secured, true, 'a $OMR-only demand reads as secured');
+assert.equal(board.terms.collateralOmrMax, LOAN.COLLATERAL_OMR_MAX, 'the terms publish the demand cap');
+
+// take: not enough liquid → clean refusal, nothing moves
+assert.equal((await call('POST', `/v1/loans/${plgLoan}/take`, { token: pBob.token })).body.error, 'omr',
+  'a borrower who cannot cover the pledge is refused');
+await seedOmr(pBob.id, 800);
+const drift0 = await consDrift(); // baseline AFTER the grant — the lifecycle below must not move it
+r = await call('POST', `/v1/loans/${plgLoan}/take`, { token: pBob.token });
+assert.equal(r.code, 200, 'taken with the pledge covered');
+assert.equal(r.body.pledgedOmr, 500, 'the response names the escrowed pledge');
+assert.equal(await omrOf(pBob.id), 300, 'the pledge left the borrower\'s liquid balance');
+assert.equal(await omrLedger('loan:pledge'), -500, 'the pledge debit is ledgered (loan:pledge)');
+assert((await check('loan omr pledge escrow')).ok, 'the $OMR pledge escrow reconciles mid-loan (active row == pledged in)');
+assert.equal((await consDrift()) - drift0, 0, 'the pledge is a TRANSFER — conservation drift is unmoved by escrowing it');
+board = (await call('GET', '/v1/loans', { token: pBob.token })).body;
+assert.equal(board.active.find((l) => l.id === plgLoan).pledgedOmr, 500, 'the book shows the pledge on the active row');
+
+// repay: the pledge comes home
+r = await call('POST', `/v1/loans/${plgLoan}/repay`, { token: pBob.token });
+assert.equal(r.code, 200, 'squared up');
+assert.equal(r.body.pledgeReturned, 500, 'the response says the pledge came home');
+assert.equal(await omrOf(pBob.id), 800, 'the borrower\'s liquid balance is whole again');
+assert.equal(await omrLedger('loan:pledge:return'), 500, 'the return is ledgered (loan:pledge:return)');
+assert((await check('loan omr pledge escrow')).ok, 'the escrow empties on repay');
+assert.equal((await consDrift()) - drift0, 0, 'the full pledge round-trip moves conservation by zero');
+
+// default → collect: the lender takes the pledge
+const dBob = await mk('Deadbeat Danny');
+await seedCh(dBob.id, 'cash=100000');
+await seedOmr(dBob.id, 400);
+const drift1 = await consDrift();
+const cLoan = (await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 30000, rate: 0.1, hours: 1, collateralOmr: 400 } })).body.id;
+await call('POST', `/v1/loans/${cLoan}/take`, { token: dBob.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${cLoan}'`);
+await seedCh(dBob.id, 'cash=0, bank=0');
+const sharkOmr0 = await omrOf(pShark.id);
+r = await call('POST', `/v1/loans/${cLoan}/collect`, { token: pShark.token });
+assert.equal(r.code, 200, 'collected');
+assert.equal(r.body.omrSeized, 400, 'the lender takes the pledged $OMR on default');
+assert.equal(await omrOf(pShark.id) - sharkOmr0, 400, 'the seize lands on the lender\'s account');
+assert.equal(await omrLedger('loan:seize:omr'), 400, 'the seize is ledgered (loan:seize:omr)');
+assert((await check('loan omr pledge escrow')).ok, 'the escrow reconciles after a seize');
+assert.equal((await consDrift()) - drift1, 0, 'a default seize is a transfer — conservation unmoved');
+
+// grace-forfeit: the sweep hands an abandoned $OMR-only-secured pledge to the lender
+const gBob = await mk('Ghosted Gary');
+await seedCh(gBob.id, 'cash=100000');
+await seedOmr(gBob.id, 250);
+const fLoan = (await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 20000, rate: 0.1, hours: 1, collateralOmr: 250 } })).body.id;
+await call('POST', `/v1/loans/${fLoan}/take`, { token: gBob.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '${Math.ceil(LOAN.GRACE_MS / 3600000) + 2} hours' WHERE id='${fLoan}'`);
+const sharkOmr1 = await omrOf(pShark.id);
+const fs2 = await sweepLoans(pool);
+assert(fs2.forfeited >= 1, 'the sweep forfeits the abandoned $OMR-secured loan');
+assert.equal(await omrOf(pShark.id) - sharkOmr1, 250, 'the grace-forfeit hands the pledge to the lender');
+assert.equal((await pool.query(`SELECT status FROM loans WHERE id='${fLoan}'`)).rows[0].status, 'collected', 'the loan resolves');
+assert((await check('loan omr pledge escrow')).ok, 'the escrow reconciles after the grace-forfeit');
+
+// borrower DEATH under a player fire-kill: the pledge is looted at the flat IDLE rate — the vault is closed.
+// (An alt-ring "loan" would otherwise be a loot-immune $OMR shelter; at OMR_LOOT_IDLE it is exactly
+// neutral vs holding loose.) Direct estate-hook call with the killer's account threaded (h.acct/h.accountId
+// — the fire path's own shape, combat.js).
+const dv = await mk('Doomed Victor');
+const dvKiller = await mk('Pledge Killer');
+await seedCh(dv.id, 'cash=100000');
+await seedOmr(dv.id, 200);
+const drift2 = await consDrift();
+const dLoan = (await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 10000, rate: 0.1, hours: 24, collateralOmr: 200 } })).body.id;
+await call('POST', `/v1/loans/${dLoan}/take`, { token: dv.token });
+const expectLoot = Math.floor(200 * M3.OMR_LOOT_IDLE), expectRest = 200 - expectLoot;
+assert(expectLoot > 0 && expectRest > 0, 'the fixture splits both ways — a one-sided split would make either assertion vacuous');
+const sharkOmr2 = await omrOf(pShark.id);
+{
+  const client = await pool.connect();
+  await client.query('BEGIN');
+  const killerCh = (await client.query(`SELECT * FROM characters WHERE id='${dvKiller.id}' FOR UPDATE`)).rows[0];
+  const acct = (await client.query(`SELECT ap.* FROM account_persistent ap WHERE ap.account_id='${killerCh.account_id}' FOR UPDATE`)).rows[0];
+  await voidLoansAtDeath(client, dv.id, { ledger, notify, acct, accountId: killerCh.account_id }, killerCh, 0.25);
+  await client.query(`UPDATE account_persistent SET omr=${Number(acct.omr)} WHERE account_id='${killerCh.account_id}'`); // persist the in-memory killer credit (the fire path's persistAccount)
+  await client.query('COMMIT'); client.release();
+}
+assert.equal(await omrOf(dvKiller.id), expectLoot, `the killer loots the pledge at the IDLE rate (${M3.OMR_LOOT_IDLE})`);
+assert.equal(await omrOf(pShark.id) - sharkOmr2, expectRest, 'the remainder goes to the lender — their security survives the body');
+assert.equal(await omrLedger('loan:pledge:loot'), expectLoot, 'the loot leg is ledgered (loan:pledge:loot)');
+assert((await check('loan omr pledge escrow')).ok, 'the escrow reconciles after the death split');
+assert.equal((await consDrift()) - drift2, 0, 'the death split is transfers all the way down — conservation unmoved');
+
+// borrower death with NO killer (NPC/mod kill): no loot leg — the whole pledge goes to the lender
+const nv = await mk('NPC-killed Ned');
+await seedCh(nv.id, 'cash=100000');
+await seedOmr(nv.id, 100);
+const nLoan = (await call('POST', '/v1/loans', { token: pShark.token, body: { amount: 5000, rate: 0.1, hours: 24, collateralOmr: 100 } })).body.id;
+await call('POST', `/v1/loans/${nLoan}/take`, { token: nv.token });
+const sharkOmr3 = await omrOf(pShark.id);
+{
+  const client = await pool.connect();
+  await client.query('BEGIN');
+  await voidLoansAtDeath(client, nv.id, { ledger, notify });
+  await client.query('COMMIT'); client.release();
+}
+assert.equal(await omrOf(pShark.id) - sharkOmr3, 100, 'a headless kill loots nothing — the lender takes the whole pledge');
+assert.equal(await omrLedger('loan:pledge:loot'), expectLoot, 'no new loot leg without a killer');
+assert((await check('loan omr pledge escrow')).ok, 'the escrow closes clean on the headless death');
+
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
@@ -508,5 +639,5 @@ assert((await check('loan escrow')).ok, 'loan-escrow still reconciles after the 
 // (car conservation is proven above by the seize being a row-MOVE with a stable COUNT — the §10.4
 // invariant itself is confounded here by directly-seeded cars, the SQL-seeded-cash precedent.)
 
-console.log('✅ test/loans.js — loan sharking (offer/take/repay/cancel/collect, welsher, sweep, death, §10.4) + STEP FIVE THE LOAN HOUSE (mod funding from the confiscation pool, the vig split feeding the window, level/floor/cap/welsher/one-debt gates, a pool-bounded take + a full repay cycle growing the pool, THE WALL (never lends past the pool), the sweep auto-collecting a default (partial seize, welsher + WANTED, the pool eats the bounded shortfall), and the loan-house-pool §10.4 check exact throughout)');
+console.log('✅ test/loans.js — loan sharking (offer/take/repay/cancel/collect, welsher, sweep, death, §10.4) + STEP FIVE THE LOAN HOUSE (mod funding from the confiscation pool, the vig split feeding the window, level/floor/cap/welsher/one-debt gates, a pool-bounded take + a full repay cycle growing the pool, THE WALL (never lends past the pool), the sweep auto-collecting a default (partial seize, welsher + WANTED, the pool eats the bounded shortfall), and the loan-house-pool §10.4 check exact throughout) + DROP 5 THE $OMR PLEDGE (demand cap, board terms, liquid-only take gate, the pledge escrowed into the row + the escrow §10.4 check, repay round-trip, default seize, grace-forfeit, the death split at the IDLE loot rate + the headless all-to-lender path — every leg a transfer, conservation drift ZERO end to end)');
 process.exit(0);

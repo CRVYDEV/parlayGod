@@ -6359,3 +6359,33 @@ money the pot has claimed (test-pinned at a constructed book state, deterministi
 **What is deliberately absent:** any new §10.4 reason for the FEED (a reservation moves no value),
 any liability change (the pot is subtracted in `denAvailable` beside the ticket exposures), and any
 $OMR surface (the pot is den cash end to end).
+
+## THE $OMR PLEDGE — collateralized loans on the P2P rail (NetNet research rec B, 2026-08-21)
+
+The Shylock's secured-credit market gains a second kind of security: a lender may demand a $OMR
+pledge (`collateralOmr` on the offer), which ESCROWS out of the borrower's LIQUID balance into the
+loan row itself at take (`loans.collateral_omr` doubles as the demand on open rows and the escrow
+bucket on active rows — Σ over `status='active'` joined `omrBuckets`, with its own §10.4 identity
+`loan omr pledge escrow`). LIQUID only, never staked — the MADE_LADDER keys on `staked`, and a
+pledge that kept climbing it would be power for free. Four exact transfer reasons under the
+`loan:` omr vocabulary prefix, in NEITHER the mint nor burn term: `loan:pledge` (borrower → the
+row), `loan:pledge:return` (repay/void → borrower), `loan:seize:omr` (default collect /
+grace-forfeit / a dead borrower's remainder → the lender), `loan:pledge:loot` (a player fire-kill
+on the borrower loots the pledge FIRST, at the flat `M3.OMR_LOOT_IDLE` rate).
+
+**The loot leg is the vault closure, and it is the load-bearing decision.** Without it, an
+alt-ring "loan" (pledge your hoard against your own alt's offer) is a loot-immune $OMR shelter —
+the exact class the market-order and loan-offer audits closed on the cash side. Looted at the
+IDLE rate, the shelter is exactly neutral against holding loose: a killer takes the same 50%
+either way, so the pledge buys credit access and nothing else. The season loot multiplier
+deliberately stops at the body (the escrow leg loots at the flat rate — the same call the cash
+`loan:loot` leg made).
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `LOAN.COLLATERAL_OMR_MAX` | **2000** | The ceiling on a demand — bounds how much of the token supply one loan row can freeze, and with it the biggest single `loan:pledge:loot` prize a kill can take. `0` retires the mechanic (no offer can demand a pledge). |
+
+**What is deliberately absent:** a mint or burn anywhere (every leg is a single-leg transfer, the
+auction:bid shape — `$OMR conservation` is proven UNMOVED across the full lifecycle in
+test/loans.js); a staked-pledge option (power-for-free through the ladder); and any exemption of
+the pledge from the death split (the vault closure IS the mechanic).

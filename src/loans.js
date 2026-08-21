@@ -65,16 +65,17 @@ async function payVig(client, hLedger, vig) {
 // offers surface their collateral_min. Active loans surface any pledged collateral (both roles).
 export async function loanBoard(pool, ch) {
   const offers = (await pool.query(
-    `SELECT l.id, l.principal, l.rate, l.hours, l.collateral_min, l.offered_to, c.name AS lender, l.lender_character
+    `SELECT l.id, l.principal, l.rate, l.hours, l.collateral_min, l.collateral_omr, l.offered_to, c.name AS lender, l.lender_character
        FROM loans l JOIN characters c ON c.id = l.lender_character
       WHERE l.status='open' AND (l.offered_to IS NULL OR l.offered_to=$1 OR l.lender_character=$1)
       ORDER BY l.offered_at DESC LIMIT 50`, [ch.id])).rows
     .map((r) => ({ id: r.id, principal: Number(r.principal), rate: Number(r.rate), hours: r.hours,
       owed: loanOwed(r.principal, r.rate), lender: r.lender, mine: r.lender_character === ch.id,
-      collateralMin: Number(r.collateral_min) || 0, secured: Number(r.collateral_min) > 0,
+      collateralMin: Number(r.collateral_min) || 0, collateralOmr: Number(r.collateral_omr) || 0,
+      secured: Number(r.collateral_min) > 0 || Number(r.collateral_omr) > 0,
       directed: !!r.offered_to, forMe: r.offered_to === ch.id }));
   const active = (await pool.query(
-    `SELECT l.id, l.principal, l.rate, l.due_at, l.lender_character, l.borrower_character, l.collateral_car, l.for_sale,
+    `SELECT l.id, l.principal, l.rate, l.due_at, l.lender_character, l.borrower_character, l.collateral_car, l.collateral_omr, l.for_sale,
             lc.name AS lender, bc.name AS borrower
        FROM loans l JOIN characters lc ON lc.id=l.lender_character
        LEFT JOIN characters bc ON bc.id=l.borrower_character
@@ -82,20 +83,21 @@ export async function loanBoard(pool, ch) {
     .map((r) => ({ id: r.id, owed: loanOwed(r.principal, r.rate),
       role: r.lender_character === ch.id ? 'lender' : 'borrower',
       counterparty: r.lender_character === ch.id ? r.borrower : r.lender,
-      collateral: !!r.collateral_car, forSale: r.for_sale != null ? Number(r.for_sale) : null,
+      collateral: !!r.collateral_car, pledgedOmr: Number(r.collateral_omr) || 0,
+      forSale: r.for_sale != null ? Number(r.for_sale) : null,
       dueSeconds: Math.ceil((new Date(r.due_at) - Date.now()) / 1000),
       overdue: new Date(r.due_at) <= new Date() }));
   // step 3: the PAPER market — active loans the lender has put up for sale (a receivables market; a
   // buyer weighs the borrower's creditworthiness — owed, collateral, overdue, the welsher mark).
   const paper = (await pool.query(
-    `SELECT l.id, l.principal, l.rate, l.due_at, l.for_sale, l.collateral_car, l.lender_character,
+    `SELECT l.id, l.principal, l.rate, l.due_at, l.for_sale, l.collateral_car, l.collateral_omr, l.lender_character,
             lc.name AS lender, bc.name AS borrower, bc.welsher AS borrower_welsher
        FROM loans l JOIN characters lc ON lc.id=l.lender_character
        JOIN characters bc ON bc.id=l.borrower_character
       WHERE l.status='active' AND l.for_sale IS NOT NULL ORDER BY l.for_sale ASC LIMIT 50`)).rows
     .map((r) => ({ id: r.id, price: Number(r.for_sale), owed: loanOwed(r.principal, r.rate),
       lender: r.lender, borrower: r.borrower, mine: r.lender_character === ch.id,
-      collateral: !!r.collateral_car, borrowerWelsher: !!r.borrower_welsher,
+      collateral: !!r.collateral_car, pledgedOmr: Number(r.collateral_omr) || 0, borrowerWelsher: !!r.borrower_welsher,
       dueSeconds: Math.ceil((new Date(r.due_at) - Date.now()) / 1000), overdue: new Date(r.due_at) <= new Date() }));
   // step 5: THE HOUSE WINDOW — the always-open NPC lender (bad terms, no counterparty needed).
   // lender_character='HOUSE' rows never hit the characters JOINs above, so they surface only here.
@@ -112,7 +114,7 @@ export async function loanBoard(pool, ch) {
       dueSeconds: Math.ceil((new Date(marker.due_at) - Date.now()) / 1000),
       overdue: new Date(marker.due_at) <= new Date() } : null,
   };
-  return { offers, active, paper, house, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS, paperTakeBps: LOAN.PAPER_TAKE_BPS } };
+  return { offers, active, paper, house, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS, paperTakeBps: LOAN.PAPER_TAKE_BPS, collateralOmrMax: LOAN.COLLATERAL_OMR_MAX } };
 }
 
 // ── step 5: THE LOAN HOUSE — the backed NPC lender (the window is always open, the terms are bad) ──
@@ -188,6 +190,10 @@ export async function offerLoan(ch, body, client, h) {
   const rate = Number(body?.rate);
   const hours = Math.floor(Number(body?.hours) || 0);
   const collateralMin = Math.max(0, Math.floor(Number(body?.collateral) || 0));
+  // Drop 5 (B): an optional $OMR pledge demand — the borrower must escrow this much LIQUID $OMR at
+  // take (into the loan row), returned on repay, seized on default. A demand, not a debit: nothing
+  // moves at offer time (the lender escrows only the principal).
+  const collateralOmr = Math.max(0, Math.floor(Number(body?.collateralOmr) || 0));
   if (jailed(ch)) throw new GameError('jailed', 'No running your book from a cell.');
   // audit (loot-proof vault): parking cash in an offer while safe-housed would be a loot-immune
   // vault (a killer can't reach escrow AND can't reach you) — the market order-post precedent.
@@ -196,6 +202,7 @@ export async function offerLoan(ch, body, client, h) {
   if (!(rate > 0) || rate > LOAN.RATE_MAX) throw new GameError('rate', `The vig runs up to ${Math.round(LOAN.RATE_MAX * 100)}%.`);
   if (hours < LOAN.TERM_MIN_H || hours > LOAN.TERM_MAX_H) throw new GameError('hours', `Terms run ${LOAN.TERM_MIN_H}–${LOAN.TERM_MAX_H} hours.`);
   if (collateralMin > LOAN.COLLATERAL_MAX) throw new GameError('collateral', `Collateral tops out at ${usd(LOAN.COLLATERAL_MAX)}.`);
+  if (collateralOmr > LOAN.COLLATERAL_OMR_MAX) throw new GameError('collateral_omr', `A $OMR pledge demand tops out at ${LOAN.COLLATERAL_OMR_MAX} $OMR.`);
   // directed (trust line): name a living borrower who alone can take it (not yourself)
   let offeredTo = null;
   if (body?.to) {
@@ -207,11 +214,11 @@ export async function offerLoan(ch, body, client, h) {
   if (Number(ch.cash) < amount) throw new GameError('cash', 'You can’t front what you don’t have.');
   ch.cash = Number(ch.cash) - amount;
   const id = uid();
-  await client.query('INSERT INTO loans (id, lender_character, principal, rate, hours, status, offered_to, collateral_min) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-    [id, ch.id, amount, rate, hours, 'open', offeredTo, collateralMin]);
+  await client.query('INSERT INTO loans (id, lender_character, principal, rate, hours, status, offered_to, collateral_min, collateral_omr) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [id, ch.id, amount, rate, hours, 'open', offeredTo, collateralMin, collateralOmr]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amount, reason: 'loan:offer' });
-  if (offeredTo) await h.notify(client, offeredTo, 'loan_offered', { by: ch.name, principal: amount, rate, collateralMin });
-  return { ok: true, id, principal: amount, owed: loanOwed(amount, rate), hours, directed: !!offeredTo, collateralMin };
+  if (offeredTo) await h.notify(client, offeredTo, 'loan_offered', { by: ch.name, principal: amount, rate, collateralMin, collateralOmr });
+  return { ok: true, id, principal: amount, owed: loanOwed(amount, rate), hours, directed: !!offeredTo, collateralMin, collateralOmr };
 }
 
 // POST /v1/loans/:id/take — a borrower takes an open offer (escrow → borrower). step 2: a DIRECTED
@@ -238,6 +245,18 @@ export async function takeLoan(ch, loanId, carId, client, h) {
     if (val < Number(loan.collateral_min)) throw new GameError('collateral', `The pledge must be worth ${usd(Number(loan.collateral_min))} — that car books at ${usd(val)}.`);
     pledgedCar = car.id;
   }
+  // Drop 5 (B): a $OMR-secured offer escrows the demand out of the borrower's LIQUID balance into the
+  // loan row itself (collateral_omr doubles as the escrow bucket once active — invariants sums it over
+  // status='active'). LIQUID only, never staked: the MADE_LADDER keys on `staked`, and a pledge that
+  // kept climbing it would be power for free. A single-leg TRANSFER row (`loan:pledge`, the auction:bid
+  // shape) — account bucket down, escrow bucket up, conservation needs no term.
+  const pledgeOmr = Math.floor(Number(loan.collateral_omr) || 0);
+  if (pledgeOmr > 0) {
+    if (Math.floor(Number(h.acct.omr)) < pledgeOmr)
+      throw new GameError('omr', `That offer wants a ${pledgeOmr} $OMR pledge — you hold ${Math.floor(Number(h.acct.omr))} liquid.`);
+    h.acct.omr = Number(h.acct.omr) - pledgeOmr;
+    await h.ledger(client, { accountId: ch.account_id, currency: 'omr', amount: -pledgeOmr, reason: 'loan:pledge', counterparty: loan.lender_character });
+  }
   ch.cash = Number(ch.cash) + Number(loan.principal);
   const dueAt = new Date(Date.now() + loan.hours * 3600 * 1000);
   await client.query("UPDATE loans SET borrower_character=$2, status='active', due_at=$3, collateral_car=$4 WHERE id=$1", [loanId, ch.id, dueAt, pledgedCar]);
@@ -246,8 +265,8 @@ export async function takeLoan(ch, loanId, carId, client, h) {
     const c = h.owned.cars.find((x) => x.id === pledgedCar); if (c) c.pledged = true; // keep the view honest
   }
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: Number(loan.principal), reason: 'loan:take', counterparty: loan.lender_character });
-  await h.notify(client, loan.lender_character, 'loan_taken', { by: ch.name, principal: Number(loan.principal), collateral: !!pledgedCar });
-  return { ok: true, principal: Number(loan.principal), owed: loanOwed(loan.principal, loan.rate), collateral: !!pledgedCar, dueSeconds: Math.ceil((dueAt - Date.now()) / 1000) };
+  await h.notify(client, loan.lender_character, 'loan_taken', { by: ch.name, principal: Number(loan.principal), collateral: !!pledgedCar, pledgedOmr: pledgeOmr });
+  return { ok: true, principal: Number(loan.principal), owed: loanOwed(loan.principal, loan.rate), collateral: !!pledgedCar, pledgedOmr: pledgeOmr, dueSeconds: Math.ceil((dueAt - Date.now()) / 1000) };
 }
 
 // POST /v1/loans/:id/cancel — the lender pulls an untaken offer (escrow refunds)
@@ -279,11 +298,18 @@ export async function repayLoan(ch, lender, loanId, client, h) {
     await client.query('UPDATE cars SET pledged=false WHERE id=$1', [loan.collateral_car]);
     const c = (h.owned.cars || []).find((x) => x.id === loan.collateral_car); if (c) c.pledged = false;
   }
+  // Drop 5 (B): the $OMR pledge comes home too — escrow → the borrower's liquid balance (the actor,
+  // in-memory; a TRANSFER — the row leaves the escrow bucket the moment status flips off 'active').
+  const pledgeBack = Math.floor(Number(loan.collateral_omr) || 0);
+  if (pledgeBack > 0) {
+    h.acct.omr = Number(h.acct.omr) + pledgeBack;
+    await h.ledger(client, { accountId: ch.account_id, currency: 'omr', amount: pledgeBack, reason: 'loan:pledge:return', counterparty: lender.id });
+  }
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'loan:repay', counterparty: lender.id });
   await h.ledger(client, { characterId: lender.id, currency: 'cash', amount: toLender, reason: 'loan:repay', counterparty: ch.id });
   await payVig(client, h.ledger, vig); // step 5: the vig splits — half → the buyback pool, half → the house window
   await h.notify(client, lender.id, 'loan_repaid', { by: ch.name, amount: toLender });
-  return { ok: true, paid: owed, toLender, vig };
+  return { ok: true, paid: owed, toLender, vig, pledgeReturned: pledgeBack };
 }
 
 // POST /v1/loans/:id/collect — two-party: ch=lender (actor), victim=borrower. After due, seize the
@@ -348,11 +374,19 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
     }
     carSeized = loan.collateral_car;
   }
+  // Drop 5 (B): the $OMR pledge is the lender's security — on default it is SEIZED whole to the
+  // lender's LIQUID balance (the actor here, in-memory — persisted by withTwoCharacters). A TRANSFER
+  // (`loan:seize:omr`): escrow bucket down (the row leaves status='active'), lender's account up.
+  const omrSeized = Math.floor(Number(loan.collateral_omr) || 0);
+  if (omrSeized > 0) {
+    h.acct.omr = Number(h.acct.omr) + omrSeized;
+    await h.ledger(client, { accountId: ch.account_id, currency: 'omr', amount: omrSeized, reason: 'loan:seize:omr', counterparty: borrower.id });
+  }
   await client.query("UPDATE loans SET status='collected' WHERE id=$1", [loanId]);
-  await h.notify(client, borrower.id, 'loan_collected', { by: ch.name, seized: collected, car: !!carSeized, wanted: true });
+  await h.notify(client, borrower.id, 'loan_collected', { by: ch.name, seized: collected, car: !!carSeized, omr: omrSeized, wanted: true });
   bus.emit('streets', { type: 'welsher', who: borrower.name, by: ch.name });
   await track(client, ch.account_id, 'loan_collect', { seized: collected, shortfall: owed - collected, car: !!carSeized });
-  return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected, carSeized, wanted: true };
+  return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected, carSeized, omrSeized, wanted: true };
 }
 
 // POST /v1/loans/:id/sell — step 3 (the paper market): the current lender puts this ACTIVE loan's
@@ -479,7 +513,7 @@ export async function voidLoansAtDeath(client, victimId, h, killerCh = null, loo
   // active loans void — tell the surviving counterparty why the row vanished (a lender loses a claim,
   // a borrower's debt is erased). The killer, if a counterparty, still gets the notification row.
   const active = (await client.query(
-    "SELECT id, lender_character, borrower_character, collateral_car FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId])).rows;
+    "SELECT id, lender_character, borrower_character, collateral_car, collateral_omr FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId])).rows;
   let inherited = 0;
   for (const l of active) {
     if (l.lender_character === victimId && l.borrower_character) {
@@ -499,13 +533,62 @@ export async function voidLoansAtDeath(client, victimId, h, killerCh = null, loo
         inherited++;
       } else {
         if (l.collateral_car) await client.query('UPDATE cars SET pledged=false WHERE id=$1', [l.collateral_car]);
+        // Drop 5 (B): with the loan voided the $OMR pledge goes home to the (living) borrower. A
+        // direct arithmetic SQL credit — safe vs persist-clobber because withCharacter FOR-UPDATEs
+        // the account row from load, so writes serialize (the auction third-party-refund argument).
+        // In practice UNREACHABLE (runEstate always passes an heirId) — kept so the no-heir fallback
+        // can't strand escrow if that ever changes.
+        const pomr = Math.floor(Number(l.collateral_omr) || 0);
+        if (pomr > 0) {
+          const bAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [l.borrower_character])).rows[0];
+          if (bAcct) {
+            await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [bAcct.account_id, pomr]);
+            await h.ledger(client, { accountId: bAcct.account_id, currency: 'omr', amount: pomr, reason: 'loan:pledge:return', counterparty: victimId });
+          }
+        }
         await h.notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_dead' });
       }
     } else if (l.borrower_character === victimId) {
       // the borrower is dead: the claim is uncollectable, any pledged car dies with the fleet (the
       // estate wipe). A house marker has no lender to tell ('HOUSE' is a sentinel, not a character —
       // the pool simply ate the shortfall, bounded by what sinks funded).
-      if (l.lender_character !== 'HOUSE') await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead' });
+      // Drop 5 (B): the $OMR PLEDGE is the one piece of a dead borrower's security that DOESN'T die —
+      // it is the lender's collateral. But handing it over whole would make an alt-ring "loan" (pledge
+      // your hoard against your own alt's offer) a loot-proof $OMR vault — the exact class the
+      // market-order/loan-offer audits closed on the cash side. So a PLAYER fire-kill (killerCh +
+      // lootRate>0 — only fire sets the loot rate) loots the pledge at the flat OMR_LOOT_IDLE rate
+      // first (`loan:pledge:loot`, to the killer's account — h.acct IS the killer's account on every
+      // looting path, the whack:loot omr precedent), and the REMAINDER goes to the lender
+      // (`loan:seize:omr`). At the IDLE rate the shelter is exactly neutral vs holding loose. The
+      // lender is a third party: a direct arithmetic account credit is clobber-safe (accounts are
+      // FOR-UPDATE-locked from load, so writes serialize — the auction refund argument); the residual
+      // estate-holds-victim-char / collector-holds-lender-account AB-BA maps to the standard 40P01 →
+      // contention retry. If the killer IS the lender, credit in memory (h.acct — never SQL, the
+      // refundPot killer-threading discipline). Accounts survive death, so a dead lender line's
+      // account still takes the credit (the bloodline keeps its security).
+      const pomr = Math.floor(Number(l.collateral_omr) || 0);
+      if (pomr > 0 && l.lender_character !== 'HOUSE') {
+        const loot = killerCh && lootRate > 0 && h.acct ? Math.floor(pomr * Math.min(1, M3.OMR_LOOT_IDLE)) : 0;
+        if (loot > 0) {
+          h.acct.omr = Number(h.acct.omr) + loot; // the killer is the in-memory actor — never SQL
+          await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: loot, reason: 'loan:pledge:loot', counterparty: victimId });
+        }
+        const rest = pomr - loot;
+        if (rest > 0) {
+          if (killerCh && killerCh.id === l.lender_character && h.acct) {
+            h.acct.omr = Number(h.acct.omr) + rest; // the lender IS the killer — in-memory, never SQL
+            await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: rest, reason: 'loan:seize:omr', counterparty: victimId });
+          } else {
+            const lAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [l.lender_character])).rows[0];
+            if (lAcct) {
+              await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [lAcct.account_id, rest]);
+              await h.ledger(client, { accountId: lAcct.account_id, currency: 'omr', amount: rest, reason: 'loan:seize:omr', counterparty: victimId });
+            }
+          }
+        }
+      }
+      // omr rides always (0 when unsecured) — ONE key set, so the wire ledger's two-shape rule never bites
+      if (l.lender_character !== 'HOUSE') await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead', omr: Math.floor(Number(l.collateral_omr) || 0) });
     }
   }
   // delete only the loans that did NOT survive: borrower-dead actives (+ any no-heir lender-dead actives).
@@ -606,8 +689,9 @@ export async function sweepLoans(pool, opts = {}) {
   // manual collect/repay); the car + loan are the only writes (no character rows → no lock cycle).
   let forfeited = 0;
   const graceCut = new Date(now.getTime() - LOAN.GRACE_MS);
+  // Drop 5 (B): the sweep forfeits BOTH kinds of security — the car AND/OR a $OMR pledge.
   const abandoned = (await pool.query(
-    "SELECT id FROM loans WHERE status='active' AND collateral_car IS NOT NULL AND due_at < $1 ORDER BY id", [graceCut])).rows;
+    "SELECT id FROM loans WHERE status='active' AND (collateral_car IS NOT NULL OR collateral_omr > 0) AND due_at < $1 ORDER BY id", [graceCut])).rows;
   for (const { id } of abandoned) {
     const client = await pool.connect();
     try {
@@ -621,7 +705,7 @@ export async function sweepLoans(pool, opts = {}) {
       for (const cid of [pre.lender_character, pre.borrower_character].filter(Boolean).sort())
         await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
       const loan = (await client.query("SELECT * FROM loans WHERE id=$1 AND status='active' FOR UPDATE", [id])).rows[0];
-      if (!loan || !loan.collateral_car || new Date(loan.due_at) >= graceCut) { await client.query('ROLLBACK'); continue; }
+      if (!loan || (!loan.collateral_car && !(Number(loan.collateral_omr) > 0)) || new Date(loan.due_at) >= graceCut) { await client.query('ROLLBACK'); continue; }
       // a paper sale can reassign lender_character between the unlocked pre-read and the lock — if the
       // counterparties moved under us, skip this tick (the next sweep re-reads; 24h grace has many ticks)
       if (loan.lender_character !== pre.lender_character || loan.borrower_character !== pre.borrower_character) { await client.query('ROLLBACK'); continue; }
@@ -629,9 +713,22 @@ export async function sweepLoans(pool, opts = {}) {
       const car = (await client.query('SELECT id FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
       if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [loan.collateral_car, loan.lender_character]); // clear race flags on forfeit (lender consent)
       if (car) await logCarCollect(client, loan.lender_character, loan.collateral_car); // THE COLLECTION
+      // Drop 5 (B): the $OMR pledge forfeits to the lender the same way — escrow → the lender's
+      // liquid balance (`loan:seize:omr`, a transfer; the row leaves status='active' below so the
+      // escrow bucket drops by exactly what lands). Direct arithmetic SQL is clobber-safe here: the
+      // lender's char row is FOR-UPDATE-locked above, so any withCharacter action by them either
+      // finished (persisted) or hasn't loaded yet (the account row is locked from load — writes serialize).
+      const pomr = Math.floor(Number(loan.collateral_omr) || 0);
+      if (pomr > 0) {
+        const lAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [loan.lender_character])).rows[0];
+        if (lAcct) {
+          await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [lAcct.account_id, pomr]);
+          await ledger(client, { accountId: lAcct.account_id, currency: 'omr', amount: pomr, reason: 'loan:seize:omr', counterparty: loan.borrower_character });
+        }
+      }
       await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
-      await notify(client, loan.lender_character, 'loan_forfeited', { car: !!car });
-      await notify(client, loan.borrower_character, 'loan_forfeited', { car: !!car, lost: true });
+      await notify(client, loan.lender_character, 'loan_forfeited', { car: !!car, omr: pomr });
+      await notify(client, loan.borrower_character, 'loan_forfeited', { car: !!car, omr: pomr, lost: true });
       await client.query('COMMIT'); forfeited++;
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans forfeit', id, e.message); }
     finally { client.release(); }

@@ -3019,7 +3019,7 @@
     // name their system, so this branch scopes to the personal one rather than to a field it once
     // owned alone. The five below get the line their own money deserves, ordered above the fallback.
     else if (body.upkeep === 'business' && body.paid > 0) bits.push(`paid $${fmt(body.paid)} of the pad across ${body.fronts?.length || 0} front${body.fronts?.length === 1 ? '' : 's'} — square, and they keep earning`);
-    else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house. Your name's clean.`);
+    else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house${body.pledgeReturned > 0 ? `, and your ${fmt(body.pledgeReturned)} $OMR pledge came home` : ''}. Your name's clean.`);
     else if (body.paid > 0 && body.interest !== undefined) bits.push(`paid the window back — $${fmt(body.paid)}, $${fmt(body.interest)} of it interest`);
     else if (body.paid > 0 && body.perDay !== undefined) bits.push(`staff wages settled — ${fmt(body.paid)} $OMR${body.staff ? ` for ${body.staff} on the household` : ''} (${fmt(body.perDay)} $OMR a day)`);
     // THE NUT, the last of the six obligations and the only one still falling to the bare catch-all
@@ -3101,7 +3101,7 @@
     // this line — written for the lender, in DOLLARS — fired for the interdiction too, where the field
     // counts UNITS: 20 units of contraband and a $1,200 fine read "collected $20" ahead of the real
     // line. `toLender` is on the collect and nothing else. Driven.
-    if (body.seized && body.toLender !== undefined) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}${body.shortfall > 0 ? ` — still $${fmt(body.shortfall)} short, and they're marked` : ''}`);
+    if (body.seized && body.toLender !== undefined) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}${body.omrSeized > 0 ? ` + their ${fmt(body.omrSeized)} $OMR pledge` : ''}${body.shortfall > 0 ? ` — still $${fmt(body.shortfall)} short, and they're marked` : ''}`);
     // `pay` is the generic "what it paid" field, but a FAVOR's pay is the poster's gross — the
     // runner nets it minus the house cut, and the favor branch above already says so. Appending the
     // gross here would report a bigger number than the pocket actually moved.
@@ -3319,8 +3319,8 @@
     // $50,000 now, owe $60,000": the two sides of the table, one line, and it named the wrong one.
     // `dueSeconds` is on the borrower's reply only; `hours` and `directed` are the poster's.
     if (body.principal !== undefined && body.owed !== undefined && body.dueSeconds === undefined)
-      bits.push(`\uD83E\uDD1D money's on the street — $${fmt(body.principal)} out of your pocket and into escrow, $${fmt(body.owed)} owed back inside ${body.hours}h${body.directed ? ' (spoken for)' : ''}${body.collateralMin > 0 ? `, secured against a car worth $${fmt(body.collateralMin)}+` : ''}. Nobody's on the hook until somebody takes it.`);
-    else if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}${body.dueSeconds ? ` inside ${minsTxt(body.dueSeconds)}` : ''}`);
+      bits.push(`\uD83E\uDD1D money's on the street — $${fmt(body.principal)} out of your pocket and into escrow, $${fmt(body.owed)} owed back inside ${body.hours}h${body.directed ? ' (spoken for)' : ''}${body.collateralMin > 0 ? `, secured against a car worth $${fmt(body.collateralMin)}+` : ''}${body.collateralOmr > 0 ? `, plus a ${fmt(body.collateralOmr)} $OMR pledge` : ''}. Nobody's on the hook until somebody takes it.`);
+    else if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}${body.pledgedOmr > 0 ? ` — ${fmt(body.pledgedOmr)} $OMR escrowed against it: it comes home when you square up, the shark keeps it if you don't` : ''}${body.dueSeconds ? ` inside ${minsTxt(body.dueSeconds)}` : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.family !== undefined && body.success !== undefined && (body.loot !== undefined || body.hospSeconds !== undefined)) {
@@ -9047,7 +9047,7 @@
       ${(b.offers || []).length ? `<div class="grid">${b.offers.map((o) => `
         <div class="card"><span class="t">$${fmt(o.principal)} at ${Math.round(o.rate * 100)}%</span>
           ${o.mine ? '<span class="chip">your paper</span>' : ''}${o.forMe ? '<span class="chip good">FOR YOU</span>' : ''}${o.directed && !o.forMe && !o.mine ? '<span class="chip cold">spoken for</span>' : ''}
-          <div class="d">owe $${fmt(o.owed)} in ${o.hours}h · ${o.lender}${o.secured ? ` · SECURED: pledge a car worth $${fmt(o.collateralMin)}+` : ''}</div>
+          <div class="d">owe $${fmt(o.owed)} in ${o.hours}h · ${o.lender}${o.collateralMin > 0 ? ` · SECURED: pledge a car worth $${fmt(o.collateralMin)}+` : ''}${o.collateralOmr > 0 ? ` · pledge ${fmt(o.collateralOmr)} $OMR (escrowed till it's squared — seized if you default)` : ''}</div>
           ${o.mine ? `<button class="act" data-loando="cancel:${o.id}">pull it</button>`
             : `${o.secured ? (() => {
                  // this asked the player to TYPE A UUID to pledge collateral. me.cars is already on
@@ -9061,7 +9061,9 @@
                      }).join('')}</select>`
                    : '<span class="d" style="color:var(--dim)">you have no free car to pledge</span>';
                })() : ''}
-               <button class="act" data-loantake="${o.id}">take the money</button>`}</div>`).join('')}</div>`
+               ${o.collateralOmr > 0 && Math.floor(Number(me.omr || 0)) < o.collateralOmr
+                 ? `<button class="act" disabled title="that offer wants a ${fmt(o.collateralOmr)} $OMR pledge — you hold ${fmt(Math.floor(me.omr || 0))} liquid">short of the $OMR pledge</button>`
+                 : `<button class="act" data-loantake="${o.id}">take the money</button>`}`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no paper on offer</span>'}
 
       <h2 style="margin-top:12px">Put Money on the Street</h2>
@@ -9070,13 +9072,14 @@
       <input id="ln-hours" placeholder="term hrs" size="8">
       <select id="ln-to"><option value="">— open offer —</option>${streets.map((s) => `<option value="${s.id}">${s.name} only${s.id === me.id ? '' : ''}</option>`).join('')}</select>
       <input id="ln-coll" placeholder="collateral min $ (opt)" size="16">
+      <input id="ln-collomr" placeholder="$OMR pledge (opt, ≤${fmt(b.terms?.collateralOmrMax ?? 2000)})" size="18">
       <button class="act" id="ln-offer">escrow it</button>
       <div class="d" style="color:var(--dim);font-size:12.5px">the escrow leaves your pocket now — a defaulter gets leg-broken, branded a WELSHER, and goes WANTED</div>
 
       <h2 style="margin-top:12px">Your Book</h2>
       ${(b.active || []).length ? `<div class="grid">${b.active.map((l) => `
         <div class="card"><span class="t">${l.role === 'lender' ? 'they owe you' : 'YOU OWE'} $${fmt(l.owed)}</span>
-          ${l.overdue ? '<span class="chip bad">OVERDUE</span>' : ''}${l.collateral ? '<span class="chip">secured</span>' : ''}${l.forSale ? `<span class="chip cold">paper listed $${fmt(l.forSale)}</span>` : ''}
+          ${l.overdue ? '<span class="chip bad">OVERDUE</span>' : ''}${l.collateral ? '<span class="chip">secured</span>' : ''}${l.pledgedOmr > 0 ? `<span class="chip">${fmt(l.pledgedOmr)} $OMR pledged</span>` : ''}${l.forSale ? `<span class="chip cold">paper listed $${fmt(l.forSale)}</span>` : ''}
           <div class="d">${l.role === 'lender' ? 'to' : 'to'} ${l.counterparty} · ${l.overdue ? 'past due' : 'due in ' + mins(l.dueSeconds)}</div>
           ${l.role === 'borrower' ? `<button class="act" data-loando="repay:${l.id}">square it</button>`
             : `${l.overdue ? `<button class="act" data-loando="collect:${l.id}" style="border-color:var(--blood)"${groundOff('Collecting a marker')}>COLLECT (break legs)</button>` : ''}
@@ -9087,7 +9090,7 @@
       <h2 style="margin-top:12px">The Paper Market <span class="d" style="font-size:11px">(buy a claim — the debt + collateral carry over)</span></h2>
       ${(b.paper || []).length ? `<div class="grid">${b.paper.map((p) => `
         <div class="card"><span class="t">$${fmt(p.owed)} claim — ask $${fmt(p.price)}</span>
-          ${p.borrowerWelsher ? '<span class="chip bad">WELSHER debtor</span>' : ''}${p.overdue ? '<span class="chip bad">overdue</span>' : ''}${p.collateral ? '<span class="chip">secured</span>' : ''}${p.mine ? '<span class="chip">yours</span>' : ''}
+          ${p.borrowerWelsher ? '<span class="chip bad">WELSHER debtor</span>' : ''}${p.overdue ? '<span class="chip bad">overdue</span>' : ''}${p.collateral ? '<span class="chip">secured</span>' : ''}${p.pledgedOmr > 0 ? `<span class="chip">${fmt(p.pledgedOmr)} $OMR pledged</span>` : ''}${p.mine ? '<span class="chip">yours</span>' : ''}
           <div class="d">${p.borrower} owes it · held by ${p.lender} · ${p.overdue ? 'collectable NOW' : 'due ' + mins(p.dueSeconds)}</div>
           ${p.mine ? '' : `<button class="act" data-loando="buy:${p.id}">buy the claim</button>`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">nobody’s selling their book</span>'}
@@ -9096,6 +9099,7 @@
       const body = { amount: Number(t.querySelector('#ln-amt').value), rate: Number(t.querySelector('#ln-rate').value), hours: Number(t.querySelector('#ln-hours').value) };
       const to = t.querySelector('#ln-to').value; if (to) body.to = to;
       const coll = Number(t.querySelector('#ln-coll').value); if (coll) body.collateral = coll;
+      const collOmr = Number(t.querySelector('#ln-collomr').value); if (collOmr) body.collateralOmr = collOmr;
       act('POST', '/v1/loans', body).then(() => renderLoans());
     };
     const houseTake = t.querySelector('#house-take');
@@ -9109,7 +9113,7 @@
     t.querySelectorAll('[data-loando]').forEach((btn) => btn.onclick = async () => {
       const [what, id] = btn.dataset.loando.split(':');
       // one click used to hospitalize a debtor, seize their pledged car, and brand them WELSHER + WANTED
-      if (what === 'collect' && !await ask('Send the boys round?', 'You take what they have on them, seize any collateral, put them in the hospital, and mark them a welsher — WANTED, with the whole city free to hunt them.',
+      if (what === 'collect' && !await ask('Send the boys round?', 'You take what they have on them, seize any collateral — a pledged car and any $OMR held in escrow — put them in the hospital, and mark them a welsher — WANTED, with the whole city free to hunt them.',
         { yes: 'break their legs', no: 'give them time', danger: true })) return;
       act('POST', `/v1/loans/${id}/${what}`, {}).then(() => renderLoans());
     });
@@ -10060,7 +10064,7 @@
       commission_override: () => `${d.family || 'a floor family'} moved to override the head's veto${d.restored ? ' — the decree is RESTORED' : ''}`,
       bracket_round: () => `the bracket cut the field — round ${d.round}, ${d.remaining} still standing`,
       ring_folded_up: () => `the ring table folded up — your $${fmt(d.cashedOut)} came home`,
-      loan_forfeited: () => d.lost ? 'your pledged car was forfeited to the lender' : 'a pledged car was forfeited to you',
+      loan_forfeited: () => d.lost ? `your pledge was forfeited to the lender${d.omr ? ` — ${fmt(d.omr)} $OMR gone with it` : ''}` : `a pledge was forfeited to you${d.omr ? ` — ${fmt(d.omr)} $OMR of it` : ''}`,
       gp_entry: () => `${d.who} entered the Grand Prix (${d.entrants} on the grid)`,
       gp_result: () => d.place != null
         ? `🏁 Grand Prix: you finished ${d.place} of ${d.of}${d.payout ? ` — ${$c(d.payout)}` : ''}`
@@ -10176,11 +10180,11 @@
       consign_sold: () => `your ${d.name} sold at the block — ${$c(d.net)} after the house`,
       consign_lost: () => `nobody bid on your ${d.name} — it comes back to you`,
       // ── the shylock
-      loan_offered: () => `${d.by} put ${$c(d.principal)} on the table at ${Math.round((d.rate || 0) * 100)}%${d.collateralMin ? ' — secured' : ''}`,
-      loan_taken: () => `${d.by} took your ${$c(d.principal)}${d.collateral ? ' and pledged a car against it' : ''}`,
+      loan_offered: () => `${d.by} put ${$c(d.principal)} on the table at ${Math.round((d.rate || 0) * 100)}%${d.collateralMin ? ' — secured' : ''}${d.collateralOmr ? ` — wants a ${fmt(d.collateralOmr)} $OMR pledge` : ''}`,
+      loan_taken: () => `${d.by} took your ${$c(d.principal)}${d.collateral ? ' and pledged a car against it' : ''}${d.pledgedOmr ? ` and escrowed ${fmt(d.pledgedOmr)} $OMR against it` : ''}`,
       loan_repaid: () => `${d.by} squared up — ${$c(d.amount)} back to you`,
-      loan_collected: () => `${d.by} collected — ${$c(d.seized)} seized${d.car ? ' and your car with it' : ''}, and you're WANTED`,
-      loan_defaulted: () => `the debt died with the borrower — nothing to collect`,
+      loan_collected: () => `${d.by} collected — ${$c(d.seized)} seized${d.car ? ' and your car with it' : ''}${d.omr ? ` + your ${fmt(d.omr)} $OMR pledge` : ''}, and you're WANTED`,
+      loan_defaulted: () => `the debt died with the borrower${d.omr ? ` — their ${fmt(d.omr)} $OMR pledge settled what it could` : ' — nothing to collect'}`,
       loan_inherited: () => `your lender's street fell — the paper passed to their heir, the debt stands`,
       loan_voided: () => `your lender's line ended — the debt dies with them`,
       paper_sold: () => `you sold the paper to ${d.to} — ${$c(d.price)}`,

@@ -15894,3 +15894,39 @@ while available-without would be ~$100k — the tip must come back capped and th
 itself past the wall). Four mutations, each caught at its own named assertion (the feed dropped;
 the reservation dropped from denAvailable; the reseed dropped — a hit taking the whole pot; the
 payout unledgered). Levers pinned + tabled.
+
+**THE $OMR PLEDGE — collateralized loans on the P2P rail (NetNet rec B, 2026-08-21) — BUILT**
+(`schema.sql` `loans.collateral_omr` (ALTER-added — the boot-crash lesson), `src/rules.tail.js`
+`LOAN.COLLATERAL_OMR_MAX` (2000), `src/loans.js` offer/take/repay/collect/voidLoansAtDeath/
+sweepLoans/loanBoard, `src/population.js` retireResident (a defensive pledge-return before the
+resident-lender DELETE — unreachable today, guards the stranded-escrow class), `src/invariants.js`
+(`loan:` joined the omr vocabulary; the active-row sum joined `omrBuckets`; a new **`loan omr
+pledge escrow`** identity), `public/index.html` (the Shylock offer form/cards/book/paper chips,
+four describe() branches, five feedText templates, the collect confirm), `test/loans.js`;
+BALANCE.md § THE $OMR PLEDGE). A lender may demand a $OMR pledge on an offer; taking it ESCROWS
+the demand out of the borrower's **LIQUID** balance INTO THE LOAN ROW — `collateral_omr` doubles
+as the demand on open rows and the escrow bucket on active ones (Σ over `status='active'` in
+`omrBuckets`, the auction current_bid shape), so the §10.4 surface is four EXACT single-leg
+TRANSFER reasons in neither the mint nor burn term: `loan:pledge` (borrower → row),
+`loan:pledge:return` (repay/void → borrower), `loan:seize:omr` (default collect / grace-forfeit /
+a dead borrower's remainder → the lender), `loan:pledge:loot`. **LIQUID only, never staked** —
+the MADE_LADDER keys on `staked`, and a pledge that kept climbing it would be power for free.
+**The loot leg is the vault closure and the load-bearing decision**: without it an alt-ring
+"loan" (pledge your hoard against your own alt's offer) is a loot-immune $OMR shelter — the exact
+class the market-order and loan-offer audits closed on the cash side; a player fire-kill loots
+the pledge at the flat `M3.OMR_LOOT_IDLE` rate FIRST (to the killer's account — `h.acct` is the
+killer on every looting path, the whack:loot omr precedent, credited IN MEMORY never SQL) and the
+REMAINDER goes to the lender, so the shelter is exactly neutral vs holding loose. Third-party
+lender credits are direct arithmetic SQL on `account_persistent` — clobber-safe because
+withCharacter FOR-UPDATEs account rows from load (the auction third-party-refund argument);
+accounts survive death, so a dead lender line still takes its security. The `loan_defaulted`
+notify carries `omr` ALWAYS (0 when unsecured) — ONE key set, so THE WIRE LEDGER's two-shape rule
+never bites; `loan_collected`/`loan_forfeited` branch. `test/loans.js` proves the demand cap, the
+board surfacing + published `collateralOmrMax`, the liquid-only take gate, the escrow identity
+mid-loan, the repay round-trip, the default seize, the grace-forfeit, the death split at the IDLE
+rate (both legs asserted non-vacuous — the fixture guarantees loot AND remainder are each > 0)
+and the headless all-to-lender path — with **`$OMR conservation` drift proven MOVED-BY-ZERO
+across the entire lifecycle** (SQL omr grants create baseline drift, so every claim is a DELTA —
+the scale/loadtest posture). Four mutations, each caught at its own named assertion (the take
+debit dropped; the collect seize dropped; the death loot leg dropped; the escrow term dropped
+from omrBuckets). Lever pinned + tabled.

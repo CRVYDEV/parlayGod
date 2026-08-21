@@ -1237,6 +1237,11 @@ CREATE TABLE IF NOT EXISTS loans (
   collateral_car TEXT,                              -- step 2: the pledged car id once taken (NULL = none); seized to the lender on default
   for_sale NUMERIC                                  -- step 3: the paper market — the current lender's ASK price on this active loan (NULL = not for sale)
 );
+-- Drop 5 (B — $OMR-collateralized loans): the lender's $OMR demand on an OPEN row; the ESCROWED
+-- pledge itself once ACTIVE (invariants sums it over status='active' as a §10.4 $OMR bucket +
+-- the `loan omr pledge escrow` check). An ALTER, never inline — `loans` is a live table and a
+-- CREATE TABLE IF NOT EXISTS is a no-op on one (the 2026-08-06 boot-outage class).
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS collateral_omr NUMERIC NOT NULL DEFAULT 0;
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a
 -- shared cash reservoir the whole player base grinds down together (positive-sum co-op); it
