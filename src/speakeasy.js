@@ -113,9 +113,10 @@ export async function collectSpeakeasy(ch, client, h) {
   if (!row) throw new GameError('no_club', "You don't run a house.");
   // step two: the Prohibition raid resolves on the owner's touch — a hot club may be seized + shuttered
   const raid = await resolveRaid(ch, row, client, h);
-  if (raid.raided) return { ok: true, collected: 0, raid, district: row.district_id };
+  // `collect` names the system — see collectBusiness: five verbs send `collected`, only two pay a pocket.
+  if (raid.raided) return { ok: true, collect: 'club', collected: 0, raid, district: row.district_id };
   const inc = accruedIncome(row); // 0 while shut (income_at was pushed to shut_until by the raid)
-  if (inc <= 0) return { ok: true, collected: 0, ...(isShut(row) ? { shutSeconds: Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) } : {}) };
+  if (inc <= 0) return { ok: true, collect: 'club', collected: 0, ...(isShut(row) ? { shutSeconds: Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) } : {}) };
   // SIGN-OFF (net-EV): protection + wages come off the top — a recurring UPKEEP cut (the business-'pad'
   // 20% rate) so the passive bar take isn't a risk-free faucet. §10.4-clean: both rows character_id'd and
   // ride the existing speakeasy: cash prefix, so the per-character check reconciles with zero vocab change.
@@ -125,7 +126,7 @@ export async function collectSpeakeasy(ch, client, h) {
   await client.query('UPDATE speakeasies SET income_at=now() WHERE district_id=$1', [row.district_id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: inc, reason: 'speakeasy:income' });
   if (upkeep > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -upkeep, reason: 'speakeasy:upkeep' });
-  return { ok: true, collected: net, gross: inc, upkeep, district: row.district_id };
+  return { ok: true, collect: 'club', collected: net, gross: inc, upkeep, district: row.district_id };
 }
 
 // Redo the decor to the next tier — banks the pending base take at the OLD rate first (never wiped),

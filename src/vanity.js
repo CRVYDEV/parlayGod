@@ -10,7 +10,7 @@
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
 import { GameError, cleanText } from './game.js';
-import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf } from './rules.js';
+import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf, carOf } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
@@ -66,7 +66,12 @@ export async function setPlate(ch, carId, plate, client, h) {
   await spendOmr(client, h, VANITY.PLATE_OMR, 'vanity:plate');
   await client.query('UPDATE cars SET plate=$2 WHERE id=$1', [carId, p]);
   car.plate = p; // keep this transaction's view fresh
-  return { ok: true, carId, plate: p };
+  // The CAR's name ships with the reply because describe() has no handle on the garage: it sees a
+  // carId and nothing that can turn one into iron. The price ships for the same reason every other
+  // $OMR burn in this file ships one. NOTE `model_id`, not `model`: h.owned.cars holds RAW `cars`
+  // rows, and it is the character VIEW that renames that column — reading `model` here is silently
+  // undefined and degrades the line to a bare plate, which is the class this reply exists to close.
+  return { ok: true, carId, plate: p, car: carOf(car.model_id)?.name || null, omr: VANITY.PLATE_OMR };
 }
 
 // The family crest color — the boss's call alone (an underboss commands soldiers, not the flag).

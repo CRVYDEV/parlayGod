@@ -199,7 +199,10 @@ export async function unlockFeature(ch, featureId, client, h) {
   set.add(f.id);
   await upsertEstate(client, ch.account_id, { features: [...set].join(','), spent_omr: Number(cur.spent_omr || 0) + f.omr });
   await h.track(client, ch.account_id, 'estate_feature', { feature: f.id, omr: f.omr });
-  return { ok: true, feature: f.id, name: f.name };
+  // `omr` and `spent` mirror upgradeEstate deliberately: both are $OMR burns against the same
+  // compound, and a wing that names neither while the tier above it names three numbers is the
+  // forgotten-sibling shape. `spent` is the lifetime figure the board calls the estate's value.
+  return { ok: true, feature: f.id, name: f.name, omr: f.omr, spent: Number(cur.spent_omr || 0) + f.omr };
 }
 
 // Name / rename the compound (you can only name a place you own — tier ≥ 1). Burn `estate:name`.

@@ -245,9 +245,14 @@ export async function collectBusiness(ch, client, h) {
     ch.cash = Number(ch.cash) + rakeback;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: rakeback, reason: 'casino:rakeback' });
   }
-  if (total <= 0 && rakeback <= 0 && !raids.length && !cold && !padPaid) return { ok: true, collected: 0 };
+  // `collect` NAMES the system, and it is not decoration: five income verbs answer with `collected`
+  // and only two of them pay a POCKET, so describe()'s flat field-name chain gave the three FAMILY
+  // ones (territory / frontier / vassals) this line — a boss was told he had "collected" money he
+  // cannot spend a dollar of. Scoping on which fields each happens to OMIT was the shape that
+  // collided in the first place, so every one of the five says which it is.
+  if (total <= 0 && rakeback <= 0 && !raids.length && !cold && !padPaid) return { ok: true, collect: 'business', collected: 0 };
   h.owned.businesses = await businessesOf(client, ch.id);
-  return { ok: true, collected: total, businesses: rows.length,
+  return { ok: true, collect: 'business', collected: total, businesses: rows.length,
     ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}),
     ...(cold ? { cold } : {}), ...(padPaid > 0 ? { padPaid } : {}) };
 }

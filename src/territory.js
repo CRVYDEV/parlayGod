@@ -211,13 +211,14 @@ export async function collectTerritory(ch, client, h) {
     const inc = accrued(r);
     if (inc > 0) { total += inc; running += inc; await client.query('UPDATE territory_rackets SET last_income_at=now() WHERE district_id=$1', [r.district_id]); }
   }
-  if (total <= 0 && fines <= 0) return { ok: true, collected: 0, ...(cold ? { cold } : {}) };
+  // `collect` names the system — see collectBusiness: five verbs send `collected`, only two pay a pocket.
+  if (total <= 0 && fines <= 0) return { ok: true, collect: 'territory', collected: 0, ...(cold ? { cold } : {}) };
   // apply the NET treasury delta in one UPDATE (income − fines); THE EMPIRE banks lifetime income only
   // (fines don't reduce it). Each fine was already ledgered `territory:raid` inside resolveTerritoryRaid.
   await client.query('UPDATE gangs SET treasury = treasury + $2 - $3, territory_earned = territory_earned + $2 WHERE id=$1', [h.owned.gangId, total, fines]);
   if (total > 0) await h.ledger(client, { currency: 'cash', amount: total, reason: 'territory:income', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total - fines;
-  return { ok: true, collected: total, rackets: rackets.length, ...(cold ? { cold } : {}), ...(raids.length ? { raided: raids } : {}) };
+  return { ok: true, collect: 'territory', collected: total, rackets: rackets.length, ...(cold ? { cold } : {}), ...(raids.length ? { raided: raids } : {}) };
 }
 
 // PAY THE PAD (recurring sinks) — a boss/underboss settles the upkeep owed on every operation the

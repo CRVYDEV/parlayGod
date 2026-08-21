@@ -16016,3 +16016,54 @@ does not accrue, so the toast is pinned EXACTLY against the ledger figure it was
 mutation-verified: floor→round in the response fails by name at 1234561-vs-1234560), and the
 cross-surface half takes the wave-36 shape (exact lower edge, an upper bound computed from the LIVE
 `BANK_RATE`/`BANK_PERIOD_MS` levers over a 30s gap, never a hardcoded tolerance).
+
+**PLAY WAVE 55 — FIVE VERBS, ONE FIELD, AND THE WRONG POCKET (2026-08-21).** Wave 54 ended by naming
+the sweep's own root cause — *a route nobody has driven has a line nobody has read* — and measured the
+surface honestly for the first time by **INSTRUMENTING the ledger's drive loop rather than regexing
+it** (a static scan reports 49 driven rows against a real 204, because dynamic rows resolve their URL
+at drive time and are invisible to a regex). Against the **410 mutating routes the console can press,
+204 are driven and 209 are not**. Driving the income cluster out of that list found one collision
+across FIVE verbs, one echo, one wrong-system line and two silences.
+
+**`collected` IS SENT BY FIVE INCOME VERBS AND ONLY TWO OF THEM PAY A POCKET.** `describe()` is a flat
+chain over field NAMES, so the three FAMILY collects — territory operations, frontier outposts and
+vassal tribute, **every dollar of which lands in the TREASURY** — all fell into the personal-business
+line: a boss banking $40,000 of operations income was told he had *"collected $40,000"*, when he cannot
+spend a dollar of it himself, and the one place he would learn that is the line that just told him
+otherwise. Two of the three were worse than mis-scoped. Frontier and vassals ALSO shared a `tributes`
+line further down which fired **alongside** the pocket one — *"collected $2,000 … · collected $2,000 in
+vassal tribute → the treasury"*, **the same figure twice in one sentence** (the wave-36 echo) — and
+that shared line calls a cartel OUTPOST's tribute *"vassal tribute"*, which is a different system
+entirely (a conquered NPC family). Fixed at the SOURCE on all five: each reply names its own system
+(`collect: 'business' | 'club' | 'territory' | 'frontier' | 'vassals'`) and each branch keys on that,
+with the shared line deleted. **The speakeasy needed the marker as much as the treasury three did** —
+scoping the pocket branch on the ABSENCE of a family field would have been the very rule being fixed:
+*absence is not a discriminator, it holds exactly until a sibling grows the field you were relying on
+being missing*, which is how these five came to collide in the first place.
+
+**TWO SILENCES WITH IT, both $OMR burns.** An **estate wing** — up to 1,500 $OMR — read *"built the
+Trophy Room"* and named no price, three lines from the TIER above it which names three numbers (the
+forgotten-sibling shape); it now mirrors its sibling with the burn and the lifetime figure the board
+calls the compound's value. And the **vanity plate** read **`"done."`** outright over 12 $OMR — and
+could not have read otherwise, because `describe()` has no handle on the garage: it sees a `carId` and
+nothing that can turn one into iron, so the CAR's name had to ship with the reply.
+
+**AND FIXING IT REPRODUCED THE EXACT CLASS BEING FIXED, which is the more useful half.** The first cut
+read `carOf(car.model)` — but `h.owned.cars` holds RAW `cars` rows and it is the character VIEW that
+renames that column, so it was `carOf(undefined)` → `null` → a line that silently degraded back to a
+bare plate. Caught only by READING the driven output (*"the plate reads SIX GUN — 12 $OMR"*, no iron in
+it) rather than re-reading the diff. The site now says `model_id` and says WHY, because the failure is
+silent in both directions.
+
+**Guarded** by a WAVE 55 block in `test/client.js` that drives all five collects for real — the pocket
+front, an established territory operation, a held frontier outpost and a conquered vassal family — and
+asserts the PROPERTY rather than the wording: a pocket collect must not claim a treasury, a treasury
+collect must SAY treasury, and **no line may print its own figure twice** (a COUNT, because the failure
+a player saw was the number stated twice, not a phrase). Frontier and vassals are seeded rather than
+conquered, because routing an apex outfit is a whole co-op raid and what is under test is the LINE.
+**Six mutations, each caught at its own named assertion** — the pocket branch un-scoped (*"family
+operations pay the TREASURY, not the man"* against `"collected $40,000"`), the shared line restored
+(caught by the wrong-system word), the shared line restored WITHOUT that word (caught by the echo count
+alone, so both assertions are load-bearing), the wing price dropped, `model` read off a raw row, and the
+plate branch deleted. Driven actions 232 → 238. Suite green + sim drift-0 + mobile + pgquery + pgcheck
+47/47 on a FRESH real Postgres.
