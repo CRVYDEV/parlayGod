@@ -15969,3 +15969,50 @@ payload → the outside verifier fails; today's reveal leaked onto the board →
 fails; the mismatch check forced false → the tamper assertion fails). **This closes the NetNet
 recommendation set** (E risk factors / A the commitment / D the near miss / C the vig pot / B the
 $OMR pledge / F the fair draw — all six built; G/H stand as open decision rows in SIGN-OFF.md).
+
+**G AND H DECIDED — the NetNet set fully resolved, and THE UPPER LEG built (founder-directed
+2026-08-21, via the options prompt: G "leave as-is", H "build the desk's upper leg")** (`src/rules.tail.js`
+`DESK_SURGE`, `src/desk.js` `deskSurge` + the lotSize fold + the board's `surge` edge; `test/desk.js`
+block 25; BALANCE.md § THE UPPER LEG; SIGN-OFF.md's G/H rows flipped to DECIDED). **G — the
+backing/queue gauge — is a RECORDED no-change**: the number already lives in the vig invariants and
+the tokenhealth board, and nothing goes public (a NAV-like figure on a game token risks investment
+framing — the copy-rules posture stands); recorded so it is a decision, not a default. **H — THE
+UPPER LEG** — completes the band's symmetry with NetNet's PremiumSeller insight as a FORMULA over the
+desk's own price history: when the latest REAL print sits `START_BPS` (1.10×) above the 30-day
+window's average of real prints, the lot's two POLICY bounds scale by the premium — the
+returned-inventory bound × surge, and the float ceiling up to `FLOAT_CAP_MAX_BPS` (3%/day vs the base
+1%) — **clip-sized at `MAX_X` (3), and NEVER the shelf bound** (wall 2 is not a policy). **Nothing
+mints** — the leg only decides how much of the shelf goes up today, so wall 1 is untouched by
+construction, and at surge 1 the arithmetic is byte-identical to the pre-leg desk (`min(100×1, 300)`
+= the base cap — the existing lot assertions passed unchanged). **The direction is the load-bearing
+line and it is test-pinned**: prices in `vig_buyback` are $OMR per ETH, so a DEARER $OMR is a SMALLER
+number — the premium is ref/spot, and getting it backwards would make the desk sell MORE into a
+CRASH. Three quiet states are NAMED (`thin_window` under `MIN_PRINTS` 5 — a single print is its own
+reference, so "euphoria" from it is a division by itself; `no_price`; `inside_band` — ordinary noise,
+the dead-zone rule) so an asleep leg never reads as broken (the desk-dark lesson); the board
+publishes the leg beside the band's other two edges. NetNet's ordering rule — the treasury's sell
+threshold must sit ABOVE any emission throttle so the protocol never competes with itself — is
+satisfied trivially (no price-responsive emission exists anywhere; wall 1) and recorded at the lever
+block for the day one is proposed. The test wipes and re-seeds the print window so spot and reference
+are CONTROLLED (a premium computed against inherited history passes by luck), asserts the float-cap
+binder as a PRECONDITION (a surge test where the shelf binds is vacuous), and drives all four states
+— thin window asleep, noise inside the band, a 1.8× euphoria selling a 1.8× lot with the wall
+stretched to exactly `min(base×surge, MAX_BPS)`, and a 10× spike clipping at 3×. Three mutations,
+each caught at its own named assertion (the surge dropped from the lot path; the clip dropped; the
+min-prints guard dropped). §10.4: ZERO (lot sizing is policy over the existing audited sale — the
+block ends on absolute conservation). All four `DESK_SURGE.*` numbers are founder sign-off levers
+(pinned; `MAX_X: 1` restores the flat clip exactly).
+**A pre-existing flake fixed en route, and it is the boundary class for the third time:** the full-suite
+run failed `test/economy.js` on *"the toast and the sheet must not disagree about one balance"* —
+1234560 vs 1234561 — while the file passed standalone. The wave-13 precision assertion seeded
+`bank = 1234567.891234`, **$0.109 below the next integer**, then compared the withdraw reply's floored
+balance to a SECOND authed request's sheet — and at that principal bank interest crosses an integer
+every ~2 seconds, so any loaded-run gap between the two requests flipped the floor (the wave-36
+dollar-boundary shape exactly; the pipe-masking trap nearly hid it too — `npm test | tail` reported
+tail's exit 0 over the red run, the recorded ground-rule-8 lesson, re-run with pipefail). Fixed by the
+wave-46 rule — **ground truth is the DATABASE, never the reply under test**: a direct `pool.query`
+does not accrue, so the toast is pinned EXACTLY against the ledger figure it was computed from
+(flooring the DB also keeps the rounded-regression discrimination the meOf comparison was there for —
+mutation-verified: floor→round in the response fails by name at 1234561-vs-1234560), and the
+cross-surface half takes the wave-36 shape (exact lower edge, an upper bound computed from the LIVE
+`BANK_RATE`/`BANK_PERIOD_MS` levers over a 30s gap, never a hardcoded tolerance).
