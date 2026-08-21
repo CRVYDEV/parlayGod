@@ -1,6 +1,6 @@
 {
   "model": "bytedance/seedance-2.5/image-to-video",
-  "spentUsd": 158.06,
+  "spentUsd": 186.50000000000006,
   "clips": [
     {
       "plate": "hero-poster",
@@ -168,6 +168,79 @@
       "plate": "interior-empire",
       "ar": "16:9",
       "url": "https://v3b.fal.media/files/b/0aa64971/ww_jMRuJfJrZBM1jVvLFp_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-auction",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa72c8f/wgNNPz-tHVHBJgQ8HG7W2_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-chase",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-slam",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-made",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-store",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-tax",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-toll",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-noprint",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-crew",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-family",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-pot",
+      "ar": "16:9",
+      "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-seats",
+      "ar": "16:9",
+      "t2v": true,
       "est": 2.37
     }
   ],
