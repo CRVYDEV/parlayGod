@@ -835,3 +835,17 @@ ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C t
    wallet widens the build; the bonus is what re-aims it). Total ceiling 15+3+3 = **21 (+40%)**,
    once per wallet ever; an unknown wallet still rolls exactly 15. Recorded in BALANCE.md § THE
    LEDGER-BORN; two more named mutations (the cap dropped; the spread collapsed onto the boost stat).
+4. **THE TWELVE + THE TRIO — DIRECTED + ✅ BUILT same day** (founder, 2026-08-21: *"Can we create a
+   total of 12 archetypes for variety and add more stats to the characters"*). The archetype catalog
+   went 4 → 12 — four history FAMILIES (`forgeShape` unchanged) × three VARIANTS each, the variant a
+   stable FNV-1a hash of the lowercased wallet (`forgeArchetype` — deterministic per wallet forever,
+   never a roll; the original ids lead their families, so stored rows need no migration). "More
+   stats" shipped as the REGIMEN's established mechanism: three new disciplines (5 → 8) — White
+   Knuckle (handling → the race score, the DUEL_ADD twin), Cool Head (poise → the laylow sink, the
+   Iron Chin shape, discounted-figure-ledgered) and Night Eyes (vigilance → stored convoy guard
+   defense at depart, the rig-armor site) — each EXACTLY ONE new single-touchpoint modifier off the
+   audit-locked surfaces, plus each archetype carrying an AFFINITY the forge schools with banded
+   head-start XP (`WALLET_FORGE.AFFINITY_XP_PER_BAND` 40 × bands ≤ 200 XP ≈ level 4 of 25) through
+   the regimen's own `addXp` rail. All levers tabled in BALANCE.md § THE LEDGER-BORN; four more
+   named mutations (the affinity grant dropped; the variant collapsed; poise off the till;
+   vigilance off the stored guards).

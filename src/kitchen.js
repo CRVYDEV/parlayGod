@@ -6,7 +6,8 @@ import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR,
-  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused, usd } from './rules.js';
+  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused, usd,
+  REGIMEN, disciplineLvlOf } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -259,10 +260,15 @@ export async function layLow(ch, client, h) {
   // FIVE PILLARS #1: a Man of Honor lays low cheaper — the judges' benefit of the doubt
   // (stacks multiplicatively with the decree + the skill; a NEW lever, sign-off)
   // SEASONAL MODIFIER (slate #6): the season's twist composes multiplicatively like the decree
+  // THE REGIMEN (the 2026-08-21 trio): Cool Head (poise) — its ONE touchpoint, the Iron Chin shape
+  // on the laylow sink: ×(1 − POISE_BPS·(lvl−1)/10⁴), floored. The DISCOUNTED number is the one
+  // ledgered (the decree/roster discipline), so §10.4 reconciles the smaller figure exactly.
+  const poiseLvl = disciplineLvlOf(Number(h.owned?.disciplines?.poise || 0));
   const cost = Math.floor(M4.LAYLOW_CASH * (amnesty ? COMMISSION.AMNESTY_MULT : 1)
     * skillMult(h, 'fast_talker', SKILLS.FX.LAYLOW_MULT)
     * (Number(ch.honor || 0) >= HONOR.TRUSTED ? HONOR.LAYLOW_MULT : 1)
-    * (seasonModOf().laylowMult || 1));
+    * (seasonModOf().laylowMult || 1)
+    * Math.max(REGIMEN.POISE_FLOOR, 1 - REGIMEN.POISE_BPS * (poiseLvl - 1) / 10000));
   if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes ${usd(cost)}.`);
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
   ch.cash = Number(ch.cash) - cost;

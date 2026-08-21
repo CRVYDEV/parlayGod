@@ -15951,3 +15951,45 @@ shape-law comment) moved in the same commit, since depth B+budget makes that sen
 stale-promise class). §10.4 still ZERO (the flow writes not one `transactions` row — the existing
 pin covers the new path). `WALLET_FORGE.BUDGET_MAX` is a founder sign-off lever (pinned;
 `BUDGET_MAX: 0` reverts to the boost-only depth B).
+
+**THE TWELVE + THE TRIO — 12 archetypes and three new stats (founder-directed 2026-08-21: "Can we
+create a total of 12 archetypes for variety and add more stats to the characters") — BUILT**
+(`src/rules.tail.js` `WALLET_FORGE.ARCHETYPES` 4→12 + `FORGE_FAMILIES` + `forgeArchetype` +
+`REGIMEN` 5→8 disciplines + `HANDLING_ADD`/`POISE_BPS`/`POISE_FLOOR`/`VIGILANCE_DEF` +
+`AFFINITY_XP_PER_BAND`; `src/walletforge.js`, `src/races.js`, `src/kitchen.js`, `src/convoy.js`;
+`test/walletforge.js`/`test/regimen.js`/`test/convoy.js`; BALANCE.md § THE LEDGER-BORN + SIGN-OFF §
+THE 2026-08-21 PAIR row 4, recorded same-commit — the D13/D15 rule). **THE TWELVE:** the bands
+cannot honestly yield twelve distinct answers (eleven cells), so the catalog is four history
+FAMILIES — `forgeShape` byte-unchanged — × three VARIANTS each, the variant picked by
+`forgeArchetype(tiers, wallet)`: a stable FNV-1a hash of the LOWERCASED wallet, so the same wallet
+forges the same face forever (deterministic, auditable, NEVER a roll — the sell-deterministic rule;
+the rng_audit outcome stays roll-0 `(deterministic)`), and the original four ids LEAD their
+families so every stored `wallet_rolls.archetype`/`characters.forged` value stays a live key — no
+migration. Every shape still sums `CREATE_STAT_TOTAL` (the load guard now also demands exactly 12,
+valid affinities, and family coverage exactly-once — placed AFTER the REGIMEN const, which is
+defined far below WALLET_FORGE's own guard). **THE TRIO ("more stats"):** built as the REGIMEN — the
+codebase's sanctioned mechanism for new trainable stats (one single-touchpoint modifier each, off
+the audit-locked surfaces, shared gym clock, XP is not a currency): **White Knuckle** (handling — +
+(lvl−1)×0.5 on YOUR race score at all three sites, symmetric in PvP via each side's own owned
+handle; variance-buried → the levers pin is its guard, the marksmanship precedent), **Cool Head**
+(poise — the laylow sink ×(1−1%·(lvl−1)) floored 0.75, the Iron Chin shape; the DISCOUNTED figure is
+the one ledgered, till-tested to the dollar with the ledger row asserted), and **Night Eyes**
+(vigilance — + (lvl−1)×0.5 baked into the STORED convoy guards at depart beside the rig armor;
+defense-side only — an ambush is an ownership transfer, so no faucet widens). The board, the
+trainer-drill picker and the client drawer all iterate the catalog GENERICALLY, so the three joined
+every surface with zero new rendering code. **THE AFFINITY** ties the halves together: each
+archetype names a regimen discipline, and the forge schools it with `AFFINITY_XP_PER_BAND` (40) ×
+(ageTier+velTier) head-start XP through the regimen's own `addXp` rail (walletforge → regimen is
+acyclic) — max 5 bands = 200 XP ≈ level 4 of 25, schooling never mastery; the reply/notify carry
+`affinity {discipline, name, xp, level}` with the display NAME server-side (the F12 raw-key rule),
+and an unknown wallet schools nothing. §10.4: ZERO new surface (the forge still writes not one
+`transactions` row — the existing pin covers the affinity path; poise DISCOUNTS an existing sink;
+vigilance is defense-side). Six lever pins added + the ARCHETYPES whole-map pin replaced with the
+12-map + a FORGE_FAMILIES pin (register 716). **Four mutations, each caught at its own named
+assertion** (the affinity grant dropped → the character_disciplines DB read, NaN vs 120; the
+variant collapsed to `candidates[0]` → the two-wallets-differ variety assertion; poise off the till
+→ 5000 vs 4500 to the dollar; vigilance off the stored guards → 35 vs 40 exact from the DB). The
+integration pins use the STABLE literal variants (`graybeard`/`ironhand` — the FNV answer for those
+fixture wallets is math, not state) plus family-membership assertions, so a variant drift fails
+loudly without the test restating the function under test. Codices synced in the same commit (both
+Forge passages: twelve faces, the stable-function rule, the affinity schooling).
