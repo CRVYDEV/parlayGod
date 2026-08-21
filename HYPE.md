@@ -126,6 +126,19 @@ lesson: the closer cta fits ~62 chars — the first 66-char cta clipped BOTH fra
 so it shortened to "a real book · extraction opens at launch · omerta.fun". Copy rules as ever:
 mechanism-true, number-free, founder signs wording + voice + a licensed track before public.
 
+### The brand graphics pack (`public/art/brand/`, 2026-08-21 — $0)
+
+Eight static assets, the fourth approved deliverable, zero AI spend: each is an HTML composition
+over EXISTING noir plates + the served Oswald face, rasterized with playwright-core against the
+pre-installed chromium (`tools/brandpack.js`, the omr-flywheel.html precedent parameterized).
+An **X header** (1500×500, hero-backdrop), an **OG/link card** (1200×630, hero-poster), and **six
+1080×1350 pillar posters** (Streets / Rackets / Vice / Blood / Family / Legit) whose copy mirrors
+the LIFE cut's act enumerations — one source of truth, so a poster can't drift from the video.
+One build lesson: `file://` subresources do NOT load under playwright's `setContent` — the first
+renders were correct text stacks over near-black frames (caught by READING them, the art-pass
+discipline) — so the plate jpg + woff2 are inlined as data URIs and the build asserts
+`document.fonts.check` rather than assuming. Rebuilds are free; edit the ASSETS table and re-run.
+
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 
 The founder lifted the standing no-earnings rule and asked for earnings language + the $OMR value
