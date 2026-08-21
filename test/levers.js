@@ -189,6 +189,11 @@ const SIGNED = [
   // step 4, the BUY side. MIN_ETH is pacing; PRICE_FLOOR_BPS is a SAFETY bound, not a balance one —
   // the shelf credit is eth/price, so it is what stops a mistyped decimal minting inventory.
   ['DESK_BUYBACK.MIN_ETH', 0.001],
+  // THE UPPER LEG (NetNet rec H, 2026-08-21) — the formulaic sell-into-euphoria leg on the desk lot
+  ['DESK_SURGE.START_BPS', 11000],          // euphoria begins at 1.10x the 30d reference — below is noise
+  ['DESK_SURGE.MAX_X', 3],                  // CLIP-SIZED: the policy bounds never scale past 3x
+  ['DESK_SURGE.FLOAT_CAP_MAX_BPS', 300],    // the surged daily ceiling: at most 3% of float/day
+  ['DESK_SURGE.MIN_PRINTS', 5],             // a thin window has no trustworthy average — surge 1
   ['DESK_BUYBACK.PRICE_FLOOR_BPS', 2000],
   ['DUELS.GRUDGE_CD_MULT', 0.34],
   ['DUELS.LEGEND_MIN_LVL', 10],

@@ -53,7 +53,7 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { drainQueue } from './chain.js';
-import { BAND, DESK, DESK_AUCTION, DESK_BUYBACK, DESK_RECYCLE_REASON, COMMUNITY, auctionPriceAt, dayOf } from './rules.js';
+import { BAND, DESK, DESK_AUCTION, DESK_BUYBACK, DESK_SURGE, DESK_RECYCLE_REASON, COMMUNITY, auctionPriceAt, dayOf } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round8 = (n) => Math.round(n * 1e8) / 1e8;
@@ -95,6 +95,32 @@ export async function floatOmr(db) {
   return round6(held + family);
 }
 
+// ── THE UPPER LEG (NetNet rec H) — sell more into GENUINE euphoria, by formula ─────────────────
+// The premium is the LATEST real print against the window's AVERAGE of real prints (the same 30-day
+// window the anchor names). Prices in `vig_buyback` are $OMR per ETH, so a DEARER $OMR is a SMALLER
+// number — the premium is ref/spot, not spot/ref, and getting that backwards would make the desk
+// sell MORE into a crash. Folded in JS rather than SQL AVG (the pg-mem aggregate posture; the
+// window holds at most a few dozen rows). Three quiet states, each NAMED so the board can say why
+// the leg is asleep rather than reading as broken: `thin_window` (fewer than MIN_PRINTS real prints
+// — a single print is its own reference, so "euphoria" from it is a division by itself),
+// `no_price`, and `inside_band` (premium below START_BPS — ordinary noise, the dead-zone rule).
+export async function deskSurge(db, now = Date.now()) {
+  const since = new Date(now - BAND.ANCHOR_DAYS * 86400000);
+  const rows = (await db.query(
+    'SELECT price_omr_per_eth FROM vig_buyback WHERE real AND created_at >= $1 ORDER BY created_at DESC',
+    [since])).rows;
+  const prints = rows.length;
+  if (prints < DESK_SURGE.MIN_PRINTS) return { surge: 1, premiumBps: null, prints, reason: 'thin_window' };
+  const spot = Number(rows[0].price_omr_per_eth);
+  const ref = rows.reduce((t, r) => t + Number(r.price_omr_per_eth), 0) / prints;
+  if (!(spot > 0) || !(ref > 0)) return { surge: 1, premiumBps: null, prints, reason: 'no_price' };
+  const premiumBps = Math.round((ref / spot) * 10000);
+  if (premiumBps < DESK_SURGE.START_BPS) return { surge: 1, premiumBps, prints, reason: 'inside_band' };
+  // CLIP-SIZED: however hot the print, the scale never passes MAX_X — the line between "sell into
+  // strength" and "dump into a spike somebody manufactured".
+  return { surge: Math.min(DESK_SURGE.MAX_X, premiumBps / 10000), premiumBps, prints, reason: null };
+}
+
 // THE LOT — what goes up for sale today. Three bounds, and each is a different claim:
 //   • yesterday's returned inventory  — the design's rule: the desk sells what came home, not a
 //     quantity somebody picked. Turnover, not issuance.
@@ -108,11 +134,17 @@ export async function lotSize(db, now = Date.now()) {
     `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason=$1 AND at >= $2`,
     [DESK_RECYCLE_REASON, since])).rows[0].s);
   const float = await floatOmr(db);
-  const floatCap = Math.max(DESK_AUCTION.FLOAT_CAP_MIN_OMR, float * DESK_AUCTION.FLOAT_CAP_BPS / 10000);
+  // THE UPPER LEG scales the two POLICY bounds by the euphoria premium — never the shelf bound,
+  // which is wall 2 and not a policy. At surge 1 the arithmetic below is byte-identical to the
+  // pre-leg desk: min(100 × 1, 300) = the base FLOAT_CAP_BPS.
+  const s = await deskSurge(db, now);
+  const capBps = Math.min(DESK_AUCTION.FLOAT_CAP_BPS * s.surge, DESK_SURGE.FLOAT_CAP_MAX_BPS);
+  const floatCap = Math.max(DESK_AUCTION.FLOAT_CAP_MIN_OMR, float * capBps / 10000);
   const shelf = Number((await deskInventory(db)).balance);
   return {
-    qty: round6(Math.max(0, Math.min(returned, floatCap, shelf))),
+    qty: round6(Math.max(0, Math.min(returned * s.surge, floatCap, shelf))),
     returned: round6(returned), float, floatCap: round6(floatCap), shelf: round6(shelf),
+    surge: s.surge, surgePremiumBps: s.premiumBps, surgeReason: s.reason,
   };
 }
 
@@ -425,6 +457,7 @@ export async function deskBoard(pool, now = Date.now()) {
     closesSeconds: Math.max(0, Math.round((new Date(a.closes_at).getTime() - now) / 1000)),
   } : null;
   const budget = await polBudget(pool);
+  const surgeNow = await deskSurge(pool, now);
   return {
     inventory: Number(d.balance),
     lifetimeIn: Number(d.lifetime_in),
@@ -448,6 +481,13 @@ export async function deskBoard(pool, now = Date.now()) {
       sellAbove: band.anchor === null ? null : round8(band.anchor * BAND.UPPER_BPS / 10000),
       buyBelow: band.anchor === null ? null : round8(band.anchor * BAND.LOWER_BPS / 10000),
       stale: band.stale, reason: band.stale ? band.reason : null,
+    },
+    // THE UPPER LEG (NetNet rec H) — published like the band's other two edges: a player told the
+    // desk sells more into genuine strength is entitled to see whether the leg is awake and why not.
+    surge: {
+      x: surgeNow.surge, premiumBps: surgeNow.premiumBps, prints: surgeNow.prints,
+      asleep: surgeNow.reason, startBps: DESK_SURGE.START_BPS, maxX: DESK_SURGE.MAX_X,
+      floatCapMaxBps: DESK_SURGE.FLOAT_CAP_MAX_BPS,
     },
     schedule: {
       durationMs: DESK_AUCTION.DURATION_MS,

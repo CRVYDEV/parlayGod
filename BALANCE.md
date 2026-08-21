@@ -6389,3 +6389,33 @@ deliberately stops at the body (the escrow leg loots at the flat rate — the sa
 auction:bid shape — `$OMR conservation` is proven UNMOVED across the full lifecycle in
 test/loans.js); a staked-pledge option (power-for-free through the ladder); and any exemption of
 the pledge from the death split (the vault closure IS the mechanic).
+
+## THE UPPER LEG — the formulaic sell-into-euphoria leg on the desk lot (NetNet research rec H, 2026-08-21)
+
+Founder-directed ("Build the desk's upper leg" — the answer to the rec-H decision prompt; rec G, the
+backing gauge, was answered "leave as-is" in the same sitting and needed no change). The desk already
+BUYS below the band's LOWER edge and SELLS at or above UPPER; the LOT was blind to HOW FAR above —
+a genuine squeeze and an ordinary day both sold the same clip. The leg is NetNet's PremiumSeller
+insight as a formula over the desk's OWN price history: when the latest REAL print sits `START_BPS`
+above the 30-day window's average of real prints, the lot's two POLICY bounds (returned-inventory ×
+surge, float cap up to `FLOAT_CAP_MAX_BPS`) scale by the premium — clip-sized at `MAX_X`, and NEVER
+the shelf bound (wall 2 is not a policy). Nothing mints — the leg only decides how much of the shelf
+goes up today, so wall 1 is untouched by construction, and at surge 1 the arithmetic is
+byte-identical to the pre-leg desk (min(100×1, 300) = the base cap).
+
+| Lever | Ships at | What it is |
+|---|---|---|
+| `DESK_SURGE.START_BPS` | 11000 | euphoria begins at 1.10× the 30d reference — below is ordinary noise (the dead-zone rule) |
+| `DESK_SURGE.MAX_X` | 3 | CLIP-SIZED: the policy bounds never scale past 3× — "sell into strength", never "dump into a manufactured spike" |
+| `DESK_SURGE.FLOAT_CAP_MAX_BPS` | 300 | the surged daily ceiling: at most 3% of float/day (base 1%) — the anti-dump wall stretches, it never disappears |
+| `DESK_SURGE.MIN_PRINTS` | 5 | fewer real prints in the window and there is no average worth trusting — a single print is its own reference, so the leg sleeps (`thin_window`) |
+
+Prices in `vig_buyback` are $OMR per ETH, so a DEARER $OMR is a SMALLER number — the premium is
+ref/spot, and getting that backwards would make the desk sell MORE into a crash (the direction is
+test-pinned). The three quiet states are NAMED on the board (`thin_window` / `no_price` /
+`inside_band`) so an asleep leg never reads as a broken one — the desk-dark lesson. NetNet's
+ordering rule (the treasury's sell threshold must sit ABOVE any emission throttle, so the protocol
+never competes with itself) is satisfied trivially — there is no price-responsive emission anywhere
+(wall 1; bonds are GM-throttled by THE DAILY OFFERING) — and is recorded at the lever block for the
+day one is ever proposed. All four numbers are founder sign-off levers (pinned in test/levers.js);
+`MAX_X: 1` puts the desk back to the flat clip exactly.

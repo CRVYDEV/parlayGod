@@ -351,7 +351,22 @@ assert.equal(wd.body.bank, 25000, 'and what is left banked');
 await seed('bank = 1234567.891234');
 const frac = await call('POST', '/v1/bank/withdraw', { token, body: { amount: 7 } });
 assert(Number.isInteger(frac.body.bank), `the withdrawal's balance must arrive at the sheet's precision — got ${frac.body.bank}`);
-assert.equal(frac.body.bank, (await meOf(token)).bank, 'and the toast and the sheet must not disagree about one balance');
+// Pin the toast against the LEDGER, never against a second request: a direct pool.query does not
+// accrue, so this is exactly the figure the withdraw's reply was computed from — while meOf() is a
+// SECOND authed request, and at this principal bank interest crosses an integer every ~2 seconds,
+// so strict equality against it was the recorded flake class (a deterministic assertion resting on
+// a timing precondition — this one seeded $0.109 below the boundary and failed under a loaded run).
+// Flooring the DB figure also catches a ROUNDED regression (.891 rounds up, floors down), which is
+// the discrimination the meOf comparison was there for.
+const fracDb = Number((await pool.query(`SELECT bank FROM characters WHERE id='${cid}'`)).rows[0].bank);
+assert.equal(frac.body.bank, Math.floor(fracDb), 'the toast floors the ledger figure — the same convention the sheet uses');
+// The cross-surface half keeps the wave-36 shape: the sheet reads a LATER moment, so it may only be
+// equal or ahead by the interest the gap accrued — the lower edge exact, the upper a computed 30s
+// bound (orders of magnitude past any real gap; a raw/fractional regression fails isInteger above).
+const sheetBank = (await meOf(token)).bank;
+const drift30s = Math.ceil(fracDb * CONSTANTS.BANK_RATE * (30000 / CONSTANTS.BANK_PERIOD_MS)) + 1;
+assert(sheetBank >= frac.body.bank && sheetBank - frac.body.bank <= drift30s,
+  `and the sheet agrees to within the gap's own interest (toast ${frac.body.bank}, sheet ${sheetBank})`);
 const dep2 = await call('POST', '/v1/bank/deposit', { token, body: { amount: 1 } });
 assert(Number.isInteger(dep2.body.bank), `the deposit's balance too — got ${dep2.body.bank}`);
 assert(Number((await pool.query(`SELECT bank FROM characters WHERE id='${cid}'`)).rows[0].bank) % 1 !== 0,
