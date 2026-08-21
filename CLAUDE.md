@@ -15202,6 +15202,46 @@ test/client.js` used to undo a mutation **destroyed three uncommitted edits in t
 the recorded rule exists for exactly this: **mutations go on a scratchpad copy (`cp` out, `cp`
 back), never `git checkout`, while uncommitted work is in the tree.**
 
+**WAVE 49 — THE TWO DAILY BUTTONS, AND BOTH OF THEM HID THE HOOK (`src/game.js` + `src/growth.js`
++ `public/index.html`, 2026-08-21).** Wave 48's extractor was pointed at the daily rails, and the
+two most-repeated reward buttons in the game were each rendering their own retention hook as
+nothing. **(1) THE CHECK-IN.** The reply carried `pay` and `streak`, so the line read
+*"+$105,350 (day 1)"* — **the streak rendered as a COUNTER when it is the money MULTIPLIER**:
+`pay = 250×lvl + 100×lvl×min(streak,7)`, so day 2 was worth **+$30,100 more** and the player had no
+way to know. That is the entire reason to come back tomorrow, it is **uncomputable client-side**
+(the formula is level-scaled and published nowhere — the `crewNextCost` case), and its own sibling
+one system over (`/v1/streak/claim`) has stated day/best/rank since it shipped. It also silently
+handed back **+20 energy**, measured and never mentioned. **(2) THE DAILY CONTRACT** — up to three a
+day, every player — read **`"done."`** over **$60,200 and 1,505 respect**, and what it withheld is
+the ENVELOPE: clearing all three pays **3.5× the cash, 4× the respect, refills energy outright, and
+draws $OMR from the event fund** — and `daily:all` is **one of only TWO ways to earn the token at
+all** (the mission ladder's 1,320 lifetime, and this). A player two-for-three had no idea the third
+was worth that.
+**THREE THINGS THE DRIVING DECIDED, none of which reading would have.** (a) **`energyGained` is a
+DELTA, clamped at 0, and the clamp is not defensive**: the energy cap is LEVEL-scaled and the season
+rollover RESETS respect, so a returning player's stored energy can sit ABOVE the new cap — `Math.min`
+then clamps DOWN and the raw delta is negative. Driven at a forced cap it printed **"+-99,347
+energy"**: a wrong number where a silent one would do, which is the thing this whole sweep is about.
+(b) **The envelope can be OUT OF REACH and the hook must say so** — `all` requires EVERY job on the
+board, so on a day that draws the family-gated tribute a solo player cannot reach it however many
+they clear; the card already discloses that per-job, and dangling the envelope anyway would be the
+coach's own `dailyLiveFor` lesson unlearned. (c) **The $OMR is DRAWN from the event fund, not
+minted**, so the promise is worded *"if the event fund covers it"* and the all-three line says which
+happened — driven with a dry fund it paid **0**, and a player who read an unqualified promise and
+got silence would think it was eaten.
+**AND THE GUARD'S OWN PRECONDITION WAS A CALENDAR FLAKE, caught by its own vacuity check.** Which
+jobs the board draws is a function of the real DAY, so on days that include the family-gated job the
+mirror's family-less fixture lands in `outOfReach` and the hook assertion would pass or fail **by the
+date** — the recorded shape (a deterministic assertion resting on a probabilistic precondition). Fixed
+by GUARANTEEING it rather than weakening the check: the resolver pre-claims the blocked jobs, so the
+envelope is open every day of the year and the driven claim is still a real server reply.
+**TWO ASSERTIONS FAILED AT THE WRONG THING FIRST, and the fix is the wave-46 rule applied twice.**
+Both blocks put their vacuity relation ahead of the server's contract, so a mutation that dropped a
+FIELD tripped *"this block is vacuous…"* and **blamed the fixture for something the server had stopped
+sending**. Each now asserts the contract by name first. Six mutations, six distinct named failures —
+M2 and M5 reproducing the originals verbatim (`"+$156,800 (day 1)"` and `"done."`). Suite green, sim
+drift-0, mobile 79/79, pgquery, **pgcheck 47/47 on a fresh real Postgres**. Driven actions 219 → 221.
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and

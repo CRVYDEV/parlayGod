@@ -3024,7 +3024,37 @@
     // `pay` is the generic "what it paid" field, but a FAVOR's pay is the poster's gross — the
     // runner nets it minus the house cut, and the favor branch above already says so. Appending the
     // gross here would report a bigger number than the pocket actually moved.
-    if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
+    // THE DAILY CONTRACT — the most-repeated reward button in the game, and it said "done." over a
+    // five-figure payout. The ENVELOPE is the half that matters: all three pays 3.5× the cash, 4×
+    // the respect, refills energy and draws $OMR — one of only two ways to earn the token — so a
+    // player two-for-three needs to know what the third is worth. `remaining`/`allBonus` come from
+    // the server because both are level-scaled; `envelopeOutOfReach` is when the board drew a job
+    // this street cannot clear, and dangling the envelope then would be a promise it cannot keep.
+    if (body.payout !== undefined && body.rep !== undefined && body.all !== undefined)
+      bits.push(`\u{1F4CB} contract paid — $${fmt(body.payout)} and ${fmt(body.rep)} respect`
+        + (body.all
+          // the $OMR is drawn from the event fund and a dry fund pays nothing, so say WHICH
+          // happened — a player who read the promise and got silence would think it was eaten.
+          ? `. ALL THREE — the envelope: energy back to full`
+            + `${body.omrBonus ? ` and ${fmt(body.omrBonus)} $OMR` : ', though the event fund was dry so no $OMR this time'}`
+          : body.envelopeOutOfReach
+            ? '. The envelope is out of reach today — one of the three needs a family'
+            : body.remaining
+              // "if the fund covers it" because it is drawn from the event fund, not minted: the
+              // promise has to be the one the game can actually keep.
+              ? `. ${body.remaining} to go for the envelope: $${fmt(body.allBonus.cash)} more, ${fmt(body.allBonus.rep)} more respect, a full tank`
+                + `, and ${fmt(body.allBonus.omr)} $OMR if the event fund covers it`
+              : ''));
+    // THE CHECK-IN, above the generic `pay` because the streak is not a counter, it is the
+    // multiplier: the pay climbs every consecutive day to seven, so tomorrow's figure is the whole
+    // reason to come back and it read as a bare parenthetical. `next` is what the SERVER says the
+    // next one pays — never re-derived here, because the formula is level-scaled and lives there.
+    if (body.pay && body.streak && (body.next !== undefined || body.energyGained !== undefined))
+      bits.push(`+$${fmt(body.pay)} — day ${body.streak}`
+        + `${body.energyGained ? `, +${body.energyGained} energy` : ''}`
+        + `${body.wasStreak ? `. The gap cost you: day ${body.wasStreak} down to ${body.streak}` : ''}`
+        + `${body.next ? `. Back tomorrow and it's $${fmt(body.next)}` : `. That's the top of the ladder`}`);
+    else if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
     // CUTTING the stash and COLLECTING a batch both answer with a qty and a quality, so the cut has
     // to be claimed FIRST and by its own `op` — and it says what it ADDED and what the quality fell

@@ -2556,6 +2556,31 @@ if (mark) {
     }, null]);
   if (staff) addAction(['POST', '/v1/estate/upgrade', null], ['POST', `/v1/estate/staff/${staff.id}`, null]);
   addAction(['POST', '/v1/loans', { amount: 5000, rate: 0.2, hours: 24 }]);
+  // THE DAILY CHECK-IN — the streak is the money MULTIPLIER, not a counter, and the line rendered
+  // it as a bare parenthetical. Driven here so check 8 owns its silence; the numbers are asserted
+  // by name below, because "+$105,350 (day 1)" is a fluent sentence no silence pattern can see.
+  addAction(['POST', '/v1/checkin', null]);
+  // THE DAILY CONTRACT — the most-repeated reward button in the game, and it said "done." The
+  // counters are seeded so the CLAIM is what drives; doing the work is another suite's business,
+  // and a job whose work this fixture cannot reach would 4xx and read as covered. LAZY, because
+  // the board is drawn per DAY and the id cannot be written down here.
+  addAction(['POST', async () => {
+    const day = Math.floor(Date.now() / 86400000);
+    const board = (await inject('GET', '/v1/daily', token)).body?.jobs || [];
+    if (!board.length) return null;
+    const ctr = {}; for (const j of board) ctr[j.kind] = j.goal;
+    await app.pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ($1,$2,$3,'[]')
+      ON CONFLICT (character_id, day) DO UPDATE SET counters=$3, claimed='[]'`, [charId, day, JSON.stringify(ctr)]);
+    // GUARANTEE the state the assertion is about, rather than hope for it. Which jobs the board
+    // draws is a function of the real DAY, and a family-gated one on a family-less fixture leaves
+    // the envelope out of reach — so the claim would land in a different branch on some calendar
+    // days and the same assertion would pass or fail by the date (the recorded flake shape).
+    // Pre-claiming the blocked ones here leaves the envelope open every day of the year, and the
+    // driven claim below is still a real server reply.
+    for (const j of board.filter((x) => x.blocked)) await inject('POST', `/v1/daily/${j.id}/claim`, token, null);
+    const rest = board.filter((j) => !j.blocked);
+    return rest.length >= 2 ? `/v1/daily/${rest[0].id}/claim` : null;
+  }, null]);
   // THE RACKET UPGRADE. The BUY has read an hourly rate since it shipped; the UPGRADE three lines
   // below it landed on the bare catch-all `paid $6,250` — the forgotten sibling, and the worst of
   // the pair to leave mute, because the whole POINT of an upgrade is the NEW number. Both are
@@ -3567,6 +3592,64 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   assert(upLine.includes(asMoney(upBody.upkeepPerHr)) && /pad/i.test(upLine),
     '…and the pad it just RAISED, which is the recurring bill a tester asked about. Got: '
     + `${JSON.stringify(upLine)} over upkeepPerHr ${upBody.upkeepPerHr}`);
+}
+// THE DAILY CONTRACT — the most-repeated reward button in the game, and it read "done." over a
+// five-figure payout. The ENVELOPE is what it withheld: all three pays 3.5× the cash, 4× the
+// respect, refills energy and draws $OMR — one of only TWO ways to earn the token — so a player
+// two-for-three has to be told what the third is worth. Both figures come from the server because
+// both are level-scaled; the promise is worded "if the fund covers it" because it is drawn from the
+// event fund, not minted, and a promise the game cannot keep is worse than a silent one.
+{
+  const dcUrl = [...said.keys()].find((u) => /^\/v1\/daily\/[a-z0-9]+\/claim$/.test(u));
+  const dc = said.get(dcUrl), dcBody = paidBody.get(dcUrl);
+  assert(dcUrl && dc && dcBody, 'the daily contract never drove — an unfinished contract answers 400 '
+    + 'and is skipped, which reads on the summary line exactly like a covered action');
+  assert(dc.includes(asMoney(dcBody.payout)) && dc.includes(asMoney(dcBody.rep)),
+    `the day's take and the respect with it. Got: ${JSON.stringify(dc)}`);
+  // The fixture GUARANTEES the state this block is about — the claim leaves the set unfinished and
+  // the blocked jobs are pre-claimed — so those two are the precondition, and the SERVER'S contract
+  // is asserted separately and by name. Ordering matters: put the vacuity relation first and a
+  // dropped field blames the FIXTURE for something the server had stopped sending.
+  assert(dcBody.all === false && !dcBody.envelopeOutOfReach,
+    'this block is vacuous unless the claim leaves the envelope OPEN — the resolver pre-claims the '
+    + `blocked jobs to make that true every day of the year. Got: ${JSON.stringify(dcBody)}`);
+  assert(dcBody.remaining > 0 && dcBody.allBonus,
+    'with the envelope still open the reply must carry the hook — how many are left and what they '
+    + `are worth. Both are level-scaled, so the client cannot derive either. Got: ${JSON.stringify(dcBody)}`);
+  assert(dc.includes(asMoney(dcBody.allBonus.cash)) && /envelope/i.test(dc),
+    '…and what clearing the rest is worth, which is the whole hook and is level-scaled, so the '
+    + `client cannot derive it. Got: ${JSON.stringify(dc)} over ${dcBody.allBonus.cash}`);
+  assert(/if the event fund covers it/i.test(dc),
+    'the $OMR is DRAWN from the event fund and a dry fund pays nothing, so the promise has to be the '
+    + `one the game can keep. Got: ${JSON.stringify(dc)}`);
+}
+// THE DAILY CHECK-IN — the reply carried `pay` and `streak` and nothing else, so the line read
+// "+$105,350 (day 1)": the STREAK rendered as a counter when it is the multiplier. Pay climbs
+// 100×level for every consecutive day to seven, so day 2 was worth +$30,100 more and the player had
+// no way to know — the whole reason to come back, and uncomputable client-side because the formula
+// lives on the server. Crossed against what the SERVER sent: `next` is the figure it promises and a
+// literal would pass while the two drift.
+{
+  const ci = said.get('/v1/checkin'), ciBody = paidBody.get('/v1/checkin');
+  assert(ci && ciBody, 'the check-in never drove — a second check-in the same day answers 400 and is '
+    + 'skipped, which reads on the summary line exactly like a covered action');
+  // the SERVER'S contract first, and by name: below the top of the ladder there is always a
+  // tomorrow figure, and it is the one number the client cannot derive. Asserting the vacuity
+  // relation first would blame the FIXTURE for a field the server had stopped sending.
+  assert(ciBody.streak >= 7 || typeof ciBody.next === 'number',
+    'the reply must carry what tomorrow pays — the client cannot derive it, the formula is '
+    + `level-scaled and lives on the server. Got: ${JSON.stringify(ciBody)}`);
+  assert(ciBody.next > ciBody.pay,
+    'this block is vacuous unless tomorrow really pays MORE — the whole claim is that the streak is a '
+    + `multiplier. Got pay ${ciBody.pay} next ${ciBody.next}`);
+  assert(ci.includes(asMoney(ciBody.pay)) && new RegExp(`day ${ciBody.streak}\\b`).test(ci),
+    `the day's take and which day it is. Got: ${JSON.stringify(ci)}`);
+  assert(ci.includes(asMoney(ciBody.next)) && /tomorrow/i.test(ci),
+    '…and what coming back tomorrow is worth, which is the entire hook and the one number the client '
+    + `cannot derive. Got: ${JSON.stringify(ci)} over next ${ciBody.next}`);
+  // the energy is a DELTA, so a line claiming a constant would be a wrong number at the cap
+  if (ciBody.energyGained) assert(new RegExp(`\\+${ciBody.energyGained} energy`).test(ci),
+    `…and the energy that really landed. Got: ${JSON.stringify(ci)} over ${ciBody.energyGained}`);
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
