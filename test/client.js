@@ -46,8 +46,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
   COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, RACKETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS,
-  PEN, HONOR, MARRIAGE, CAMPAIGNS } from '../src/rules.js';
+  PEN, HONOR, MARRIAGE, CAMPAIGNS, LIMITED_RUNS } from '../src/rules.js';
 import { bumpHonor } from '../src/honor.js';
+import { mintLimitedRun } from '../src/economy.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -2312,6 +2313,7 @@ const describeFn = (() => {
 // class this file exists to catch. `fmt` groups thousands, so the raw number never appears verbatim.
 const fmtLike = (n) => String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+let respecWant = null;   // WAVE 55: the respec row computes its own conserving swap at drive time
 const ACTIONS = [
   ['POST', '/v1/travel/neon', null],
   // found by playing: the numbers ticket said "done." — neither the number taken, the stake, nor the
@@ -2326,6 +2328,23 @@ const ACTIONS = [
   ['POST', '/v1/kitchen/makings/vim', { qty: 1 }],
   // a permanent build decision that said "done."
   ['POST', '/v1/skills/bruiser', null],
+  // WAVE 55 — two of the most-pressed verbs in the game, neither of which the ledger had ever
+  // driven. THE REBUILD said "done." over a paid, once-a-day reshaping of the three numbers every
+  // opposed roll reads. THE BOOST said "boosted a rare ride" over iron it never named — including,
+  // silently, a numbered 1-of-N car, which is the single rarest thing that can happen to a player.
+  // Both seed their own precondition at drive time: a respec that lands on the same build 4xxs
+  // `same`, and boosting needs the cooldown clear and the garage under its cap.
+  ['POST', async () => {
+    // The build is SEEDED rather than read, because the conserving swap below needs headroom the
+    // fixture may not have: a 5/5/5 character is already on the per-stat floor, so every legal
+    // redistribution of 15 points is 5/5/5 — the server answers `same`, the row skips, and the
+    // assertions read `undefined` while the summary line calls it covered.
+    await app.pool.query('UPDATE characters SET muscle=20, cunning=10, speed=10, respec_at=NULL WHERE id=$1', [charId]);
+    respecWant = { muscle: 10, cunning: 20, speed: 10 };   // conserves 40, every stat clear of the floor
+    await app.pool.query('UPDATE account_persistent SET omr=9000 WHERE account_id=' +
+      '(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+    return '/v1/respec';
+  }, () => respecWant],
   ['POST', '/v1/bank/deposit', { amount: 100 }],
   ['POST', '/v1/bank/withdraw', { amount: 50 }],
   ['POST', '/v1/armory/ammo', null],
@@ -2825,7 +2844,7 @@ let described = 0;
 for (const [m, url0, payload] of ACTIONS) {
   const url = typeof url0 === 'function' ? await url0() : url0;
   if (!url) continue;
-  const r = await inject(m, url, token, payload);
+  const r = await inject(m, url, token, typeof payload === 'function' ? payload() : payload);
   if (r.code >= 400 || !r.body) continue;              // a refusal is another suite's business
   described++;
   let line;
@@ -2841,6 +2860,72 @@ for (const [m, url0, payload] of ACTIONS) {
   if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
     mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
 }
+// WAVE 55 — THE BOOST, driven on its OWN token and AFTER the loop above, for the reason the loop's
+// own header gives: a failed boost JAILS you, and a jailed fixture silences every row that follows
+// while each of them still reads on the summary line as covered. It is also the only row here that
+// must be driven TWICE: the ordinary success and the LIMITED RUN are different lines, and the run —
+// a numbered 1-of-N car, the rarest thing that can happen to a player — is the one that was silent.
+// The run roll is pinned through its TEST-ONLY knob rather than looped for, because looping for a
+// 0.4% event is a flake with extra steps.
+{
+  const bt = (await inject('POST', '/v1/auth/guest')).body.token;
+  await inject('POST', '/v1/character', bt, { name: 'Ledger Boost ' + Math.random().toString(36).slice(2, 6) });
+  const bid = (await inject('GET', '/v1/me', bt)).body.character.id;
+  await app.pool.query("UPDATE characters SET cash=900000, respect=2000000, energy=900, speed=40, cunning=40 WHERE id=$1", [bid]);
+  const tryBoost = async () => {
+    for (let i = 0; i < 40; i++) {                      // the roll caps at 0.9 — retry, never assume
+      await app.pool.query('UPDATE characters SET gta_at=NULL, jail_until=NULL, energy=900 WHERE id=$1', [bid]);
+      const r = await inject('POST', '/v1/garage/boost', bt);
+      if (r.code === 200 && r.body?.success === true) return r.body;
+      // a full garage would 4xx forever rather than flake, so make room and keep going
+      await app.pool.query('DELETE FROM cars WHERE character_id=$1', [bid]);
+    }
+    assert(false, 'the boost never landed in 40 tries — the fixture is wrong, not the dice');
+  };
+  const plain = await tryBoost();
+  const plainLine = String(describeFn(plain, 200));
+  said.set('/v1/garage/boost', plainLine);
+  assert(plain.car && plain.car.name, 'the boost reply must NAME the iron it just handed over — the model ' +
+    'id alone (`junker`) is what the art route keys on, not something to show a player');
+  assert(plainLine.includes(plain.car.name), 'THE BOOST DID NOT NAME THE CAR. The most-repeated money verb ' +
+    `in the game read ${JSON.stringify(plainLine)} over a ${plain.car.name} — a player had to open the ` +
+    'Garage to find out what they had just stolen');
+  assert(!/ride/.test(plainLine) || plainLine.includes(plain.car.name),
+    'a generic "ride" is what this line said before it said anything');
+
+  // THE NUMBERED CAR — and a correction, recorded because a sweep that publishes only its hits
+  // cannot be audited. The wave that found the boost silent claimed the 1-of-N car was silent with
+  // it, and that was WRONG: `car.run` returns on its own dedicated line ~700 lines earlier in
+  // describe(), and the mutation written to prove otherwise passed. (It passed twice, in fact —
+  // the first attempt was a python replace with no anchor assert, so it never applied at all and
+  // read exactly like a clean bill of health. The second one really applied, and the branch it
+  // removed turned out to be dead code I had just added.) What stays is a REGRESSION guard on the
+  // line that was already right, because the ordering is what makes it right and ordering is what
+  // a future edit moves.
+  //
+  // A run only exists on FOUR of the sixty catalog models and `rollCar` reaches them 0.93% of the
+  // time — measured, not guessed — so 99% confidence needs ~500 boosts, which is a flake with extra
+  // steps. The run therefore comes from the server's own minter (roll pinned through its TEST-ONLY
+  // knob) spliced into the REAL boost reply: every value asserted below is still server-produced.
+  // Stated rather than hidden: the DRAW is not driven here, only the line that renders it.
+  process.env.LIMITED_RUN_P = '1';                      // TEST-ONLY (preflight classifies it)
+  const cl = await app.pool.connect();
+  let mintedRun;
+  try { mintedRun = await mintLimitedRun(cl, LIMITED_RUNS[0].model, 0); } finally { cl.release(); }
+  delete process.env.LIMITED_RUN_P;
+  assert(mintedRun && mintedRun.serial, 'the minter must return a real numbered run, or the line below is checked against nothing');
+  const runBody = { ...plain, car: { ...plain.car, run: mintedRun } };
+  const runLine = String(describeFn(runBody, 200));
+  said.set('/v1/garage/boost#run', runLine);
+  const { serial, cap, name: runName } = runBody.car.run;
+  assert(runLine.includes(String(serial)) && runLine.includes(String(cap)) && runLine.includes(runName),
+    `THE NUMBERED CAR MUST OUTRANK THE BOOST. Number ${serial} of ${cap} of ${runName} is the rarest `
+    + 'thing that can happen to a player, and it reads on its own line — which only works while that '
+    + `line RETURNS ahead of the ordinary boost bit. Got: ${JSON.stringify(runLine)}`);
+  assert(!runLine.includes(plain.car.name),
+    'and it must not degrade into the ordinary line, which names the model and buries the serial');
+}
+
 // WAVE 10 — the three screens the main fixture structurally cannot reach, on their own tokens (the
 // hush-line precedent below). The PEN needs a sentence, and jail refuses nearly everything, so a
 // jailed character cannot sit in ACTIONS at all: it would silence every row after it and those rows
@@ -3916,6 +4001,29 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   assert(/rules\?\.cooling/.test(html),
     'the Kitchen buttons must quote the LIVE cooling levers — restating $5,000 or 60 $OMR in the '
     + 'client is how a price drifts from the till that charges it');
+}
+// WAVE 55 — THE REBUILD. `/v1/respec` burns the premium currency to reshape the three numbers every
+// opposed roll in the game reads, and it said "done." Worse than the silence: the 24h cooldown was
+// stated on NO screen — the card priced the burn and named no cadence — so a player learned the
+// term from the refusal on the tweak they immediately wanted. The reply carries both now, and the
+// card states the cadence before you commit (the terms-ride-with-the-price discipline).
+{
+  const rs = paidBody.get('/v1/respec');
+  const rsLine = said.get('/v1/respec') || '';
+  assert(rs && rs.stats, `the respec row must actually run, or every assertion below is vacuous. Got: ${JSON.stringify(rs)}`);
+  assert(rs.omr > 0 && rs.cooldownSeconds > 0,
+    'a paid, rate-limited rebuild must send back what it COST and when the trainer reopens — both '
+    + 'were absent, which is why the line could only say "done.". Got keys: '
+    + JSON.stringify(Object.keys(rs).filter((k) => k !== 'character' && k !== 'events')));
+  assert(rsLine.includes(String(rs.stats.muscle)) && rsLine.includes(String(rs.stats.cunning))
+    && rsLine.includes(String(rs.stats.speed)),
+    `THE REBUILD SAID NOTHING. A player who just redistributed their build needs to read the build. Got: ${JSON.stringify(rsLine)}`);
+  assert(rsLine.includes(fmtLike(rs.omr)), `…and what it cost (${rs.omr} $OMR). Got: ${JSON.stringify(rsLine)}`);
+  assert(/reopens|hour|h\b|d\b/.test(rsLine),
+    `…and that it is the only one today — the term nobody could see before they spent. Got: ${JSON.stringify(rsLine)}`);
+  assert(/rules\?\.respecCdHours/.test(html),
+    'the respec card must state the ONCE-A-DAY term before the button is pressed, off the live lever '
+    + '— a cadence a player can only discover by being refused is a term withheld from the price');
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
