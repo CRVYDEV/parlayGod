@@ -6307,19 +6307,21 @@ buy power" ON THE STAT LAYER ONLY**, and the bounds are the sign-off:
 
 | lever | ships at | what it bounds |
 |---|---|---|
-| `WALLET_FORGE.BONUS_MAX` | 3 | the ONLY stat power a wallet can ever buy — +20% of the 15-point base, once, ever; 0 reverts depth B to shape-only (depth A) |
+| `WALLET_FORGE.BONUS_MAX` | 3 | the boost-stat half of what a wallet buys — once, ever; 0 reverts the boost half |
+| `WALLET_FORGE.BUDGET_MAX` | 3 | **THE BUDGET PERK** (founder-directed 2026-08-21: "I want the wallet to decide the budget as well for an extra perk") — extra WHOLE-budget points a deep history forges, `max(0, ageTier + velTier − 1)` capped here, spread round-robin (never re-aimed at the boost stat); with BONUS_MAX the total ceiling is 15+3+3 = **21 (+40%)**, once, ever; 0 reverts to the boost-only depth B |
 | `WALLET_FORGE.FREE_LVL` | 5 | at/below: free (an onboarding identity moment); above: consumes a paid reroll credit (the fees.js 0.01-ETH rail) |
 | `WALLET_FORGE.AGE_TIERS_DAYS` | [365, 1095] | wallet-age bands (1y/3y) — age is unfakeable after the fact |
 | `WALLET_FORGE.VELOCITY_TIERS` | [20, 200, 1000] | lifetime tx-count bands — each unit cost real gas |
-| `WALLET_FORGE.ARCHETYPES` | 4 shapes | each load-guarded to sum exactly `CREATE_STAT_TOTAL` — the wallet decides the SHAPE, never the budget |
+| `WALLET_FORGE.ARCHETYPES` | 4 shapes | each BASE shape load-guarded to sum exactly `CREATE_STAT_TOTAL` — only the two banded, capped grants sit on top |
 
 **Why it is Sybil-neutral by construction:** the latch is ONCE PER WALLET, EVER (`wallet_rolls`,
 lowercased-wallet PK), so wallet-shopping needs a fresh AGED, WORKED wallet per attempt — the
 features are chosen by cost-to-fake (age cannot be manufactured after the announcement; tx count
 costs gas per unit; balances are deliberately never read, because a balance is borrowable the block
 before the call). A farmed fresh wallet maps to `unknown` and earns an ordinary random roll — zero
-bonus, zero edge. The gym out-trains the whole bonus in a day (~40 pts/hr vs a once-ever +3), so
-the grant is an IDENTITY moment, not a power curve — but it IS power bought with an outside asset,
+bonus, zero edge. The gym out-trains the whole grant in a day (~40 pts/hr vs a once-ever +6 at the
+full ceiling), so the grant is an IDENTITY moment, not a power curve — but it IS power bought with
+an outside asset,
 which is why it is a founder-signed lever and not a status axis. §10.4: zero surface (no currency
 moves; the forge writes no `transactions` row — test-pinned in `test/walletforge.js`). Only the
 BANDS are stored, never the raw features (the anti-precise-kill-EV rule on a permanent table).

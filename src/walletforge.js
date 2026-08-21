@@ -1,9 +1,11 @@
 // ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
 // A SIWE-proven wallet's on-chain HISTORY forges the living street's build: the wallet decides the
-// stat SHAPE (an archetype summing to the same CREATE_STAT_TOTAL every random roll gets) and grants
-// a small banded BONUS (≤ WALLET_FORGE.BONUS_MAX on the archetype's boost stat) — the founder-signed,
-// bounded retirement of "outside wealth must not buy power" on the stat layer, recorded in
-// BALANCE.md § THE LEDGER-BORN and SIGN-OFF § THE 2026-08-21 PAIR.
+// stat SHAPE (an archetype), grants a small banded BONUS (≤ WALLET_FORGE.BONUS_MAX on the
+// archetype's boost stat), and — founder-directed 2026-08-21 ("I want the wallet to decide the
+// budget as well for an extra perk") — a banded BUDGET perk (≤ BUDGET_MAX extra whole-budget
+// points, spread evenly, never re-aimed) — the founder-signed, bounded retirement of "outside
+// wealth must not buy power" on the stat layer, recorded in BALANCE.md § THE LEDGER-BORN and
+// SIGN-OFF § THE 2026-08-21 PAIR. Ceiling: 15 + BONUS_MAX + BUDGET_MAX = 21.
 //
 // The walls, each load-bearing:
 //   • ONCE PER WALLET, EVER (`wallet_rolls`, lowercased-wallet PK) — a wallet forges ONE build,
@@ -28,7 +30,7 @@
 // retryable `contention` via deadlockToRetry.
 import crypto from 'node:crypto';
 import { GameError, notify, deadlockToRetry } from './game.js';
-import { WALLET_FORGE, walletBands, forgeShape, forgeBonus, rollStats, levelOf } from './rules.js';
+import { WALLET_FORGE, walletBands, forgeShape, forgeBonus, forgeBudgetExtra, rollStats, levelOf } from './rules.js';
 
 // ── the feature reader seam (the __setDeliver/__setReader discipline) ──
 // A reader takes a 0x wallet and resolves { ageDays, txCount } — or throws. Tests inject one;
@@ -90,6 +92,7 @@ export async function forgeBoard(pool, accountId) {
     costsCredit: !free,                // above it: one paid reroll credit (the fees.js rail)
     rerollCredits: Number(acct.reroll_credits || 0),
     bonusMax: WALLET_FORGE.BONUS_MAX,
+    budgetMax: WALLET_FORGE.BUDGET_MAX,  // the budget perk's ceiling (extra whole-budget points)
     archetypes: Object.fromEntries(Object.entries(WALLET_FORGE.ARCHETYPES)
       .map(([k, a]) => [k, { name: a.name, muscle: a.muscle, cunning: a.cunning, speed: a.speed, boost: a.boost }])),
   };
@@ -117,6 +120,7 @@ export async function forgeCharacter(pool, accountId) {
   const tiers = walletBands(features);
   const arche = forgeShape(tiers);                 // null = a fresh empty wallet → a real random roll
   const bonus = arche ? forgeBonus(tiers) : 0;
+  const budgetExtra = arche ? forgeBudgetExtra(tiers) : 0; // the budget perk — extra WHOLE-budget points
 
   // 3) the transaction: character FOR UPDATE → account FOR UPDATE (rerollCharacter's canonical order).
   const client = await pool.connect();
@@ -142,15 +146,20 @@ export async function forgeCharacter(pool, accountId) {
     if ((await client.query('SELECT 1 FROM wallet_rolls WHERE wallet=$1', [wallet])).rowCount > 0)
       throw new GameError('wallet_spent', 'That wallet already forged a build — one forge per wallet, ever.');
     await client.query(
-      'INSERT INTO wallet_rolls (wallet, account_id, archetype, age_tier, vel_tier, bonus) VALUES ($1,$2,$3,$4,$5,$6)',
-      [wallet, accountId, arche || 'unknown', tiers.ageTier, tiers.velTier, bonus]);
+      'INSERT INTO wallet_rolls (wallet, account_id, archetype, age_tier, vel_tier, bonus, budget) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [wallet, accountId, arche || 'unknown', tiers.ageTier, tiers.velTier, bonus, budgetExtra]);
 
     let stats, roll = 0, outcome;
     if (arche) {
       const a = WALLET_FORGE.ARCHETYPES[arche];
       stats = { muscle: a.muscle, cunning: a.cunning, speed: a.speed };
+      // the BUDGET perk first (founder-directed 2026-08-21): extra whole-budget points spread
+      // DETERMINISTICALLY round-robin across the three stats — the wallet widens the build, it
+      // never re-aims it (the boost stat is the bonus's job, below).
+      const keys = ['muscle', 'cunning', 'speed'];
+      for (let i = 0; i < budgetExtra; i++) stats[keys[i % keys.length]] += 1;
       stats[a.boost] += bonus;                     // the depth-B grant, capped at BONUS_MAX
-      outcome = `${arche}+${bonus} (deterministic)`; // the archetype is a pure function of the bands
+      outcome = `${arche}+${bonus}+b${budgetExtra} (deterministic)`; // pure function of the bands
     } else {
       roll = Math.random();                        // an empty wallet earns an honest random roll
       stats = rollStats();
@@ -160,12 +169,12 @@ export async function forgeCharacter(pool, accountId) {
       [ch.id, stats.muscle, stats.cunning, stats.speed, arche || 'unknown']);
     await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
       [crypto.randomUUID(), ch.id, 'wallet_forge', roll, outcome]);
-    await notify(client, ch.id, 'forged', { archetype: arche || 'unknown', name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null, bonus, ...stats });
+    await notify(client, ch.id, 'forged', { archetype: arche || 'unknown', name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null, bonus, budgetExtra, ...stats });
     await client.query('COMMIT');
     return {
       forged: arche || 'unknown',
       name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null,
-      bonus, stats,
+      bonus, budgetExtra, stats,
       tiers,                                       // the BANDS only — the raw features never leave
       spentCredit: !free,
     };

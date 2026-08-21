@@ -413,16 +413,20 @@ export function rollStats(rng = Math.random) {
 }
 
 // ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
-// A SIWE-proven wallet's HISTORY decides the stat SHAPE (an archetype summing to the same
-// CREATE_STAT_TOTAL every roll gets — the wallet never buys the budget) and grants a small banded
-// BONUS (≤ BONUS_MAX on the archetype's boost stat) — the founder-signed, bounded retirement of
-// "outside wealth must not buy power" on the stat layer. Features are read by COST-TO-FAKE (age is
+// A SIWE-proven wallet's HISTORY decides the stat SHAPE (an archetype — every base shape sums to
+// CREATE_STAT_TOTAL, load-guarded below), grants a small banded BONUS (≤ BONUS_MAX on the
+// archetype's boost stat), and — founder-directed 2026-08-21 — a banded BUDGET perk (≤ BUDGET_MAX
+// extra whole-budget points, spread evenly) — the founder-signed, bounded retirement of
+// "outside wealth must not buy power" on the stat layer. Total ceiling 15+3+3 = 21. Features are read by COST-TO-FAKE (age is
 // unfakeable, tx count costs gas); only the BAND is ever stored (the anti-precise-kill-EV rule —
 // no raw holding, no raw count, leaves the reader). Once per wallet EVER (the wallet_rolls latch).
 // All numbers are founder sign-off levers (BALANCE.md § THE LEDGER-BORN; pinned in test/levers.js).
 export const WALLET_FORGE = {
   FREE_LVL: 5,            // at/below this level the forge is free; above it, it costs a reroll credit
   BONUS_MAX: 3,           // hard ceiling on bonus points — vs the 15-point base budget (+20% max)
+  BUDGET_MAX: 3,          // hard ceiling on the budget perk — extra WHOLE-budget points a deep
+                          // history forges (founder-directed 2026-08-21: "the wallet decides the
+                          // budget as well"); with BONUS_MAX the total ceiling is 15+3+3 = 21
   AGE_TIERS_DAYS: [365, 1095],   // wallet age bands: 1y, 3y → ageTier 0/1/2
   VELOCITY_TIERS: [20, 200, 1000], // lifetime tx-count bands → velTier 0/1/2/3
   // Each archetype is a FIXED shape (the guessability rule: fictional noir names, never the
@@ -468,6 +472,12 @@ export function forgeShape({ ageTier, velTier }) {
 // Tiers → bonus points on the archetype's boost stat, hard-capped at BONUS_MAX.
 export const forgeBonus = ({ ageTier, velTier }) =>
   Math.min(WALLET_FORGE.BONUS_MAX, ageTier + (velTier >= 2 ? 1 : 0));
+// Tiers → the BUDGET perk (founder-directed 2026-08-21): every band past the FIRST adds a point
+// to the WHOLE stat budget, hard-capped at BUDGET_MAX — so a fresh-but-real wallet forges the
+// base 15 and only genuine depth (age + mileage together) forges a bigger build. Applies only
+// when an archetype landed (an unknown wallet earns a plain random roll, never a bigger one).
+export const forgeBudgetExtra = ({ ageTier, velTier }) =>
+  Math.max(0, Math.min(WALLET_FORGE.BUDGET_MAX, ageTier + velTier - 1));
 
 // ── M3 helpers (§7.6–7.9, §5.5) ──
 export const gunObjOf=(id)=>GUNS.find(g=>g.id===id)||null;

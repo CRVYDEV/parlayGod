@@ -2746,7 +2746,7 @@
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     // THE WALLET FORGE — `forged` + `stats` is this reply's own shape (nothing else sends `forged` on an action)
-    if (body.forged && body.stats) bits.push(`🔥 ${body.name ? `the ledger names you ${txt(body.name)}` : 'the ledger is silent — an ordinary hand rolled'} — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}${body.bonus ? ` (+${body.bonus} forged into the strong suit)` : ''}${body.spentCredit ? ' · one re-roll credit spent' : ''}`);
+    if (body.forged && body.stats) bits.push(`🔥 ${body.name ? `the ledger names you ${txt(body.name)}` : 'the ledger is silent — an ordinary hand rolled'} — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}${body.bonus ? ` (+${body.bonus} forged into the strong suit)` : ''}${body.budgetExtra ? ` (+${body.budgetExtra} onto the whole budget)` : ''}${body.spentCredit ? ' · one re-roll credit spent' : ''}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true && body.take !== undefined) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
@@ -9239,12 +9239,12 @@
              <div class="d">this street's build was forged from a wallet's history — the shape is yours for life.</div>`
           : !fg.linked
             ? `<div class="d">Link a wallet above and the forge reads its <b>history</b> — how old it is, how much it has worked —
-               and casts your build as an archetype on the <b>same fixed budget</b> every roll gets,
-               plus up to <b>+${fg.bonusMax}</b> on the archetype's strong suit. Never a balance read; never twice per wallet.</div>`
+               and casts your build as an archetype, with up to <b>+${fg.bonusMax}</b> on the archetype's strong suit
+               and a deep history forging up to <b>+${fg.budgetMax}</b> onto the whole budget. Never a balance read; never twice per wallet.</div>`
             : fg.walletForged
               ? `<div class="d">This wallet already forged a build — one forge per wallet, <b>ever</b>. A fresh street can still roll the ordinary way.</div>`
-              : `<div class="d">The forge reads your wallet's <b>age and mileage</b> — never a balance — and casts the build as an archetype
-                 on the same fixed budget every roll gets, plus up to <b>+${fg.bonusMax}</b> on its strong suit. Once per wallet, ever.
+              : `<div class="d">The forge reads your wallet's <b>age and mileage</b> — never a balance — and casts the build as an archetype,
+                 with up to <b>+${fg.bonusMax}</b> on its strong suit and a deep history forging up to <b>+${fg.budgetMax}</b> onto the whole budget. Once per wallet, ever.
                  ${fg.free ? '<b>Free at your level.</b>' : `Past level ${fg.freeLvl} it takes one paid re-roll credit (you hold ${fg.rerollCredits}).`}</div>
                  <button class="act" id="forge-go" data-do="POST /v1/character/forge" data-confirm="Forge your build from this wallet's history? It replaces your current base stats, and the wallet can never forge again." style="border-color:var(--neon)">forge the build</button>`}
       </div>` : ''}
@@ -10241,7 +10241,7 @@
       // ── the chain & the store
       made: () => `YOU'RE MADE — the city knows your name now`,
       rerolled: () => `a new hand dealt — your build is re-rolled`,
-      forged: () => `the ledger speaks — ${d.name ? `born ${d.name}` : 'a build rolled from an unknown hand'}${d.bonus ? ` (+${d.bonus} on the strong suit)` : ''}`,
+      forged: () => `the ledger speaks — ${d.name ? `born ${d.name}` : 'a build rolled from an unknown hand'}${d.bonus ? ` (+${d.bonus} on the strong suit)` : ''}${d.budgetExtra ? ` (+${d.budgetExtra} to the budget)` : ''}`,
       fee_credited: () => `your ${String(d.kind || '').replace(/_/g, ' ')} payment landed`,
       store_grant: () => `${d.name} is yours`,
       // ── the world

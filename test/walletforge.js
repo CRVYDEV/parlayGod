@@ -1,8 +1,10 @@
 // THE WALLET FORGE (depth B, founder-signed 2026-08-21 — omerta-wallet-forged-stats-design.md §6).
 //
 // The centre of the test, in order of what would hurt most if it broke:
-//   • THE BUDGET LAW — a forged build is EXACTLY CREATE_STAT_TOTAL + bonus, bonus ≤ BONUS_MAX,
-//     pinned against the LIVE constants (never literals — a retune must move this test with it).
+//   • THE BUDGET LAW — a forged build is EXACTLY CREATE_STAT_TOTAL + budgetExtra + bonus, each
+//     half hard-capped (BUDGET_MAX / BONUS_MAX), pinned against the LIVE constants (never
+//     literals — a retune must move this test with it). The perk spreads round-robin, never
+//     onto the boost stat alone (the wallet widens the build; the bonus is what re-aims it).
 //   • ONCE PER WALLET, EVER — the wallet_rolls latch holds across ACCOUNTS (wallet-shopping buys
 //     nothing), and only the BANDS are stored (no raw feature ever lands on a permanent table).
 //   • FAIL-CLOSED — no reader refuses; a throwing reader refuses; neither guesses a history.
@@ -10,7 +12,7 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { WALLET_FORGE, walletBands, forgeShape, forgeBonus, CONSTANTS } from '../src/rules.js';
+import { WALLET_FORGE, walletBands, forgeShape, forgeBonus, forgeBudgetExtra, CONSTANTS } from '../src/rules.js';
 import { __setReader } from '../src/walletforge.js';
 
 const app = await buildServer();
@@ -42,10 +44,17 @@ assert.equal(forgeShape({ ageTier: 1, velTier: 0 }), 'fixer', 'a little history 
 assert.equal(forgeShape({ ageTier: 0, velTier: 0 }), null, 'a fresh empty wallet earns nothing');
 assert.equal(forgeBonus({ ageTier: 2, velTier: 3 }), Math.min(WALLET_FORGE.BONUS_MAX, 3), 'the bonus is hard-capped at BONUS_MAX');
 assert.equal(forgeBonus({ ageTier: 1, velTier: 0 }), 1, 'age alone pays its tier');
+// THE BUDGET PERK (founder-directed 2026-08-21): every band past the first adds a whole-budget
+// point, hard-capped at BUDGET_MAX — a fresh-but-real wallet gets the base 15, only depth widens it.
+assert.equal(forgeBudgetExtra({ ageTier: 1, velTier: 0 }), 0, 'one band alone forges no budget perk');
+assert.equal(forgeBudgetExtra({ ageTier: 0, velTier: 1 }), 0, '…in either direction');
+assert.equal(forgeBudgetExtra({ ageTier: 2, velTier: 1 }), 2, 'depth pays: two bands past the first');
+assert.equal(forgeBudgetExtra({ ageTier: 2, velTier: 3 }), WALLET_FORGE.BUDGET_MAX,
+  'the budget perk is HARD-CAPPED at BUDGET_MAX — 2+3-1 would be 4, the wall holds it at the ceiling');
 // THE SHAPE LAW, against the LIVE budget (the load guard enforces it at boot; this pins it here too)
 for (const [k, a] of Object.entries(WALLET_FORGE.ARCHETYPES))
   assert.equal(a.muscle + a.cunning + a.speed, CONSTANTS.CREATE_STAT_TOTAL,
-    `archetype ${k} sums to the SAME budget every random roll gets — the wallet decides the SHAPE, never the budget`);
+    `archetype ${k}'s BASE shape sums to the same budget every random roll gets — only the banded perk + bonus sit on top`);
 
 // ════════════ gates: no wallet linked, then fail-closed readers ════════════
 const A = await mk('Forge Able');
@@ -72,15 +81,20 @@ r = (await call('POST', '/v1/character/forge', { token: A.token })).body;
 assert.equal(r.forged, 'patient', 'old + quiet forges The Patient Man');
 assert.equal(r.name, WALLET_FORGE.ARCHETYPES.patient.name, 'the fictional name rides the reply');
 assert.equal(r.bonus, 2, 'ageTier 2, velTier 1 → bonus 2 (age tiers alone)');
+assert.equal(r.budgetExtra, 2, 'ageTier 2 + velTier 1 − 1 → budget perk 2');
 assert.equal(r.spentCredit, false, 'at level 1 the forge is free');
 // THE BUDGET LAW — pinned against the LIVE constants, never a literal
 const total = r.stats.muscle + r.stats.cunning + r.stats.speed;
-assert.equal(total, CONSTANTS.CREATE_STAT_TOTAL + r.bonus,
-  'a forged build is EXACTLY the base budget + the banded bonus — nothing else');
+assert.equal(total, CONSTANTS.CREATE_STAT_TOTAL + r.budgetExtra + r.bonus,
+  'a forged build is EXACTLY the base budget + the budget perk + the banded bonus — nothing else');
 assert.ok(r.bonus <= WALLET_FORGE.BONUS_MAX, 'the bonus never exceeds BONUS_MAX');
+assert.ok(r.budgetExtra <= WALLET_FORGE.BUDGET_MAX, 'the budget perk never exceeds BUDGET_MAX');
 const P = WALLET_FORGE.ARCHETYPES.patient;
-assert.equal(r.stats.cunning, P.cunning + r.bonus, 'the bonus lands on the archetype BOOST stat only');
-assert.equal(r.stats.muscle, P.muscle, 'the other stats are the shape verbatim');
+// the budget perk spreads ROUND-ROBIN (muscle, cunning, speed) — it widens the build, never
+// re-aims it; the bonus alone lands on the boost stat. budgetExtra 2 → +1 muscle, +1 cunning.
+assert.equal(r.stats.muscle, P.muscle + 1, 'the budget perk\'s first point lands on muscle (round-robin, never all on the boost)');
+assert.equal(r.stats.cunning, P.cunning + 1 + r.bonus, 'cunning carries the perk\'s second point + the whole bonus');
+assert.equal(r.stats.speed, P.speed, 'speed is the shape verbatim — the perk ran out before it');
 // the view carries the archetype; the database row matches the reply
 const me = (await call('GET', '/v1/me', { token: A.token })).body.character;
 assert.equal(me.forged, 'patient', 'the sheet names the archetype');
@@ -90,6 +104,7 @@ const roll = (await pool.query('SELECT * FROM wallet_rolls WHERE wallet=$1', [WA
 assert.ok(roll, 'the wallet_rolls latch exists, keyed on the LOWERCASED wallet');
 assert.equal(roll.archetype, 'patient');
 assert.equal(Number(roll.age_tier), 2); assert.equal(Number(roll.vel_tier), 1); assert.equal(Number(roll.bonus), 2);
+assert.equal(Number(roll.budget), 2, 'the latch records the budget perk (a band, not a raw feature)');
 for (const k of Object.keys(roll))
   assert.ok(!/age_days|tx_count|balance|volume/.test(k), `no raw feature column ever lands on the latch (found ${k})`);
 // rng_audit: a deterministic archetype records roll 0 + '(deterministic)'
@@ -115,8 +130,9 @@ __setReader(async () => ({ ageDays: 10, txCount: 3 })); // no tier anywhere → 
 r = (await call('POST', '/v1/character/forge', { token: B.token })).body;
 assert.equal(r.forged, 'unknown', 'a fresh empty wallet earns no archetype');
 assert.equal(r.bonus, 0, '…and no bonus');
+assert.equal(r.budgetExtra, 0, '…and no budget perk — an unknown wallet never rolls a bigger build');
 assert.equal(r.stats.muscle + r.stats.cunning + r.stats.speed, CONSTANTS.CREATE_STAT_TOTAL,
-  'an unknown wallet rolls the ordinary fixed budget — exactly, no bonus');
+  'an unknown wallet rolls the ordinary fixed budget — exactly, no bonus, no perk');
 const audB = (await pool.query("SELECT roll, outcome FROM rng_audit WHERE character_id=$1 AND action='wallet_forge'", [B.id])).rows[0];
 assert.ok(Number(audB.roll) > 0, 'an unknown wallet audits a REAL roll (the build is random)');
 
@@ -133,6 +149,7 @@ assert.equal(r.body.error, 'no_reroll_credit', 'past FREE_LVL the forge takes a 
 await pool.query('UPDATE account_persistent SET reroll_credits=1 WHERE account_id=$1', [acctC]);
 r = (await call('POST', '/v1/character/forge', { token: C.token })).body;
 assert.equal(r.forged, 'workhorse', 'a working wallet is the workhorse');
+assert.equal(r.budgetExtra, 2, 'ageTier 1 + velTier 2 − 1 → budget perk 2');
 assert.equal(r.spentCredit, true, 'the credit was consumed');
 assert.equal(Number((await pool.query('SELECT reroll_credits n FROM account_persistent WHERE account_id=$1', [acctC])).rows[0].n), 0,
   'the paid credit is genuinely gone');
@@ -144,10 +161,14 @@ assert.equal(board.walletForged, true, 'the board says this wallet is spent');
 assert.equal(board.forged, 'workhorse', 'the board names the living street\'s archetype');
 assert.equal(board.free, false, 'past FREE_LVL the board says it costs a credit');
 assert.equal(board.bonusMax, WALLET_FORGE.BONUS_MAX);
+assert.equal(board.budgetMax, WALLET_FORGE.BUDGET_MAX, 'the board states the budget perk\'s ceiling');
 assert.ok(board.archetypes.patient.name, 'the archetype catalog rides the board');
 
 // ════════════ a later paid re-roll REPLACES the forge — mark and bonus both ════════════
 // (the codex says so, so the code must: a sheet claiming "forged" over a random build is a lie)
+const beforeRe = (await call('GET', '/v1/me', { token: C.token })).body.character;
+assert.equal(beforeRe.statTotal, CONSTANTS.CREATE_STAT_TOTAL + r.budgetExtra + r.bonus,
+  'precondition: the forged street genuinely carries a bigger build — or the reset below proves nothing');
 await pool.query('UPDATE account_persistent SET reroll_credits=1 WHERE account_id=$1', [acctC]);
 r = (await call('POST', '/v1/character/reroll', { token: C.token })).body;
 assert.equal(r.rerolled, true, 'the re-roll went through');
@@ -159,6 +180,6 @@ assert.equal(after.statTotal, CONSTANTS.CREATE_STAT_TOTAL, 'the bonus went with 
 assert.equal(await ledgerRows(), rowsBefore, 'three forges + every refusal wrote NOT ONE transactions row');
 assert.equal(await driftOf('character cash'), cashBefore, 'the cash identity is untouched');
 
-console.log('walletforge: PASS — the budget law, the once-per-wallet latch, banded storage, fail-closed readers, the credit gate, §10.4 zero');
+console.log('walletforge: PASS — the budget law (+perk), the once-per-wallet latch, banded storage, fail-closed readers, the credit gate, §10.4 zero');
 await app.close();
 process.exit(0);

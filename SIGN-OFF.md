@@ -828,3 +828,10 @@ ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C t
    OUTSIDE the transaction), `POST /v1/character/forge` + `GET /v1/forge`, THE FORGE card on Going
    Legit, the sheet's forged-archetype line, `WALLET_FORGE` levers pinned in `test/levers.js`,
    `test/walletforge.js` (four mutations, each caught at its own named assertion).
+3. **THE BUDGET PERK — DIRECTED + ✅ BUILT same day** (founder, 2026-08-21: *"I want the wallet to
+   decide the budget as well for an extra perk"*). The forge's third grant: a banded BUDGET perk —
+   `forgeBudgetExtra = max(0, ageTier + velTier − 1)`, hard-capped at `WALLET_FORGE.BUDGET_MAX` (3)
+   — extra WHOLE-budget points spread deterministically round-robin across the three stats (the
+   wallet widens the build; the bonus is what re-aims it). Total ceiling 15+3+3 = **21 (+40%)**,
+   once per wallet ever; an unknown wallet still rolls exactly 15. Recorded in BALANCE.md § THE
+   LEDGER-BORN; two more named mutations (the cap dropped; the spread collapsed onto the boost stat).

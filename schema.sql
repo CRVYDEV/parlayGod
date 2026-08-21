@@ -3586,6 +3586,10 @@ CREATE TABLE IF NOT EXISTS wallet_rolls (
   age_tier   INT NOT NULL,
   vel_tier   INT NOT NULL,
   bonus      INT NOT NULL,
+  -- the budget perk (founder-directed 2026-08-21): extra whole-budget points the history forged.
+  -- Inline is safe: wallet_rolls was born on this same unmerged branch, so no live DB predates
+  -- the column (the drop_allocations.stamped precedent — inline only when the table is new too).
+  budget     INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- The forged archetype on the living street (display + the view's `forged` field). Direct-SQL

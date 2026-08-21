@@ -15925,3 +15925,29 @@ LEDGER-BORN is the record, `BONUS_MAX: 0` reverts depth B to shape-only depth A)
 five distinct named kills (the latch neutered; the bonus landing double → the budget law; the bonus
 formula drifting; the fail-open reader; the re-roll keeping the stale mark). Codices synced in the
 same commit (docs/WIKI.md + public/wiki.html — The Forge's terms incl. the re-roll-replaces rule).
+
+**THE BUDGET PERK — the wallet decides the budget too (founder-directed 2026-08-21: "I want the
+wallet to decide the budget as well for an extra perk") — BUILT** (`src/rules.tail.js`
+`WALLET_FORGE.BUDGET_MAX` (3) + `forgeBudgetExtra`, `src/walletforge.js`, `schema.sql`
+`wallet_rolls.budget`, `test/walletforge.js`; BALANCE.md § THE LEDGER-BORN + SIGN-OFF § THE
+2026-08-21 PAIR row 3, recorded same-commit — the D13/D15 rule). The forge's third grant, on the
+same banded machinery: `forgeBudgetExtra = max(0, min(BUDGET_MAX, ageTier + velTier − 1))` — every
+band past the FIRST adds a point to the WHOLE stat budget, so a fresh-but-real wallet still forges
+the base 15 and only genuine depth (age AND mileage together) forges a bigger build. **The perk
+WIDENS, the bonus RE-AIMS** — the extra points spread deterministically round-robin over
+muscle/cunning/speed BEFORE the boost bonus lands, so the wallet can never stack the whole grant
+onto one stat (mutation-verified: collapsing the spread onto the boost stat fails by name at the
+exact-stats assertion; dropping the cap fails at the pure boundary, 4 vs 3). Total ceiling
+15+3+3 = **21 (+40%)**, once per wallet EVER (the same latch — the perk is stored on `wallet_rolls`
+as `budget`, a band, never a raw feature; the column is INLINE because the table was born on this
+same unmerged branch — the drop_allocations.stamped precedent, commented at the site). An unknown
+wallet still rolls exactly `CREATE_STAT_TOTAL`; a paid re-roll still replaces the whole build,
+perk included (the existing precondition assert now proves the forged street genuinely carried a
+bigger build before the reset, or the reset proves nothing). The budget LAW is now
+`total == CREATE_STAT_TOTAL + budgetExtra + bonus`, pinned against the live constants; the reply,
+notify, board (`budgetMax`), THE FORGE card, describe() and the wire template all carry it — and
+every "same fixed budget every roll gets" claim (rules block, card copy, both codices, the
+shape-law comment) moved in the same commit, since depth B+budget makes that sentence false (the
+stale-promise class). §10.4 still ZERO (the flow writes not one `transactions` row — the existing
+pin covers the new path). `WALLET_FORGE.BUDGET_MAX` is a founder sign-off lever (pinned;
+`BUDGET_MAX: 0` reverts to the boost-only depth B).
