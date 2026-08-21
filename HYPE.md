@@ -80,6 +80,23 @@ books cannot disagree about what the flows ARE:
   the Street Deed's on-chain vault (the deed trades with its book) · the ETH vault's burn rail
   (`allocated ≤ held`).
 
+**The narration (2026-08-21).** The explainer carries a spoken VO — four segments timed to the ACT
+boundaries (not per shot: 28 shots at ~2.8s cannot each carry a sentence, and a voice that chases
+every caption reads as a caption reader), side-chain-ducking the music bed under every line. The
+script lives in `tools/hype.js` (`NARRATION.money`) under the same copy rules as everything else
+here, and each segment is FIT-CHECKED against its window (tempo-compressed up to a cap; past that
+the build fails rather than talking over the next act). Two backends:
+
+- `--vo` — the REAL voice: fal.ai MiniMax `speech-02-hd`, `Deep_Voice_Man` (cached in the library +
+  ledgered, so a rebuild never re-buys a segment). **The fal account behind the provided key is
+  currently LOCKED — "Exhausted balance"** — so this path is one `FAL_KEY=… node tools/hype.js
+  --cut money --music public/art/hype/bed-legit.m4a --vo` away once topped up at
+  fal.ai/dashboard/billing.
+- `--vo-local` — a TIMING-TRUE placeholder (piper `en_US-ryan-high`, local, free) so the edit and
+  the read can be judged today. **The committed `hype-money.mp4` currently carries the placeholder
+  voice** — swap it by re-running with `--vo`, and the founder signs the spoken wording exactly as
+  they sign the on-screen copy, before anything goes public.
+
 Same copy rules as the rest of the file: mechanism-true, number-free (no bps, no prices, no
 value-per-$OMR figure), and the closer states plainly that **extraction opens at launch** — the rail
 is built and devnet-proven but not open, and marketing must not claim otherwise. This cut was

@@ -6,6 +6,10 @@
 //   node tools/hype.js --cut streets         → rebuild one
 //   …--music track.mp3                       → use a real track instead of the synth bed
 //   node tools/hype.js                       → free Ken-Burns montage from the stills (no key)
+//   …--vo                                    → narrate a cut that has a NARRATION script (fal TTS,
+//                                              MiniMax deep voice — needs a FUNDED key)
+//   …--vo-local                              → the same narration via local piper (placeholder
+//                                              voice, timing-true; swap with --vo when topped up)
 //
 // The library (public/art/hype/<plate>[__9x16].mp4) is Seedance 2.5 image-to-video of the game's own
 // noir plates — real camera + scene motion. Landscape cuts use 16:9 sources; the vertical short uses
@@ -207,6 +211,106 @@ function neededClips() {
   return [...seen.values()];
 }
 
+// ── narration — the explainer SPEAKS (founder ask 2026-08-21: "a strong voice narrating") ─────────
+// Segments are timed to the money cut's ACT boundaries rather than per shot: 28 shots at ~2.8s
+// cannot each carry a spoken sentence, and a trailer VO that chases every caption reads as a
+// caption reader. Each segment states its window; synthesis is FIT-CHECKED against it (a segment
+// that overruns is tempo-compressed up to a cap, and a segment that would still overrun fails the
+// build rather than talking over the next act). Copy rules are the file's own: mechanism-true,
+// number-free, founder signs the wording before anything goes public.
+const NARRATION = {
+  money: [
+    { at: 0.4, window: 26.4, text:
+      'Every dollar in this city is on the books. Real money comes in eight ways. '
+      + 'Getting made costs real ETH. The store sells for ETH. Bonds raise it. '
+      + 'Every token sold pays the tax. The desk auctions supply, daily. '
+      + 'The house pool earns its trading fees. The bank takes its cut of yield. '
+      + 'And leaving? Leaving pays the toll.' },
+    { at: 27.3, window: 26.5, text:
+      'So where does it go? Four destinations. All declared. '
+      + 'The vig buys the token off the open market, and fills the reserve. '
+      + 'Extraction never exceeds what came in. Nothing is printed. Cash can never buy it. '
+      + 'Every sink lands back on the desk, and sells again tomorrow. '
+      + 'The families take their cut. The bank pays the players who play. '
+      + 'And everything you hold? Someone can take.' },
+    { at: 54.7, window: 18.2, text:
+      'Then the city goes legit. The treasury stacks ETH. The families vote the ticker. '
+      + 'The treasury buys tokenized stock, split among the players who played. '
+      + 'Delivered to your street\u2019s vault. Own the street, and the street holds your book.' },
+    { at: 73.7, window: 2.9, text: 'Omert\u00e0. The ledger is public.' },
+  ],
+};
+// fal TTS (the real voice): MiniMax speech-02-hd, a deep trailer read. Cached in the LIB beside the
+// clips + ledgered like them, so a rebuild never re-spends. Needs a FUNDED key — a locked account
+// answers "Exhausted balance", and the error is surfaced verbatim so the fix is legible.
+const FAL_TTS_MODEL = process.env.FAL_TTS_MODEL || 'fal-ai/minimax/speech-02-hd';
+const FAL_TTS_VOICE = process.env.FAL_TTS_VOICE || 'Deep_Voice_Man';
+// local placeholder (piper, en_US-ryan-high): TIMING-true so the edit can be judged today, clearly
+// second-choice on delivery — swapped for the fal voice by re-running with --vo once topped up.
+const PIPER_MODEL = process.env.PIPER_MODEL || '/tmp/en_US-ryan-high.onnx';
+
+function audioDur(file) {
+  try { execFileSync(FF, ['-i', file], { stdio: 'pipe' }); } catch (e) {
+    const m = String(e.stderr).match(/Duration: (\d+):(\d+):([\d.]+)/);
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+  }
+  throw new Error(`could not read duration of ${file}`);
+}
+
+async function synthSegment(text, outBase, mode) {
+  if (mode === 'local') {
+    const out = `${outBase}.wav`;
+    execFileSync('piper', ['-m', PIPER_MODEL, '-f', out, '--length-scale', '1.22'],
+      { input: text, stdio: ['pipe', 'ignore', 'inherit'] });
+    return out;
+  }
+  // fal — cached: a segment already synthesized (same text) is never re-bought.
+  const out = `${outBase}.mp3`, meta = `${outBase}.json`;
+  if (fs.existsSync(out) && fs.existsSync(meta) && JSON.parse(fs.readFileSync(meta, 'utf8')).text === text) return out;
+  const key = process.env.FAL_KEY;
+  if (!key) throw new Error('FAL_KEY not set — --vo needs a funded fal.ai key (or use --vo-local for the placeholder voice).');
+  const r = await fetch(`https://fal.run/${FAL_TTS_MODEL}`, {
+    method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, voice_setting: { voice_id: FAL_TTS_VOICE, speed: 0.92 } }),
+  });
+  const j = await r.json().catch(() => ({}));
+  const url = j?.audio?.url || j?.audio_url || j?.url;
+  if (!r.ok || !url) throw new Error(`fal TTS: HTTP ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
+  fs.writeFileSync(out, Buffer.from(await (await fetch(url)).arrayBuffer()));
+  fs.writeFileSync(meta, JSON.stringify({ text, model: FAL_TTS_MODEL, voice: FAL_TTS_VOICE }));
+  return out;
+}
+
+// one VO master track: each segment placed at its act boundary, fit-checked against its window,
+// polished once (highpass + compression + loudnorm hotter than the bed, which ducks under it).
+async function buildVoMaster(cutId, mode) {
+  const segs = NARRATION[cutId];
+  if (!segs) throw new Error(`no narration written for cut '${cutId}'`);
+  fs.mkdirSync(TMP, { recursive: true });
+  const inputs = [], chains = [], mix = [];
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const base = mode === 'local' ? path.join(TMP, `vo-${cutId}-${i}`) : path.join(LIB, `vo-${cutId}-${i}`);
+    const f = await synthSegment(seg.text, base, mode);
+    const dur = audioDur(f);
+    // tempo-fit: compress up to 1.25× to make the window; past that the SCRIPT is too long — fail
+    // loudly rather than ship a voice that talks over the next act.
+    const tempo = dur > seg.window ? dur / seg.window : 1;
+    if (tempo > 1.25) throw new Error(`narration segment ${i} runs ${dur.toFixed(1)}s against a ${seg.window}s window — trim the script.`);
+    inputs.push('-i', f);
+    const at = Math.round(seg.at * 1000);
+    chains.push(`[${i}:a]${tempo > 1.01 ? `atempo=${tempo.toFixed(3)},` : ''}aresample=44100,pan=stereo|c0=c0|c1=c0,adelay=${at}|${at}[s${i}]`);
+    mix.push(`[s${i}]`);
+    console.log(`  vo ${i}: ${dur.toFixed(1)}s${tempo > 1.01 ? ` → ×${tempo.toFixed(2)} fit` : ''} @ ${seg.at}s (window ${seg.window}s)`);
+  }
+  const out = path.join(TMP, `vo-${cutId}.wav`);
+  execFileSync(FF, ['-y', ...inputs, '-filter_complex',
+    `${chains.join(';')};${mix.join('')}amix=inputs=${segs.length}:normalize=0,`
+    + 'highpass=f=75,acompressor=threshold=0.3:ratio=3:attack=8:release=180,loudnorm=I=-14:TP=-1.5:LRA=9[a]',
+    '-map', '[a]', '-c:a', 'pcm_s16le', out], { stdio: ['ignore', 'ignore', 'inherit'] });
+  return out;
+}
+
 // ── title cards (SVG → PNG, transparent, display font), scaled to the cut ─────────────────────────
 function titlePng(shot, i, w, h) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -283,7 +387,14 @@ function shotClip(shot, i, v) {
 }
 
 // ── stitch (hard cuts) + a driving synth bed, or a licensed track ─────────────────────────────────
-function assembleCut(clips, out, music) {
+function assembleCut(clips, out, music, vo) {
+  // the VO tail: with a voice track the music graph lands on [mus] and the voice side-chain DUCKS
+  // it (the bed dips under every spoken line and swells back between them — the trailer mix),
+  // then the cut's own compressor/limiter runs over the sum exactly as before. Without one, [mus]
+  // takes the same tail untouched, so a narration-less build is byte-shape identical to the old.
+  const voTail = (idx, tail) => (vo
+    ? `[${idx}:a]asplit=2[vk][vm];[mus][vk]sidechaincompress=threshold=0.05:ratio=8:attack=15:release=450[md];[md][vm]amix=inputs=2:normalize=0,${tail}[a]`
+    : `[mus]${tail}[a]`);
   const total = clips.reduce((a, c) => a + c.sec, 0);
   const listFile = path.join(TMP, `list-${path.basename(out, '.mp4')}.txt`);
   fs.writeFileSync(listFile, clips.map((c) => `file '${c.clip}'`).join('\n'));
@@ -303,7 +414,8 @@ function assembleCut(clips, out, music) {
     fc = `[1:a]loudnorm=I=-15:TP=-1.2:LRA=11,afade=in:st=0:d=0.5,afade=out:st=${(total - 1.2).toFixed(3)}:d=1.2,atrim=0:${D},asetpts=N/SR/TB[bed];`
       + `[2]highpass=f=700,volume='0.02+0.6*clip((t-${riseStart})/2.2,0,1)':eval=frame,afade=out:st=${titleAt.toFixed(3)}:d=0.25[riser];`
       + `[3]adelay=${titleMs}|${titleMs},lowpass=f=220,volume=1.15[hit];`
-      + `[bed][riser][hit]amix=inputs=3:normalize=0,acompressor=threshold=0.12:ratio=5:attack=6:release=140,alimiter=limit=0.96[a]`;
+      + `[bed][riser][hit]amix=inputs=3:normalize=0[mus];`
+      + voTail('4', 'acompressor=threshold=0.12:ratio=5:attack=6:release=140,alimiter=limit=0.96');
     amap = '[a]';
   } else {
     // input 0 is the concat VIDEO; the lavfi audio sources are inputs 1..4.
@@ -315,10 +427,12 @@ function assembleCut(clips, out, music) {
       + `[2]volume=0.12,tremolo=f=2:d=0.4[sub];`
       + `[3]highpass=f=900,volume='0.03+0.5*clip((t-(${D}-4))/4,0,1)':eval=frame[riser];`
       + `[4]adelay=${titleMs}|${titleMs},lowpass=f=200,volume=1.1[hit];`
-      + `[k][sub][riser][hit]amix=inputs=4:normalize=0,acompressor=threshold=0.15:ratio=6:attack=5:release=120,`
-      + `afade=in:st=0:d=0.3,afade=out:st=${(total - 1.2).toFixed(3)}:d=1.2,alimiter=limit=0.95[a]`;
+      + `[k][sub][riser][hit]amix=inputs=4:normalize=0,`
+      + `afade=in:st=0:d=0.3,afade=out:st=${(total - 1.2).toFixed(3)}:d=1.2[mus];`
+      + voTail('5', 'acompressor=threshold=0.15:ratio=6:attack=5:release=120,alimiter=limit=0.95');
     amap = '[a]';
   }
+  if (vo) ain.push('-i', vo);
   execFileSync(FF, ['-y', ...vin, ...ain, '-filter_complex', fc, '-map', '0:v', '-map', amap,
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-t', D, out],
@@ -326,14 +440,19 @@ function assembleCut(clips, out, music) {
   return total;
 }
 
-function buildCut(id, music) {
+async function buildCut(id, music, voMode) {
   const v = VIDEOS[id];
   if (!v) throw new Error(`unknown cut '${id}' — one of: ${Object.keys(VIDEOS).join(', ')}`);
   fs.rmSync(TMP, { recursive: true, force: true }); fs.mkdirSync(TMP, { recursive: true });
+  let vo = null;
+  if (voMode) {
+    if (NARRATION[id]) vo = await buildVoMaster(id, voMode);
+    else console.log(`  (no narration written for '${id}' — building without a voice)`);
+  }
   let missing = 0;
   const clips = v.shots.map((s, i) => { if (!fs.existsSync(clipFile(s.p, v.ar))) missing++; return shotClip(s, i, v); });
   const out = path.join(ART, id === 'hype' ? 'hype.mp4' : `hype-${id}.mp4`);
-  const total = assembleCut(clips, out, music);
+  const total = assembleCut(clips, out, music, vo);
   fs.rmSync(TMP, { recursive: true, force: true });
   const kb = (fs.statSync(out).size / 1024).toFixed(0);
   console.log(`  ✓ ${path.relative(ROOT, out)} — ${v.w}×${v.h}, ${total.toFixed(1)}s, ${kb} KB${missing ? `  (⚠ ${missing} still-fallback)` : ''}`);
@@ -399,12 +518,13 @@ async function falRun() {
 // ── main ───────────────────────────────────────────────────────────────────────────────────────
 (async () => {
   const music = opt('--music', null);
+  const voMode = flag('--vo') ? 'fal' : (flag('--vo-local') ? 'local' : null);
   if (flag('--fal')) await falRun();
   const which = opt('--cut', null);
-  if (which) { buildCut(which, music); return; }
+  if (which) { await buildCut(which, music, voMode); return; }
   if (flag('--fal') || flag('--all')) {
     console.log('building cuts from the library:');
-    for (const id of Object.keys(VIDEOS)) buildCut(id, music);
+    for (const id of Object.keys(VIDEOS)) await buildCut(id, music, voMode);
     console.log('\nWATCH each before it ships. Founder signs wording + a licensed track.');
     return;
   }
