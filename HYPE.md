@@ -62,15 +62,16 @@ Legit** — with each caption's gold detail line ENUMERATING the loops it stands
 training/armory/freight · kitchen/fronts/heists/convoys/port/market · den/track/stable/boxing/
 races/speakeasy · contracts/vendettas/wire/loans/law/pen · crew/family/war/cartels/commission/
 monuments · estate/deeds/RWA), so nothing shippable is missed while the cut stays watchable.
-**$9.48 of the $10** bought four bespoke Seedance 2.5 t2v action clips for the loops the library
-had no ACTION footage for: `mm-streetrace` (pinks), `mm-jailbreak` (the Pen), `mm-boatchase` (the
-Port) — and `mm-knockout`, which **rendered on fal's side but the account LOCKED (TOP_UP) before
-the result could be fetched** (job `01a0235e-9eb9-7373-833d-7a8dba02818e`; the fight-card shot
-rides `cine-champion` meanwhile — once topped up, re-run `--bespoke` and point the shot back).
-Narration: 7 act-boundary segments (`NARRATION.life`), currently the **piper placeholder voice**
-(`--vo-local`) since fal TTS is behind the same lock — swap to the real MiniMax voice with `--vo`
-after a top-up (≈$0.10). Same copy rules; the closer states **extraction opens at launch**.
-Founder signs wording + voice + a licensed track before anything goes public.
+Four bespoke Seedance 2.5 t2v action clips cover the loops the library had no ACTION footage for:
+`mm-streetrace` (pinks), `mm-jailbreak` (the Pen), `mm-boatchase` (the Port) and `mm-knockout`
+(the fight game). The first knockout render was stranded behind a stale TOP_UP lock on its result
+fetch even after the account came back (job `01a0235e-…`; new-job submits worked while that one
+request stayed gated — a fal quirk worth knowing), so it was re-rendered fresh after the top-up
+and the fight-card shot points at it. Narration: 7 act-boundary segments (`NARRATION.life`) in the
+**real MiniMax voice** (`--vo`, the money cut's voice) — the committed master carries it; the
+closer's window was widened 84.4→83.4 to fit the real read (the piper placeholder timed tighter).
+Same copy rules; the closer states **extraction opens at launch**. Founder signs wording + voice +
+a licensed track before anything goes public.
 
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 

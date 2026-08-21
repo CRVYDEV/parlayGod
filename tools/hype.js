@@ -300,10 +300,9 @@ const VIDEOS = {
       sub2: 'dogs and ponies — or enter your own runner' },
     { p: 'interior-stable',  use: 2.2, off: 0.5, sub: 'OWN THE ANIMALS',
       sub2: 'buy · train · breed · race the town’s best' },
-    // mm-knockout is RENDERED on fal's side (job 01a0235e-9eb9-7373-833d-7a8dba02818e) but the
-    // account locked (TOP_UP) before the result could be fetched — the fight-card library clip
-    // stands in. Once topped up: re-run --bespoke and point this shot back at mm-knockout.
-    { p: 'cine-champion',    use: 2.4, off: 0.5, sub: 'RUN A FIGHT STABLE',
+    // The first mm-knockout render (job 01a0235e-9eb9-7373-833d-7a8dba02818e) was stranded behind
+    // a stale TOP_UP lock on its result fetch even after the account came back — re-rendered fresh.
+    { p: 'mm-knockout',      use: 2.4, off: 0.3, sub: 'RUN A FIGHT STABLE',
       sub2: 'sign fighters, take the belt — or fix the odds' },
     { p: 'mm-streetrace',    use: 2.4, off: 0.3, sub: 'RACE FOR PINK SLIPS',
       sub2: 'tune it, arm the nitrous — winner keeps the car' },
@@ -409,7 +408,7 @@ const NARRATION = {
     { at: 75.8, window: 8.2, text:
       'Then the city goes legit. The compound. Your street\u2019s deed. '
       + 'A real book \u2014 earned by playing.' },
-    { at: 84.4, window: 2.8, text: 'Omert\u00e0. Every path is open.' },
+    { at: 83.4, window: 3.8, text: 'Omert\u00e0. Every path is open.' },
   ],
 };
 // fal TTS (the real voice): MiniMax speech-02-hd, a deep trailer read. Cached in the LIB beside the
