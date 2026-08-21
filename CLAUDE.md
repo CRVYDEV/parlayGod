@@ -48,6 +48,24 @@ back. For current architecture, the invariants, and the open technical-debt regi
    ```
    (`initdb`/`pg_ctl` refuse to run as root — hence `su postgres`.) After pushing, confirm the run
    went green. A red CI that nobody reads is worse than no CI, because it manufactures confidence.
+9. **UNCOMMITTED WORK MUST NOT BE DESTROYABLE. Run `tools/savepoint.sh` after every meaningful edit
+   and ALWAYS before any git command that can discard** — checkout, restore, reset, stash, merge,
+   rebase, clean. Four separate times a whole session's work was wiped here: twice by
+   `git checkout <file>` used to undo a mutation, once by an external `git merge -s ours`, once by a
+   container restart reverting the tree to an old lineage. Each time the remedy written down was a
+   PARAGRAPH, and each next occurrence proved that a rule with no enforcement is not a rule. The
+   enforcement is one command, and the git semantics behind it are MEASURED, not assumed:
+   ```
+   unstaged + `git checkout -- f`  → reverts to HEAD.   THE WORK IS GONE, UNRECOVERABLY.
+   STAGED   + `git checkout -- f`  → reverts to the INDEX.  THE WORK SURVIVES.
+   STAGED   + `reset --hard`       → gone from disk, but the blob is DANGLING and recoverable
+                                     (`tools/savepoint.sh --recover`).
+   ```
+   So `git add -A` alone turns the disaster that actually happened into a no-op, and the ones it
+   cannot prevent into something one command from recovery; the scratchpad mirror underneath covers
+   the case where git ITSELF is what went wrong. **And commit each fix the moment its mutation
+   passes rather than batching a whole drop** — a savepoint is a safety net, a commit is the floor.
+   After a loss: `tools/savepoint.sh --recover` prints every dangling blob and every snapshot.
 
 ## Where things stand
 M1–M4 complete and tested (`npm test` runs all four journeys). M2 shipped the
@@ -15385,6 +15403,47 @@ field names here, which removes the false positive without weakening what the ch
 to end in real Chromium (the guest dialog correctly offers NO "everywhere"; the provider dialog offers
 all three; `token_version` really moved 0 → 1; zero page errors). Four mutations, four distinct named
 failures. Suite green, sim drift-0, mobile 81/81. Driven actions 224 → 226.
+
+**WAVE 53 — WAVE 52'S ROOT CAUSE TAKEN AS A CLASS, AND IT FOUND TWO MORE IN THE SAME
+NEIGHBOURHOOD (`public/index.html` + `test/client.js`, 2026-08-21).** Wave 52's finding was that the
+stake line was WRONG; its root cause was that neither `/v1/stake` nor `/v1/unstake` had ever been
+driven — an earlier wave had fixed the unstake line **by inspection** and never read its neighbour
+three lines away. So this wave swept that as a class rather than a story: **which routes in that same
+neighbourhood does the ledger not drive at all?** Fourteen, on the Going Legit cluster, and the
+monument's three rails were the tell — `megaproject/omr` is driven and `megaproject/goods` is not,
+which is exactly "the wave fixed the rails and drove one of them".
+
+**THE STORE'S $OMR RAIL SAID "done."** — the one rail that lets a player pay a real-money price out of
+what they earned, burning $OMR, reporting neither the price nor what arrived. **Its sibling three
+lines up has read since it shipped**: `payPlex` answers `{kind, omrSpent}` and `payPackagePlex`
+answers `{sku, name, omrSpent}`, so the branch above (which requires `kind`) walks straight past the
+whole packages rail. The forgotten-sibling shape at its plainest. It needed **no server field** — the
+grant is published per sku on `/v1/rules`, so the line now names what arrived off the catalog the
+game already ships.
+
+**AND GETTING MADE READ LIKE A ONE-TIME CEREMONY.** It is a SUBSCRIPTION — dues in $OMR, thirty days,
+then it lapses — and the player read *"You're made. The room knows your name."*: true, well-written,
+and naming NEITHER term. That happens because `describe()` falls through to the server's own `message`
+when nothing matches, so a fluent flavour line is exactly what hides a missing branch. The reply has
+carried `omr` and `madeSeconds` all along. This is the pad / the nut / the envelope class on a
+recurring obligation, and the server's sentence still leads (it already distinguishes a first payment
+from a renewal) with the terms appended.
+
+**MY OWN ASSERTION WENT VACUOUS AND THE MUTATION IS WHAT CAUGHT IT.** The store check asked whether
+the line contained `grant.wireDays` — **30** — and the mutation that deleted the whole grant clause
+**PASSED**, because the sku is NAMED *"The Street Wire (30d)"* and carries its own 30. *A substring
+the flavour already supplies proves nothing about the field the fix reads.* It now isolates the clause
+AFTER the price separator, with a guard asserting the price did not land in that half (or the check
+would be measuring the wrong one). Four mutations, four named failures once it was repaired.
+
+**Three of my probe's "findings" were my own errors and are recorded rather than reported**: the
+monument's freight rail refused because I posted to `/v1/goods/:id/buy` (the route is `/v1/goods/buy`
+with `goodId` in the body), the vault refused because it takes `omr` not `amount`, and the landmark
+refused because my figure was under its floor. *A finding produced by a tool you wrote and did not
+check is not a finding* — for the sixth session running. The fixture's $OMR also went 1,000 → 20,000,
+because the Store's rail is priced off the ETH fee at the market rate (~6,200 for a month of the Wire)
+and an unaffordable action is SKIPPED, which reads on the summary line exactly like a covered one.
+Driven actions 226 → 228.
 
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
