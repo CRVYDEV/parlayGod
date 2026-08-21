@@ -15289,6 +15289,49 @@ did not apply and the run came back green, so every mutation now asserts its own
 first. Suite green, sim drift-0, mobile 81/81, pgquery 2982 statements, **pgcheck 47/47 on a fresh
 real Postgres**. Driven actions 221; sheet fields checked 0 → 93.
 
+**WAVE 51 — THE SEVENTH OBLIGATION, AND A RUNG THAT NAMED NEITHER ITS LADDER NOR HALF ITS OWN
+EFFECT (`src/territory.js` + `src/business.js` + `public/index.html` + `test/client.js`,
+2026-08-21).** Kept playing, into the family's own books. Two findings, and the first is a class this
+file has already enumerated — and got the count wrong.
+
+**THE PAD BRANCH SAID SIX AND THERE WERE SEVEN.** An earlier wave rescoped `body.paid > 0` after
+finding six unrelated obligations claiming the personal business pad's line, and wrote that
+enumeration into the comment. The seventh was never on the list: **the FAMILY's territory upkeep is a
+byte-shape twin** — `{paid, fronts, stillOwed}`, the same three fields — so a boss settling the
+family's operations **out of the TREASURY** read *"paid $24,000 of the pad across 1 front — square,
+and they keep earning"*: his own pad, his own pocket, and a word for a thing he may not even own,
+while the personal pad it named sat unpaid on another screen. Found by DRIVING it rather than by
+re-reading the enumeration, which is the only way a missing seventh item in a list of six is ever
+found. Fixed at the SOURCE on both halves — each reply now names its **SYSTEM** (`upkeep:
+'territory'` / `upkeep: 'business'`) rather than one of them relying on the other's absence, because
+**absence is not a discriminator**: it holds only until a sibling adds the field you were counting on
+being missing, which is exactly what happened here. The list is renamed to the word the game uses
+everywhere else for these — an **operation**, not a front — and nothing read `fronts` off the
+territory reply (checked, not assumed). The business side was re-driven byte-identical afterwards, so
+the rescope cost its own line nothing.
+
+**THE FOUNDATION SAT ONE LINE FROM THE SEAL AND SAID A THIRD OF WHAT IT DOES.** Both come out of the
+SAME pooled family reserve every member tributed into; the seal names what is left and what the next
+rung costs, and the foundation — *"the family endowed the Community Fund — softer trials for
+everyone"* — named neither, **though the reply carries both**. The forgotten-sibling shape, three
+lines apart. It also stated **half its own effect**: a tier softens a filed case AND bleeds the
+family's heat faster, and the second half is the one that PREVENTS a case rather than surviving one
+— published per tier on `/v1/rules` and never read. Both halves are on the line now, off the live
+levers rather than a restatement, so a retune cannot leave the copy behind.
+
+**THE MUTATION RUN IS THE MORE USEFUL HALF, and it corrected my own claim.** Reverting the territory
+marker fails at its named assertion — and the line it falls to is not the pad's but the **catch-all**
+`paid $110,400`, because the pad branch is now scoped, i.e. the fix is a PAIR and reverting either
+half changes what a player reads. Un-scoping only the CLIENT half then failed at a **different**
+named assertion, and neutering that one surfaced a **third**: the estate wage line and the crew nut
+each guard the same branch from their own side, so that half is caught three times over. With both
+neutered the run went GREEN — because the territory branch is tested BEFORE the pad branch, so
+un-scoping the pad can only mis-claim OTHER systems' replies, never this one. That is the honest
+scope: **my assertion covers the case those three structurally cannot see**, and the server marker is
+the mutation that proves it. Two more (drop `reserve`, drop `nextFoundation`) each fail by name.
+Suite green, sim drift-0, mobile 81/81, pgquery 2982 statements, **pgcheck 47/47 on a FRESH real
+Postgres** (both server modules changed). Driven actions 221 → 224.
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and

@@ -282,9 +282,12 @@ export async function payBusinessUpkeep(ch, client, h) {
   const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
   if (!rows.length) throw new GameError('none', 'You run no fronts — no pad to pay.');
   const { paid, settled, stillOwed } = await settlePad(ch, rows, client, h);
-  if (paid <= 0 && stillOwed <= 0) return { ok: true, paid: 0, message: 'The pad is square.' };
+  // `upkeep` names the system — the family's TERRITORY pad is a byte-shape twin of this reply
+  // (`{paid, fronts, stillOwed}`), so both sides carry a marker rather than one of them relying on
+  // the other's absence, which holds only until a sibling adds the field. See territory.js.
+  if (paid <= 0 && stillOwed <= 0) return { ok: true, upkeep: 'business', paid: 0, message: 'The pad is square.' };
   h.owned.businesses = await businessesOf(client, ch.id);
-  return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
+  return { ok: true, upkeep: 'business', paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
 }
 
 // WALK AWAY — hand the keys back and close the place up.

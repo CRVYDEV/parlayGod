@@ -247,8 +247,16 @@ export async function payTerritoryUpkeep(ch, client, h) {
     await h.ledger(client, { currency: 'cash', amount: -paid, reason: 'territory:upkeep', counterparty: h.owned.gangId });
     if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - paid;
   }
-  if (paid <= 0 && stillOwed <= 0) return { ok: true, paid: 0, message: 'The pad is square.' };
-  return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
+  // NAME THE SYSTEM, because this reply is a byte-shape twin of the personal business pad
+  // (`{paid, fronts, stillOwed}`) and the client's flat `if` chain gave both to whichever branch
+  // came first — so paying the FAMILY's upkeep out of the TREASURY read as "the pad is square
+  // across 1 front", a bill on a screen the boss was nowhere near, naming fronts they may not own.
+  // The marker names the SYSTEM rather than the state (a state marker holds only until a sibling
+  // adds the same field), and the list is renamed to the word the game uses everywhere else for
+  // these: an operation, not a front. Nothing read `fronts` off this reply — checked, not assumed.
+  if (paid <= 0 && stillOwed <= 0)
+    return { ok: true, upkeep: 'territory', paid: 0, message: 'The family owes nothing on its operations.' };
+  return { ok: true, upkeep: 'territory', paid, operations: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
 }
 
 // STEP FOUR — FORTIFY: a boss/underboss buys a defense level for an operation from the treasury (a
