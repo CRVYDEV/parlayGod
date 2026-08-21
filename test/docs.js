@@ -700,3 +700,62 @@ console.log(`✅ docs test passed — every number in SPEC.md's size table check
   }
   console.log(`✓ the risk register's ${phrases.length} lever-derived figures match the live levers in both codices`);
 }
+
+// ---------------------------------------------------------------------------------------------
+// NO LAUNCH-GATING DOC MAY CALL A CONTRACT UNWRITTEN WHILE ITS FILE EXISTS (2026-08-21).
+//
+// `CHAIN-DEPLOY.md` said, in the paragraph stating what is live TODAY, that `StockVault` was
+// unwritten and "there is no claim route to find". It had shipped 2026-08-14 with a delivery
+// keeper, a prover and a `delivered ≤ allocated` wall — and the SAME document listed it in the
+// audit batch forty lines above, so the document contradicted itself and the stale half made the
+// operative claim. It errs in the direction that UNDERSTATES what is live, which is the worst
+// direction for a security review: an auditor told a contract does not exist does not attack it.
+//
+// Scope is deliberately CHAIN-DEPLOY + DEPLOY, the two documents whose only value is being
+// accurate about the tree RIGHT NOW. CLAUDE.md is excluded on purpose: it is a chronological log
+// where "not built" is a true statement about the day it was written and later entries supersede.
+//
+// Present tense only, for the same reason: "this paragraph SAID X WAS unwritten" is a correction
+// naming its own fix, and a guard that fires on the correction is one people route around.
+{
+  const dir = 'omerta-contracts/src';
+  const contracts = fs.readdirSync(dir).filter((f) => f.endsWith('.sol')).map((f) => f.replace(/\.sol$/, ''));
+  const GONE = ['is unwritten', 'is not written', 'is unbuilt', 'is not built',
+                'does not exist', "doesn't exist", 'has not been written', 'is still unwritten'];
+  const claims = [];
+  let mentions = 0;
+  for (const doc of ['CHAIN-DEPLOY.md', 'DEPLOY.md']) {
+    if (!fs.existsSync(doc)) continue;
+    const src = read(doc);
+    for (const name of contracts) {
+      // word-boundary on both ends: `OMR` must not match inside `OMRStaking`
+      const at = new RegExp(`\\b${name}\\b`, 'g');
+      for (const m of src.matchAll(at)) {
+        mentions++;
+        const after = src.slice(m.index, m.index + 90).replace(/[`*\n]/g, ' ');
+        const hit = GONE.find((p) => after.includes(p));
+        if (hit) claims.push(`${doc}: "${name} … ${hit}" — but ${dir}/${name}.sol exists`);
+      }
+    }
+  }
+  assert(mentions >= 20,
+    `the unwritten-contract scan matched only ${mentions} contract mention(s) across the launch-gating `
+    + 'docs — the extractor has stopped reading them, so this is vacuous rather than clean');
+  assert.equal(claims.length, 0,
+    'a launch-gating doc says a contract that EXISTS is unwritten. An auditor told a contract does\n'
+    + '      not exist will not attack it, and this errs in the understating direction:\n'
+    + `   - ${claims.join('\n   - ')}`);
+
+  // and the audit SCOPE must match the tree — "batch, not dribble" means the count is knowable
+  const scope = /\*\*In the batch — (\d+) contracts \+ (\d+) interface/.exec(read('CHAIN-DEPLOY.md'));
+  assert(scope, 'CHAIN-DEPLOY.md has lost its batch enumeration — the audit scope is no longer stated');
+  const ifaces = contracts.filter((c) => /^I[A-Z]/.test(c)).length;
+  assert.equal(Number(scope[1]) + Number(scope[2]), contracts.length,
+    `CHAIN-DEPLOY.md sends ${scope[1]} contracts + ${scope[2]} interface(s) to audit, but the tree holds `
+    + `${contracts.length} .sol files — a batch that does not match the tree is a scope somebody has to `
+    + 'discover mid-engagement');
+  assert.equal(Number(scope[2]), ifaces,
+    `CHAIN-DEPLOY.md counts ${scope[2]} interface(s); the tree holds ${ifaces}`);
+  console.log(`✓ no launch-gating doc calls an existing contract unwritten (${mentions} mentions), and the `
+    + `batch matches the tree (${scope[1]} contracts + ${scope[2]} interface)`);
+}

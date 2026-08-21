@@ -48,9 +48,15 @@ touches mainnet** until §0 is satisfied.
    different layer, and the ERC-20 path survives armed at zero as its backstop.
 
    ### THE BATCH — what goes out, and why it is drawn here
+   **The packet itself is `CHAIN-AUDIT-PACKET.md`** — the enumerated scope, what each wall CLAIMS,
+   what the four provers already prove against what stays config-only, and the properties an auditor
+   should attack. Send that; this section is the summary of it.
    *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
-   is sent. Enumerated 2026-08-11; `forge test` **288/288** green on this exact set (StreetDeed added
-   2026-08-14; `DynastyNFT` + `StockVault` + `OmertaFees.payForPackage` added 2026-08-14 — see below).*
+   is sent. Enumerated 2026-08-11; `forge test` **305/305** green on this exact set, measured 2026-08-21
+   (StreetDeed added 2026-08-14; `DynastyNFT` + `StockVault` + `OmertaFees.payForPackage` added
+   2026-08-14; the count has since grown with the red-team regressions — RT#5's constructor daily
+   caps, RT#8's two-step ownership, the four-way sell tax — so re-measure rather than quoting this
+   figure, and if the two disagree the tree is right and this line is stale.)*
 
    **In the batch — 17 contracts + 1 interface, every one carrying tests:**
 
@@ -104,9 +110,20 @@ touches mainnet** until §0 is satisfied.
    no stock oracle and no eligibility gate to build — was stale for two days and is corrected here:
    **buying, holding and eventually delivering tokenized stock is back in scope**, and with it the
    claim-rail parameters (the eligibility list + verification depth) that step 7 is gated on.
-   **What is live TODAY is narrower than either framing suggests, and that is the operative fact:** the
-   treasury BUYS and the wall (`allocated ≤ held`, per ticker, in units) holds, but **nothing is
-   delivered to anybody** — `StockVault` is unwritten and there is no claim route to find. The ETH
+   **What is live TODAY, corrected 2026-08-21 — this paragraph said `StockVault` was unwritten and it
+   has shipped:** the whole rail is BUILT end to end and **chain-DORMANT**. `StockVault.sol` (2026-08-14,
+   in the batch above) never mints — every `deliver` is a pre-held `SafeERC20.transfer`, so
+   `balanceOf(this)` per token is the PHYSICAL half of the wall — and the off-chain half is complete
+   too: `brokers.js:distributeBuy` writes the owed side through the clamped `allocateStock`,
+   `stockdeliver.js` stages→confirms against the `Delivered` log, `runStockDeliveryKeeper` is the tx
+   sender, and `delivered ≤ allocated` joins `allocated ≤ held` in the nightly sweep. **There is no
+   claim route BY DESIGN and that is a decision, not a gap** — the founder chose the gateless PUSH
+   (brokers §3.3): units land straight in the Street Deed's ERC-6551 account with no claim step and no
+   on-chain eligibility gate, which is precisely why the ADDRESS is the only thing between the treasury
+   and a permanent loss and why an auditor should attack it. Nothing moves until
+   `STOCK_VAULT_ADDRESS` + `STREET_DEED_ADDRESS` + the ERC-6551 config are set (the watcher) and
+   `STOCK_KEEPER_PK` besides (the sender), so **no stock has been delivered to anybody** — but the
+   reason is unset env, not unwritten code, and the two are different things to review. The ETH
    VAULT is the same shape one asset over: a player burns earned $OMR for a share of ETH the treasury
    already holds, same asset both sides, allocation-only. The $OMR side and the stock side are
    different questions; as of 2026-08-13 the founder states BOTH are cleared by the outside review

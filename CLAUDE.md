@@ -16067,3 +16067,53 @@ operations pay the TREASURY, not the man"* against `"collected $40,000"`), the s
 alone, so both assertions are load-bearing), the wing price dropped, `model` read off a raw row, and the
 plate branch deleted. Driven actions 232 → 238. Suite green + sim drift-0 + mobile + pgquery + pgcheck
 47/47 on a FRESH real Postgres.
+
+**THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
+(2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
+outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived
+nowhere: `CHAIN-DEPLOY.md` is the operational runbook (deploy order, arm order, env, kill switches) and
+was carrying the audit scope as a side note. Two things came out of assembling it. **THE HEADLINE IS A
+STALE FACT THAT ERRED IN THE UNDERSTATING DIRECTION**, which is the worst direction for a security
+review: §0's *"what is live TODAY"* paragraph said **`StockVault` is unwritten and there is no claim
+route to find** — it shipped 2026-08-14 with a delivery keeper, a prover and a `delivered ≤ allocated`
+wall — **and the SAME document's batch table forty lines above listed it in scope with its attack
+surface described.** The document contradicted itself and the stale half made the operative claim. *An
+auditor told a contract does not exist does not attack it.* Corrected to the real fact, which is a
+different shape entirely: the rail is BUILT end to end and **chain-DORMANT** (unset env, not unwritten
+code), and **there is no claim route BY DESIGN** — the founder's §3.3 gateless push, which is precisely
+why the ADDRESS is the only thing between the treasury and a permanent loss and why it should be
+attacked. Second: `forge test **288/288**` measured **305/305** (the red-team regressions since — RT#5's
+constructor daily caps, RT#8's two-step ownership, the four-way sell tax), so the line now says
+re-measure rather than quote, and that if the two disagree the TREE is right.
+**THE GUARD IS THE DURABLE HALF** (`test/docs.js`): no launch-gating doc may call a contract unwritten
+while its `.sol` exists, plus the batch enumeration must match the tree (`17 contracts + 1 interface`
+against 18 files — so the audit SCOPE cannot drift, which is what "batch, not dribble" means). Three
+decisions in it, each a property rather than a preference: **scope is CHAIN-DEPLOY + DEPLOY only** —
+CLAUDE.md is excluded because it is a chronological log where "not built" is TRUE about the day it was
+written; **present tense only**, because *"this paragraph SAID X WAS unwritten"* is a correction naming
+its own fix and a guard that fires on the correction is one people route around; and a **word-boundary
+on both ends**, or `OMR` matches inside `OMRStaking`. Anti-vacuity floor at 20 mentions (it sees 150).
+Three mutations, three named failures — the original stale sentence restored, the batch count wrong, and
+the extractor blinded (which reports as a FAILURE rather than a clean sweep).
+**`CHAIN-AUDIT-PACKET.md` is the packet**: the 18 files enumerated with what each is and which suite
+covers it; what each wall CLAIMS rather than what it does (the four mint walls and the recorded
+deviation — *the literal "accretive-only" reading forbids every discounted bond, so wall 3 is a hard
+Safe-set rate ceiling: weaker as economics, stronger as a wall*; the oracle's both-sides window bound;
+the hook's three claims — the `beforeInitialize` pool gate that makes `SellTaxTaken` unforgeable, the
+accrue-don't-forward sweep, the deliberate absence of a pause; the NFT entitlement split; the pause
+matrix's "no contract can be paused into a state where value is unreachable"); **what the four provers
+actually prove versus what stays config-only** — and the residual is the same for all three e2e ones and
+is stated rather than smoothed: *each prover CONFIGURES the thing it then checks against*, so a wrong
+pool fee or ERC-6551 salt is a config error no prover can see; the backend PARITY surface (five values
+the chain holds authoritatively that the backend restates, where *every downstream check sums correctly
+because they all descend from the same restated number*); the signer's own scope; and a ten-item
+starting list of properties to attack. **Every claim in it was verified against the tree before it was
+written** (the four EIP-712 domains distinct, all four signer-bearers taking their cap as a CONSTRUCTOR
+argument, `OMR.mint` minter-gated with no owner path, `StockVault` containing no mint at all,
+`DynastyNFT`'s only `balanceOf` mention being the comment that says it gates nothing, the hook carrying
+no Pausable) — not because the summary would be wrong otherwise, but because a packet that overstates
+its own rigour is worse than one that says less.
+**And the recorded trap was hit again, by me:** `git checkout test/docs.js` to undo a mutation **wiped
+the uncommitted guard** — the exact thing ground rule #9 exists for, three sessions after it was
+written. Recovered from the heredoc in context; the rule stands and the savepoint now runs after every
+edit.
