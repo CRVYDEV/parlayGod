@@ -165,7 +165,9 @@ if (failures.length) {
 // token ids of the pending re-imports (`$1,$2,…` built from the count, every value bound). Same shape
 // and same reason as the three above — a read-only operator board, so the alternative (`= ANY`) would
 // return zero rows on pg-mem and the board would silently report every stranded deed as nameless.
-const CEILING = { interpolated: 74, unreadable: 40 };
+// 74 → 75 (2026-08-21, the bulletproof batch): `sweepTelemetry`'s keep-list NOT IN — a placeholder
+// fan-out over TELEMETRY_KEEP_EVENTS ($2..$n), every value a bound parameter, never a user string.
+const CEILING = { interpolated: 75, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);
