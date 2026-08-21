@@ -268,6 +268,80 @@ that unfurls with the card. Every share link carries the player's own referral c
 
 **Lifetime art spend: $11.12.** Worth saying out loud to anyone asking about burn rate.
 
+Also: the approved **money-map explainer video** (`/art/hype-money.mp4`, on the landing page), and
+the **OHM-vs-$OMR comparison graphic** (`public/art/omr-vs-ohm.png`, generator kept in the repo
+history — §9a below is its thread).
+
+---
+
+## 9a. The OHM comparison — graphic + thread (2026-08-21)
+
+The genre's ghost is OlympusDAO, and every treasury-adjacent token gets compared to it. Answer the
+comparison head-on rather than dodging it — the honest answer is also the strongest one, because
+$OMR structurally lacks the three things that killed $OHM. The graphic
+(`public/art/omr-vs-ohm.png`) is the seven-row visual; the thread below is the long form. Every row
+was checked against the tree on 2026-08-21; it respects the five never-claims (no price talk, no
+yield promise, no "floor", stock delivery stated as gated, extraction stated as opening at launch).
+**Founder signs the final wording before posting**, like everything else here.
+
+> People keep comparing every treasury-adjacent token to what $OHM did in 2021. Fair — that's the
+> ghost in the room. So here is exactly where $OMR (OMERTÀ, on Robinhood Chain) is built
+> differently — mechanism by mechanism, all of it checkable on a public ledger.
+>
+> $OHM broke for three reasons: emissions barely cared about premium (APY kept printing as inflows
+> slowed → dilution → unstake → sell), the floor was a policy intention rather than an invariant,
+> and nothing automatically recycled activity back into the treasury once selling accelerated.
+>
+> $OMR's answer to each is structural, not a parameter tune.
+>
+> 1/ There is no emission schedule to discipline — because there is almost no emission.
+> Nothing in the game farms $OMR into existence. No APY, no wage, no drip. The staking ladder pays
+> from a funded pool — a redistribution of tokens that already exist, never a mint. The only mint
+> is the bond contract: hard-capped per day, discount-ceilinged at compile time, rate-walled
+> fail-closed, with a one-transaction kill switch. OHM's death spiral was reflexive emission. You
+> cannot unwind a loop that does not exist.
+>
+> 2/ The game and the token are deliberately severed.
+> Most crypto games are a pipe: farm → convert → dump. OMERTÀ has no pipe — street cash cannot
+> become $OMR at any price, through any route. So grinding cannot inflate the token, the game gets
+> to be generous, and the $OMR that IS in the city is worth taking off somebody. Literally: it can
+> be looted off a body.
+>
+> 3/ Revenue over deflation.
+> An $OMR sink here does not burn. It lands on the desk and is resold at a daily auction for ETH.
+> The KPI is return velocity — how many times a year the same token comes home as revenue. A burn
+> is one revenue event; a recycle is a permanent one.
+>
+> 4/ Extraction ≤ inflow is an invariant, not a promise.
+> On-chain withdrawal runs through a full-reserve queue funded only by buybacks from real revenue —
+> the server cannot sign a withdrawal beyond what is backed. A nightly conservation sweep
+> reconciles every balance against the ledger; a drift is an alarm, not a footnote.
+>
+> 5/ Three buybacks, all hard-bounded.
+> The vig (real fee revenue → buys $OMR → fills the withdrawal reserve and the prize pool), the
+> desk (POL trading fees, band-gated), and the community pot (a declared cut of the city's revenue
+> buys $OMR for the top families, split by seasonal standing — every seat re-fought). Each is
+> root-capped at spend ≤ revenue behind fat-finger price walls. A buyback that is not hard-enforced
+> is a tweet. These are checked in code, every night.
+>
+> 6/ The RWA arc.
+> The treasury stacks ETH. The families vote a daily stock ticker. A walled keeper buys tokenized
+> stock, split among the players who actually played — idle money takes nothing — and delivered
+> into your Street Deed's on-chain vault, so selling the street sells the book with it. Built and
+> devnet-proven; delivery opens after the audit and launch gates clear. We do not claim it is live
+> before it is.
+>
+> 7/ What we do not claim.
+> No price targets. No yield promises. $OMR is a game token whose demand is the game — a ladder
+> you climb by HOLDING it, a subscription, family seals, the wire, the compound — and whose supply
+> nobody can print against hype. The ledger is public. Check any of this yourself.
+>
+> $OHM's lesson was never "treasuries are bad." It was that reflexive emission plus a soft floor
+> plus no forced recycling is a bomb. $OMR ships with none of the three — and instead of a staking
+> dashboard, the thing on top is a full mafia RPG.
+>
+> omerta.fun · the ledger is public · extraction opens at launch
+
 ---
 
 ## 10. Before you post
