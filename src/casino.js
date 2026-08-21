@@ -775,7 +775,10 @@ export async function playNumbers(ch, pick, amount, client, h) {
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'numbers' }); // the runner reports who plays
   if (amt >= MASTERY.GAMBLER_MIN_STAKE) await bumpMastery(client, h, ch, 'gambling', 'numbers');
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
-  return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT };
+  // `near` states the consolation's terms WITH the ticket (the terms-ride-with-the-price rule):
+  // within ±band of the draw pays mult× the stake back — the near-miss is a real payout, not a myth.
+  return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT,
+    near: { band: CASINO.NUMBERS_NEAR_BAND, mult: CASINO.NUMBERS_NEAR_MULT } };
 }
 
 // Settle every MATURED ticket (day < today — the draw for a day is final once the day ends).
@@ -785,24 +788,34 @@ export async function claimNumbers(ch, client, h) {
   const today = dayOf();
   const tickets = (await client.query('SELECT * FROM numbers_tickets WHERE character_id=$1 AND day < $2 FOR UPDATE', [ch.id, today])).rows;
   if (!tickets.length) return { ok: true, settled: 0, won: 0 };
-  let won = 0;
+  let won = 0, nearWins = 0;
   const results = [];
   for (const t of tickets) {
     const drawn = numbersDrawOf(Number(t.day));
     const hit = Number(t.pick) === drawn;
-    if (hit) {
-      const payout = Number(t.stake) * CASINO.NUMBERS_PAYOUT;
+    // THE CONSOLATION (NetNet rec D): a near miss — within ±NEAR_BAND of the draw, CIRCULAR on the
+    // 0–999 wheel (so a pick at the edge has exactly the same near-win chance as one in the middle;
+    // a linear band would make 3 and 997 quietly worse picks, an asymmetry a sharp player routes
+    // around) — pays NEAR_MULT× the stake. Same draw, same seed, same casino:win:numbers rail under
+    // the den book, so §10.4 and the den-profit identity absorb it with zero new reasons. A ticket
+    // is EITHER a hit or a near, never both, which is why openLiability's 600× reservation stands.
+    const rawDist = Math.abs(Number(t.pick) - drawn);
+    const near = !hit && Math.min(rawDist, 1000 - rawDist) <= CASINO.NUMBERS_NEAR_BAND;
+    if (hit || near) {
+      const payout = Number(t.stake) * (hit ? CASINO.NUMBERS_PAYOUT : CASINO.NUMBERS_NEAR_MULT);
       won += payout;
+      if (near) nearWins++;
       ch.cash = Number(ch.cash) + payout;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:numbers' });
       await bumpProfit(client, -payout);
-      await h.notify(client, ch.id, 'numbers_hit', { day: Number(t.day), pick: Number(t.pick), payout });
+      await h.notify(client, ch.id, hit ? 'numbers_hit' : 'numbers_near',
+        { day: Number(t.day), pick: Number(t.pick), drawn, payout });
     }
-    results.push({ day: Number(t.day), pick: Number(t.pick), drawn, hit });
+    results.push({ day: Number(t.day), pick: Number(t.pick), drawn, hit, near });
     await client.query('DELETE FROM numbers_tickets WHERE character_id=$1 AND day=$2', [ch.id, t.day]);
   }
-  await h.track(client, ch.account_id, 'casino', { game: 'numbers_claim', settled: tickets.length, won });
-  return { ok: true, settled: tickets.length, won, results };
+  await h.track(client, ch.account_id, 'casino', { game: 'numbers_claim', settled: tickets.length, won, nearWins });
+  return { ok: true, settled: tickets.length, won, nearWins, results };
 }
 
 // ── BLACKJACK (stateful PvE): deal → hit / stand / double ──
@@ -1395,6 +1408,7 @@ export async function denInfo(pool, characterId) {
       highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX,
         stakeOmr: ACCESS_STAKE.HIGH_OMR, staked: myStake, stakeMet: myStake >= ACCESS_STAKE.HIGH_OMR } },
     numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: `${CASINO.NUMBERS_PAYOUT}:1`,
+      nearBand: CASINO.NUMBERS_NEAR_BAND, nearMult: CASINO.NUMBERS_NEAR_MULT,
       yesterday: numbersDrawOf(today - 1) },
     tickets,
     fight: { ...boutOf(week), max: CASINO.FIGHT_MAX, myBets: bet },

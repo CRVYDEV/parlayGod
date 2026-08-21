@@ -15845,3 +15845,25 @@ drive lock-then-expire-then-unstake through a lazy SQL resolver, because without
 unstake row would be REFUSED and read on the summary line as covered (the declared-but-never-driven
 class, headed off at design time); the lock line's assertions pin the boost, the window and the
 no-shield claim. Suite green + pgquery + pgcheck 47/47 on a FRESH real Postgres (the ALTERs apply).
+
+**THE NEAR MISS — a consolation tier on the Numbers (NetNet rec D, 2026-08-21) — BUILT**
+(`src/rules.tail.js` `CASINO.NUMBERS_NEAR_BAND`/`NUMBERS_NEAR_MULT`, `src/casino.js`
+`playNumbers`/`claimNumbers`/`denInfo`, `src/server.js` `/v1/rules`, `public/index.html`,
+`test/casino.js`; BALANCE.md § THE NEAR MISS). A matured Numbers ticket within ±`NUMBERS_NEAR_BAND`
+(5) of the draw — and not the hit — pays `stake × NUMBERS_NEAR_MULT` (5×) as a consolation, riding
+the **SAME `casino:win:numbers` rail** (zero new §10.4 reasons — the den-book `casino:win:%` LIKE
+patterns and `openLiability`'s 600× reservation already cover it, since a ticket is a hit XOR a
+near; the book keeps a 35% edge, down from 40%, and the EV relation `(PAYOUT + 2·BAND·MULT)/1000
+< 1` is test-pinned so a retune cannot silently flip the sink). **The wheel is CIRCULAR** —
+distance is `min(|d|, 1000−|d|)`, so 999 and 000 are neighbours and an edge pick is never quietly
+worse; the test scans back for a real edge-draw day (existence ASSERTED, the guaranteed-
+precondition discipline) and proves a far-side pick within the circular band pays. The terms ride
+with the price everywhere the ticket is sold: the buy reply carries `near {band, mult}`, denInfo +
+`/v1/rules` publish both, the Den heading quotes them off the live board, the claim line reports
+`nearWins`, and `numbers_near` is a real notification with its own `feedText` template (THE WIRE
+LEDGER's rule). The suite's own two "losing ticket" fixtures moved from `drawn+1` — which the band
+makes a WINNER — to `drawn+500`, the one distance that is maximally far under either metric (the
+second of the two feeds the den-book profit arithmetic, so leaving it would have corrupted the
+rakeback recovery loop's expectations). Levers pinned; three mutations each caught at their own
+named assertion (the near branch dropped; the distance made linear — fails at the circular-edge
+test by name; the near payout unledgered).

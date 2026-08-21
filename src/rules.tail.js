@@ -255,6 +255,16 @@ export const CASINO = {
   DISTRICT: 'neon',            // the vice district — travel there to play
   MIN_BET: 100, MAX_BET: 250000, DICE_NERVE: 1,
   NUMBERS_MIN: 10, NUMBERS_MAX: 1000, NUMBERS_PAYOUT: 600,
+  // THE CONSOLATION (NetNet research rec D, 2026-08-21) — the "Bonus Draw weight for everyone who
+  // played" idea in the den's own idiom: a NEAR MISS on the Numbers (within ±NEAR_BAND of the
+  // draw, CIRCULAR on the 0–999 wheel so an edge pick is not quietly worse) pays NEAR_MULT× the
+  // stake back. Same seed, same draw, settled by the same lazy claim — no new draw and no new
+  // reason (it rides casino:win:numbers under the den-book LIKE pattern). The EV stays a deep net
+  // sink: hit 600/1000 + near 2×5×5/1000 = 0.65 returned per 1.00 staked (a 35% edge, down from
+  // 40%) — and test/casino.js pins that relation against the live levers so a retune cannot
+  // quietly flip the book. openLiability needs NO change: a ticket resolves as EITHER a hit or a
+  // near (never both) and the 600× reservation already covers the smaller payout.
+  NUMBERS_NEAR_BAND: 5, NUMBERS_NEAR_MULT: 5,
   // ── step two (all founder sign-off levers) ──
   // The HIGH-STAKES ROOM: past HIGH_LVL the PvE dice table takes up to HIGH_MAX per roll, and
   // pots ≥ HIGH_FEED hit the public streets feed (whale theater).

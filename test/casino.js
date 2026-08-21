@@ -123,11 +123,57 @@ assert.equal((await meOf(token)).cash, cashPreClaim + 60000, 'the payout landed 
 assert.equal(await sum('casino:win:numbers'), 60000, 'the win is a ledgered faucet');
 assert.equal((await call('POST', '/v1/casino/numbers/claim', { token })).body.settled, 0, 'a settled ticket is gone (idempotent)');
 // a losing ticket settles to nothing
-rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: (winningPick + 1) % 1000, amount: 100 } });
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: (winningPick + 500) % 1000, amount: 100 } });
 assert.equal(rr.code, 200, 'a second ticket (new day slot freed)');
 await pool.query(`UPDATE numbers_tickets SET day=${yesterday} WHERE character_id='${cid}'`);
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.body.settled, 1, 'the loser settled'); assert.equal(rr.body.won, 0, 'and paid nothing');
+
+// ── THE NEAR MISS (NetNet D): within ±NUMBERS_NEAR_BAND of the draw pays NUMBERS_NEAR_MULT× back ──
+// The consolation rides the SAME casino:win:numbers rail (zero new §10.4 reasons — the den-book
+// LIKE patterns and openLiability's 600× reservation already cover it, since a ticket is a hit XOR
+// a near), and the wheel is CIRCULAR — 999 and 000 are neighbours — so an edge pick is never
+// quietly worse than a middle one.
+assert.equal(den.body.numbers.nearBand, CASINO.NUMBERS_NEAR_BAND, 'the board states the near band (terms ride with the price)');
+assert.equal(den.body.numbers.nearMult, CASINO.NUMBERS_NEAR_MULT, 'and the consolation multiple');
+assert((CASINO.NUMBERS_PAYOUT + 2 * CASINO.NUMBERS_NEAR_BAND * CASINO.NUMBERS_NEAR_MULT) / 1000 < 1,
+  'the Numbers stays a NET SINK with the consolation in the book — a retune cannot silently flip the EV');
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 5, amount: 100 } });
+assert.equal(rr.code, 200, 'near-test ticket bought');
+assert.equal(rr.body.near && rr.body.near.band, CASINO.NUMBERS_NEAR_BAND, 'the buy reply states the near terms');
+await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 3) % 1000} WHERE character_id='${cid}'`);
+const cashPreNear = (await meOf(token)).cash;
+const winSumPre = await sum('casino:win:numbers');
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.settled, 1, 'the near ticket settled');
+assert.equal(rr.body.nearWins, 1, 'and reports the near miss');
+assert.equal(rr.body.won, 100 * CASINO.NUMBERS_NEAR_MULT, 'a near miss pays stake × NEAR_MULT');
+assert.equal(rr.body.results[0].near, true, 'the result row is marked near');
+assert.equal((await meOf(token)).cash, cashPreNear + 100 * CASINO.NUMBERS_NEAR_MULT, 'the consolation landed in pocket');
+assert.equal(await sum('casino:win:numbers') - winSumPre, 100 * CASINO.NUMBERS_NEAR_MULT,
+  'the consolation rides the SAME ledgered casino:win:numbers faucet — no new §10.4 reason');
+// one past the band is a plain loser — the band is exact
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 6, amount: 100 } });
+assert.equal(rr.code, 200, 'band-edge ticket bought');
+await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + CASINO.NUMBERS_NEAR_BAND + 1) % 1000} WHERE character_id='${cid}'`);
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.settled, 1, 'the band+1 ticket settled');
+assert.equal(rr.body.won, 0, 'one past the band pays nothing');
+// THE WHEEL IS CIRCULAR: find a day whose draw sits within the band of 0 and back a pick on the FAR
+// side of the wheel — linear distance reads ~995+, circular reads exactly the band. A mutation that
+// makes the distance linear fails HERE by name. The edge-draw day is scanned for and its existence
+// ASSERTED (the precondition is guaranteed, never assumed — the recorded flake class).
+let edgeDay = 0;
+for (let d = yesterday; d > yesterday - 20000; d--) if (numbersDrawOf(d) < CASINO.NUMBERS_NEAR_BAND) { edgeDay = d; break; }
+assert(edgeDay, 'an edge-draw day exists in the 20k-day scan window (P(miss) ≈ 0.995^20000 ≈ 0)');
+const edgeDraw = numbersDrawOf(edgeDay);
+const farPick = (edgeDraw - CASINO.NUMBERS_NEAR_BAND + 1000) % 1000; // wraps past 999
+assert(Math.abs(farPick - edgeDraw) > 500, 'the pick really is on the far side of the wheel linearly');
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: farPick, amount: 100 } });
+assert.equal(rr.code, 200, 'edge ticket bought');
+await pool.query(`UPDATE numbers_tickets SET day=${edgeDay}, pick=${farPick} WHERE character_id='${cid}'`);
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.nearWins, 1, `999 and 000 are neighbours — the wheel is CIRCULAR (draw ${edgeDraw}, pick ${farPick})`);
 
 // econ-pass regression: the 600:1 hit put the house DEEP under water — no street cut is minted on
 // top of a stake until the book recovers (the old model tipped 1% regardless of results)
@@ -261,7 +307,7 @@ for (let i = 0; i < 300; i++) {
   if (Number(dv.profit) - Number(dv.distributed) >= owed + 1000) break;
   rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 0, amount: 1000 } });
   assert.equal(rr.code, 200, `top-up ticket (${JSON.stringify(rr.body)})`);
-  await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 1) % 1000} WHERE character_id='${cid}'`);
+  await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 500) % 1000} WHERE character_id='${cid}'`);
   await call('POST', '/v1/casino/numbers/claim', { token }); // a settled loser: +$1k realized profit
 }
 rr = await call('POST', '/v1/business/collect', { token });

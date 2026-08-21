@@ -6319,3 +6319,22 @@ which is what makes OMR_LOOT_COMMITTED and killing a made man mean anything.
 **What is deliberately absent:** any loot discount, any unstake-early-for-a-fee escape (the window
 is the price), and any yield — the lock pays in RUNGS, which are capacity/status, so the sim-signed
 economy is untouched (zero new reasons, zero new faucets, §10.4 has no surface here).
+
+## THE NEAR MISS — a consolation tier on the Numbers (NetNet research rec D, 2026-08-21)
+
+The NetNet lottery's near-miss consolation, on the Numbers' own machinery: a matured ticket whose
+pick lands within `NUMBERS_NEAR_BAND` of the drawn number (and is not the hit) pays
+`stake × NUMBERS_NEAR_MULT` — riding the SAME `casino:win:numbers` faucet (zero new §10.4 reasons;
+the den-book LIKE patterns and `openLiability`'s 600× reservation already cover it, since a ticket
+is a hit XOR a near). The wheel is CIRCULAR — 999 and 000 are neighbours (`min(|d|, 1000−|d|)`) —
+so an edge pick is never quietly worse than a middle one, which is test-pinned against a real
+edge-draw day.
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `CASINO.NUMBERS_NEAR_BAND` | **±5** | 10 of 1000 outcomes console. Widening it raises returned EV linearly. |
+| `CASINO.NUMBERS_NEAR_MULT` | **5×** | The consolation's size. At 600 + 2×5×5 = 650/1000 returned the book keeps a **35% edge** (was 40%) — still the historically-accurate deep house game, now with a "so close" beat ~1% of tickets. The EV relation `(PAYOUT + 2·BAND·MULT)/1000 < 1` is test-pinned so a retune cannot silently make the Numbers +EV. |
+
+**What is deliberately absent:** a separate ledger reason (the rail is shared), any change to the
+draw itself (the §7.11 seed is untouched — the consolation is a payout table on the same verifiable
+number), and any liability change (the 600× reservation strictly dominates the 5× consolation).

@@ -2693,7 +2693,7 @@
       return `\u{1F5C2} the file on ${txt(d.name)} — ${txt(d.law && d.law.stage)} with the law, ${txt(d.wealth)}, ${d.record ? d.record.kills : 0} on the record${marks.length ? ` · ${marks.join(' · ')}` : ''}${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
     }
     if (body && body.ok && body.settled !== undefined && body.won !== undefined)
-      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
+      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected${body.nearWins ? ` (${body.nearWins} a near miss — the runner pays a consolation)` : ''}` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
         : 'nothing to collect — no tickets have come up yet';
     if (body && body.ok && 'fadeLimit' in body)
       return body.fadeLimit ? `you're taking bets up to $${fmt(body.fadeLimit)} in the back room` : 'you\'re off the back-room board — no more fades';
@@ -3407,7 +3407,7 @@
     // THE NUMBERS. One ticket per street per day, drawn off the seed at the roll — and buying one
     // said "done.", naming neither the number you took, what you staked, nor what it pays. The
     // stake is gone either way; the least the game owes you is the ticket.
-    if (body.game === 'numbers' && body.pick !== undefined) bits.push(`\u{1F3AF} took ${body.pick} for $${fmt(body.stake)} — pays $${fmt(Number(body.stake) * Number(body.payout || 0))} if it comes in. Drawn tomorrow; claim it here.`);
+    if (body.game === 'numbers' && body.pick !== undefined) bits.push(`\u{1F3AF} took ${body.pick} for $${fmt(body.stake)} — pays $${fmt(Number(body.stake) * Number(body.payout || 0))} if it comes in${body.near ? `, and within ±${body.near.band} pays ${body.near.mult}× back` : ''}. Drawn tomorrow; claim it here.`);
     // MAKINGS. `cost` alone fell to the generic "paid $140" — the price with the purchase left off,
     // on the buy that feeds every cook. The response already carries the line, the count and the
     // unit price.
@@ -7260,7 +7260,7 @@
       <h2>Street Craps <span class="d" style="font-size:11px">(neon only — pays 1:1)</span></h2>
       <input id="dice-amt" placeholder="stake" size="10" value="1000">
       <button class="act" id="dice-go">roll</button>
-      <h2 style="margin-top:14px">The Numbers <span class="d" style="font-size:11px">(0–999, pays 600:1, one/day)</span></h2>
+      <h2 style="margin-top:14px">The Numbers <span class="d" style="font-size:11px">(0–999, pays ${den.numbers?.pays || '600:1'}, one/day${den.numbers?.nearBand ? ` — a NEAR MISS within ±${den.numbers.nearBand} pays ${den.numbers.nearMult}× back` : ''})</span></h2>
       <input id="num-pick" placeholder="pick" size="6"> <input id="num-amt" placeholder="stake" size="8" value="100">
       <button class="act" id="num-go">play</button>
       <button class="act" data-do="POST /v1/casino/numbers/claim">claim tickets</button>
@@ -10188,6 +10188,7 @@
       backroom_dice: () => `${d.from} faded you in the back room — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
       poker_hand: () => `${d.from} sat down heads-up — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
       numbers_hit: () => `YOUR NUMBER CAME UP — ${String(d.pick).padStart(3, '0')} paid ${$c(d.payout)}`,
+      numbers_near: () => `SO CLOSE — you took ${String(d.pick).padStart(3, '0')}, the number was ${String(d.drawn).padStart(3, '0')} — the runner pays ${$c(d.payout)} consolation`,
       tourney_result: () => `${d.place} of ${d.of} at the ${d.bracket ? 'bracket' : 'tournament'} — ${d.hand}${d.payout ? ` · ${$c(d.payout)}` : ' · nothing'}`,
       tourney_refund: () => `the tournament was short a field — ${$c(d.buyin)} back`,
       bracket_advance: () => `you're through to round ${d.round} — ${d.hand}`,
