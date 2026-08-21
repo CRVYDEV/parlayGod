@@ -107,6 +107,7 @@ const BESPOKE = {
   'mm-reserve':   `behind a barred teller window a clerk stacks gleaming gold-stamped tokens into perfect columns, hands moving fast, camera dollying in through the bars, ${ACTION}`,
   'mm-noprint':   `an underground money-printing press grinds to a halt: a hand throws a heavy lever, steam vents, the rollers stop and the work lights die one by one, dramatic push-in, ${ACTION}`,
   'mm-severance': `a man shoves a bulging cash bag toward a teller window and the barred shutter slams down in his face, the CLOSED sign swinging, camera punching in on the bars, ${ACTION}`,
+  'mm-vaultdrop': `a brass street-name plaque set in a wet stone wall swings open to reveal a small hidden vault, a gloved hand places engraved certificates and gold coins inside onto dark velvet, warm lamplight, slow cinematic push-in, ${ACTION}`,
   'mm-desk':      `a dealer in shirtsleeves fans a river of gold tokens across green felt then sweeps them back with a rake, chips tumbling, fast overhead orbit, smoky lamplight, ${ACTION}`,
   'mm-crew':      `three figures clasp hands over a barrel fire in a rain-soaked alley, then turn and walk abreast toward camera, coats flaring in the wind, low tracking shot, ${ACTION}`,
   'mm-family':    `a long candle-lit dining table, the family rising to raise glasses as a new made man stands at the head, the boss clapping his shoulder, camera orbiting the toast, ${ACTION}`,
@@ -406,6 +407,50 @@ const VIDEOS = {
     { p: 'mm-penthouse',  use: 2.6, off: 0.4, sub: 'TAKE THE CITY' },
     { p: 'hero-backdrop', use: 3.2, off: 0.5, title: 'OMERTÀ', cta: 'one life · no respawns · omerta.fun' },
   ] },
+  // 10 — THE RWA ARC (2026-08-21, the masterpiece budget): the ~48s narrated explainer for the ONE
+  // claim no other game can make — play accumulates a real book. Standalone telling of the money
+  // cut's Act IV: the treasury's declared slice → the families vote the ticker → real tokenized
+  // stock → split by PLAY → delivered into your street deed's vault. One new hero shot
+  // (mm-vaultdrop); everything else is a free edit of the library. Copy rules as ever:
+  // mechanism-true, number-free, the closer states extraction opens at launch.
+  rwa: { w: 1920, h: 1080, ar: '16:9', overline: 'GOING LEGIT', shots: [
+    // ═══ COLD OPEN ═══
+    { p: 'hero-poster',      use: 2.6, off: 0.3, sub: 'EVERY EMPIRE DREAMS OF GOING LEGIT' },
+    { p: 'interior-legit',   use: 2.6, off: 0.5, sub: 'THIS ONE CAN' },
+    // ═══ ACT I — the treasury ═══
+    { p: 'citymap',          use: 2.0, off: 0.6, kicker: 'I · THE TREASURY' },
+    { p: 'mm-four',          use: 2.8, off: 0.4, sub: 'A DECLARED SLICE OF EVERY REAL FEE',
+      sub2: 'identity · the store · bonds · the sell tax · yield' },
+    { p: 'crime-depository', use: 2.6, off: 0.5, sub: 'THE TREASURY STACKS ETH',
+      sub2: 'real revenue — never player deposits' },
+    { p: 'mm-tax',           use: 2.8, off: 0.4, sub: 'COLLECTED INSIDE THE SWAP',
+      sub2: 'the tax arrives as ETH — nothing to unwind' },
+    // ═══ ACT II — the vote & the buy ═══
+    { p: 'mm-seats',         use: 2.0, off: 0.5, kicker: 'II · THE VOTE' },
+    { p: 'crime-ballot',     use: 2.8, off: 0.5, sub: 'THE FAMILIES VOTE THE TICKER',
+      sub2: 'the commission picks the day’s stock' },
+    { p: 'crime-alderman',   use: 2.4, off: 0.5, sub: 'EVERY SEAT IS RE-FOUGHT',
+      sub2: 'seasonal standing decides who votes' },
+    { p: 'crime-ticker',     use: 2.8, off: 0.5, sub: 'THE TREASURY BUYS TOKENIZED STOCK',
+      sub2: 'real fills only — behind hard price walls' },
+    // ═══ ACT III — your share ═══
+    { p: 'estate-6',         use: 2.0, off: 0.5, kicker: 'III · YOUR SHARE' },
+    { p: 'cine-payday',      use: 2.8, off: 2.8, sub: 'EARNED BY PLAYING',
+      sub2: 'activated brokers split every buy by activity' },
+    { p: 'interior-streets', use: 2.6, off: 0.5, sub: 'IDLE MONEY TAKES NOTHING',
+      sub2: 'money alone buys no share — play does' },
+    { p: 'district-brick',   use: 2.6, off: 0.5, sub: 'YOUR STREET ON THE MAP',
+      sub2: 'claim it, name it — the deed is an NFT' },
+    { p: 'mm-vaultdrop',     use: 3.0, off: 0.4, sub: 'DELIVERED INTO THE DEED’S VAULT',
+      sub2: 'sell the street — the book travels with it' },
+    // ═══ ACT IV — the exit ═══
+    { p: 'heist-vault',      use: 2.8, off: 0.5, sub: 'OR BURN $OMR FOR TREASURY ETH',
+      sub2: 'the vault only ever owes what it already holds' },
+    { p: 'mm-noprint',       use: 2.8, off: 0.4, sub: 'NOTHING HERE IS PRINTED',
+      sub2: 'no emission, no promises — a ledger anyone can audit' },
+    { p: 'hero-backdrop',    use: 3.8, off: 0.5, title: 'OMERTÀ',
+      cta: 'play your way to a real book · extraction opens at launch · omerta.fun' },
+  ] },
 };
 
 // a clip file is (plate, aspect) — 16:9 sources and 9:16 sources are distinct renders
@@ -481,6 +526,21 @@ const NARRATION = {
       'Earn the name \u2014 until the whole city answers to you.' },
     { at: 24.6, window: 3.4, text: 'One family. One code.' },
     { at: 28.0, window: 3.4, text: 'Omert\u00e0. One life. Make it count.' },
+  ],
+  // the RWA explainer: the one claim, told slowly. Segments ride the act boundaries.
+  rwa: [
+    { at: 0.4, window: 14.6, text:
+      'Every empire dreams of going legit. This one can. '
+      + 'The treasury takes a declared slice of every real fee in the city \u2014 and stacks it, in ETH.' },
+    { at: 15.6, window: 9.4, text:
+      'The families vote the ticker. And the treasury buys the stock \u2014 '
+      + 'real fills, behind hard price walls.' },
+    { at: 25.6, window: 12.6, text:
+      'Your share is earned by playing \u2014 by what you did, not what you hold. '
+      + 'And it lands in your street\u2019s vault. Sell the street? The book travels.' },
+    { at: 38.6, window: 5.4, text:
+      'Or burn the token for ETH. Nothing is printed here.' },
+    { at: 44.2, window: 3.4, text: 'Omert\u00e0. The book is real.' },
   ],
 };
 // fal TTS (the real voice): MiniMax speech-02-hd, a deep trailer read. Cached in the LIB beside the
