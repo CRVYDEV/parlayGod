@@ -441,6 +441,92 @@ step 3 returned the true counts, step 4 came back `"ok": true` with every §10.4
 - [ ] `npm run invariants` (or `GET /v1/mod/invariants`) → every check `ok:true`.
 - [ ] Confirm the worker logged a tick (and, after 12h, a buyback).
 
+## 8b. SLOs — the numbers a monitor holds us to (bulletproof audit, 2026-08-21)
+A target nobody wrote down is a target nobody is missing. These are the service-level objectives, each
+readable off `GET /health` (which now carries request-side SLIs: `load.req5m` / `load.err4xx5m` /
+`load.err5xx5m` / `load.p95Ms` / `load.maxMs`, plus `rssMb` and `worker.beatAgoSeconds`):
+
+| SLI (where to read it)                    | SLO                       | What a miss means / first move |
+|-------------------------------------------|---------------------------|--------------------------------|
+| `/health` returns 200 (uptime monitor)    | ≥ 99.5% monthly (~3.6h budget) | DB down or box down — §7b runbook |
+| `load.p95Ms` (recent-request latency)     | < 500ms sustained         | pool cliff or DB CPU — §2's PG_POOL_MAX note; the DB plan is the dial |
+| `load.err5xx5m`                            | 0 (a 5xx is a BUG — 4xx are ordinary gameplay refusals) | read the `[500]` log lines (each carries route + message) |
+| `worker.beatAgoSeconds` / `worker.stale`  | < 5400s / never `stale:true` | the worker is dark: every alarm + timed settlement stopped — restart it |
+| `/admin` Backups panel                    | `HEALTHY`                 | §7c — archiving broke; PITR is rotting while everything looks fine |
+| `rssMb`                                    | flat over days (± tens of MB) | a steady creep is a memory leak — restart buys time, then diagnose |
+
+**Provision the uptime monitor (one-time, ~5 minutes):** point any free monitor (UptimeRobot,
+BetterStack) at `GET https://<your-host>/health`, alert on non-200, 1–5 min interval. Add a keyword
+alert on `"stale":true` if the monitor supports it — that is the worker going dark, which no status
+code shows. Do NOT make `/health` the *platform's* health check (§7b: restarting the API does not fix
+a database). The endpoint is cached ~2s + single-flight server-side, so monitor frequency is free.
+
+## 8c. Rolling back a bad deploy
+Render keeps every previous deploy. To roll back: **Render dashboard → the service → Deploys → pick
+the last good deploy → "Rollback to this deploy" — and do it on BOTH services** (`omerta-api` AND
+`omerta-worker`), to the SAME commit: the two ship from one repo and a split-version pair is a state
+nothing is tested against.
+
+**Why rolling back is safe here, and the one rule that keeps it safe:** the schema is ADDITIVE-ONLY —
+`CREATE TABLE IF NOT EXISTS` + derived `ADD COLUMN IF NOT EXISTS`, never `DROP`/`RENAME`/type-change
+migrations — so an older build running against a newer schema simply ignores columns it doesn't know.
+Keep it that way: a destructive migration is what turns "click rollback" into "restore from backup".
+Each boot stamps `schema_meta` with the build version that applied the schema; **a rolled-back (older)
+build detects the newer stamp, logs a `⚠ … likely a rollback in progress` line, and deliberately does
+not overwrite it** — so the stamp always names the newest schema the database has seen. A rollback
+undoes CODE, never data: if bad data was written, fix forward (a mod route or SQL with a ledger row),
+don't expect the rollback to unwrite it.
+
+**Blueprint drift is its own rollback trap:** any dashboard change (plan, HA toggle) must be written
+into `render.yaml` in the same sitting — a drifted blueprint silently stops EVERY later change to
+that file (including deploy-gating config) from reaching Render. The 16-day incident is documented at
+the top of `render.yaml`; the lesson is one sentence: the file must match the dashboard, both ways.
+
+## 8d. Cloudflare in front — one move that buys CDN, edge caching, DDoS and a WAF (optional)
+The app is a single always-on origin; putting Cloudflare's free tier in front (orange-cloud the DNS
+record) buys four of the classic production layers in one step, with two rules:
+
+- **Cache static, NEVER the API.** Safe to cache aggressively: `/art/*`, `/v1/art/*`, `/v1/avatar/*`
+  (already served with long/immutable cache headers — Cloudflare respects them by default). Add a
+  cache rule to BYPASS everything else under `/v1/*` — every other board is per-player or
+  fast-moving, and an edge-cached `/v1/me` would hand one player another's sheet. WebSockets
+  (`/v1/ws`) pass through on all plans.
+- **Set `TRUST_PROXY=2`** (the env now takes a hop count): the chain becomes client → Cloudflare →
+  Render LB → app, and the default `on` (=1 hop) would read Cloudflare's egress IP as the client —
+  every per-IP throttle collapses onto ~a dozen shared addresses. Verify after flipping: the IPs in
+  `/v1/mod/actions` (mod audit log) should be real client addresses, not `104.x`/`172.6x` Cloudflare
+  ranges.
+
+Without Cloudflare, DDoS/WAF is Render's platform layer + the in-app throttles (H4 default keyless
+throttle, per-IP auth buckets, the security-header baseline) — adequate for launch scale; the
+Cloudflare move is the cheap upgrade when traffic or abuse says so.
+
+## 8e. Disaster recovery — the secrets are part of the backup
+A database dump restores the WORLD, but three env values are unrecoverable-by-construction if lost,
+and losing them is losing something real:
+
+- **`JWT_SECRET`** — lost = every player logged out (they can log back in; sessions die).
+- **`MARKET_SEED`** — lost = every §7.11 seeded draw (prices, numbers, track, contracts) changes
+  discontinuously. The game survives, but open seeded bets settle against a different draw.
+- **`MOD_KEY`** — lost = no admin access until it is rotated.
+
+**One-time step:** copy all three out of the Render dashboard (env group `omerta-secrets`) into the
+founder's password manager. Render generated them (`generateValue: true`), so the dashboard is
+currently the ONLY copy — a deleted env group or a destroyed account currently takes them with it.
+Chain-era secrets (`VOUCHER_SIGNER_PK`, bot keys) get the same treatment the day they are set.
+
+**Stated RPO/RTO:** managed PITR (watched by §7c) targets minutes of data loss; the nightly
+`npm run backup` dump is the independent floor — worst case, one day (RPO ≤ 24h) restored in under an
+hour (§7c's rehearsed restore, measured 2026-07-26). **The nightly dump must run somewhere with
+`pg_dump` + durable storage** — a laptop cron, a VPS, a GitHub Action with an artifact store. NOT a
+Render cron service: those containers have no persistent disk, so a dump written there evaporates
+with the container. If the dump destination is third-party storage, encrypt it first
+(`gpg -c` on the file) — it contains every player's email-free but complete game state.
+
+**`DATABASE_URL` rule:** always the INTERNAL connection string (the `fromDatabase` blueprint wiring
+already does this). The external string traverses the public internet and counts against connection
+limits; nothing in this stack needs it except your own laptop running a restore rehearsal.
+
 ## 9. Still gated (NOT part of the off-chain alpha)
 Mainnet / on-chain extraction — `forge test` on a real toolchain, the third-party audit of the contracts
 **and** the off-chain signer, and the launch checklist on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.

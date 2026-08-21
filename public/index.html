@@ -10464,6 +10464,15 @@
   const cd = (seconds, ready) => Number(seconds) > 0
     ? `<span class="cdt" data-until="${Date.now() + Number(seconds) * 1000}"${ready ? ` data-ready="${esc(ready)}"` : ''}></span>`
     : `<span class="cdt cd-ready">${ready || 'READY'}</span>`;
+  // (bulletproof audit, Exponential Backoff) a fixed 4s retry makes every open tab re-dial IN STEP after a
+  // server restart — a reconnect herd of simultaneous WS upgrades at exactly the moment the box is coldest.
+  // Jittered exponential backoff (2s · 1.6^n, capped 30s, ±30% jitter) spreads the herd; reset on a
+  // successful open so an ordinary blip still reconnects fast.
+  let wsRetries = 0;
+  const wsRetryMs = () => {
+    const base = Math.min(30000, 2000 * Math.pow(1.6, wsRetries));
+    return Math.round(base * (0.7 + Math.random() * 0.6));
+  };
   function connectWs() {
     if (ws) return;
     try {
@@ -10471,7 +10480,7 @@
       // (red-team R12 F2) pass the session JWT as a subprotocol value, NOT in the URL — a WS URL lands in
       // access/proxy logs + browser history, and this is the same full bearer token (→ account takeover).
       ws = new WebSocket(`${proto}://${location.host}/v1/ws`, ['bearer', token]);
-      ws.onopen = () => { const d = $('#ws-dot'); d.style.color = 'var(--ok)'; d.classList.add('live'); pollOnline(); };
+      ws.onopen = () => { wsRetries = 0; const d = $('#ws-dot'); d.style.color = 'var(--ok)'; d.classList.add('live'); pollOnline(); };
       ws.onmessage = (m) => {
         try {
           const ev = JSON.parse(m.data);
@@ -10486,7 +10495,7 @@
           else renderActive();
         } catch { /* noise */ }
       };
-      ws.onclose = () => { const d = $('#ws-dot'); d.style.color = 'var(--bad)'; d.classList.remove('live'); ws = null; setTimeout(connectWs, 4000); };
+      ws.onclose = () => { const d = $('#ws-dot'); d.style.color = 'var(--bad)'; d.classList.remove('live'); ws = null; wsRetries++; setTimeout(connectWs, wsRetryMs()); };
     } catch { /* headless */ }
   }
 

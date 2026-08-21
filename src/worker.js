@@ -149,6 +149,24 @@ export async function mergeLegacyPools(pool) {
   finally { client.release(); }
 }
 
+// (bulletproof audit) TELEMETRY retention — the one unbounded high-write table (a row per tracked
+// action, forever). SELECTIVE by construction, never blanket: some event types are LEDGER inputs
+// or lifetime analytics, and pruning those silently breaks a check or a founder dashboard —
+//   · 'death'                → invariants.js car conservation SUMS every death's fleet size (§10.4)
+//   · 'first_week_step', 'broadcast_share', 'screen_open', 'referral_claim_late'
+//                            → funnelStats reads LIFETIME tallies of exactly these (growth.js)
+// Everything else (per-action engagement noise) is read only through windows — engagement 30d,
+// capo RETAIN_DAYS 14d, push-skip minutes, /v1/online 15m, dispatch lapse 30d — so 180 days is
+// comfortably past every reader. Exported so the keep-list is TESTED, not promised.
+export const TELEMETRY_KEEP_EVENTS = ['death', 'first_week_step', 'broadcast_share', 'screen_open', 'referral_claim_late'];
+export async function sweepTelemetry(pool) {
+  const inList = TELEMETRY_KEEP_EVENTS.map((_, i) => `$${i + 2}`).join(',');
+  const r = await pool.query(
+    `DELETE FROM telemetry WHERE at < $1 AND event NOT IN (${inList})`,
+    [new Date(Date.now() - 180 * 86400000), ...TELEMETRY_KEEP_EVENTS]);
+  return r.rowCount || 0;
+}
+
 // §8 SEASON ROLLOVER — seasons are 28-day windows from the epoch. Characters
 // stamped with an older season convert level → prestige (floor(level/2), the
 // §7.9 formula) and reset respect. Batched; each character is row-locked.
@@ -355,6 +373,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 60 * 86400000)])); // the pair K-decay reads only TODAY — old rows are noise
     await safe('gala guest retention', () => pool.query('DELETE FROM gala_guests WHERE at < $1',
       [new Date(Date.now() - 7 * 86400000)])); // (red-team LOW) a gala is a 4h window — old guest lists are noise
+    // selective telemetry retention (bulletproof audit) — the sweep + its keep-list live beside the
+    // season rollover as exported functions so test/hardening.js drives them rather than restating the query
+    await safe('telemetry retention', () => sweepTelemetry(pool));
     await safe('oauth state sweep', () => pool.query('DELETE FROM oauth_states WHERE created_at < $1',
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
     // §7.13 tier-2 reconcile: pay the "family tree" fee the post-commit hook couldn't (grandrecruiter

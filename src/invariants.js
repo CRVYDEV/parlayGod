@@ -668,24 +668,49 @@ async function collectLedgerChecks(pool) {
 // Alerting: a telemetry row always; a webhook when INVARIANT_WEBHOOK_URL is set. Exported + `kind`-tagged
 // (red-team R6 A) so the worker can route the real-VALUE invariants (Vig extraction≤reserve, Bond
 // anti-Ponzi) through the SAME founder alarm as the in-game §10.4 sweep — they had no automated alert.
-export async function alertDrift(pool, failed, kind = 'ledger') {
+export async function alertDrift(pool, failed, kind = 'ledger', retryDelaysMs = [1000, 4000]) {
   // preserve the original ledger telemetry event name (dashboards/ops key on it); tag vig/bond distinctly
   const event = kind === 'ledger' ? 'invariant_drift' : `${kind}_invariant_drift`;
   await pool.query('INSERT INTO telemetry (id, event, props) VALUES ($1,$2,$3)',
     [crypto.randomUUID(), event, JSON.stringify(failed)]);
   console.error(`🚨 ${kind === 'ledger' ? '§10.4 LEDGER' : kind.toUpperCase()} INVARIANT DRIFT:`, JSON.stringify(failed));
   if (process.env.INVARIANT_WEBHOOK_URL) {
-    try {
-      await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
-        headers: { 'content-type': 'application/json' },
+    // RETRIED, with backoff (bulletproof pass, 2026-08-21). This is the single most important
+    // outbound POST in the app — the alarm the whole invariant machinery exists to deliver — and it
+    // was one transient Discord 502 away from being lost: the telemetry row and the console line
+    // survive, but the thing a HUMAN sees does not, and the whole 2026-07-25 incident class is that
+    // a line in a log nobody reads is not an alarm. Three attempts, 1s then 4s apart, still
+    // swallowed at the end (an alarm must never take the worker's tick down with it — the safe()
+    // argument, one layer in). `retryDelaysMs` is a parameter ONLY so the test can drive the retry
+    // path without sleeping through real backoff (the getDaily `day` precedent); production callers
+    // never pass it.
+    const attempts = retryDelaysMs.length + 1;
+    for (let i = 0; i < attempts; i++) {
+      try {
         // `text` is what Slack incoming webhooks require; `content` is what Discord requires. Both REJECT
         // a body carrying neither (400) — and this function swallows that, so the original payload of
         // `{alert, failed}` alone meant the two services the deploy docs recommend would silently deliver
         // NOTHING: configured, no visible error, no alerts. The structured fields are kept alongside for
         // anything custom. test/hardening.js asserts both keys are present, since a missing one fails
         // exactly where nobody is looking.
-        body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed, text: webhookText(kind, failed), content: webhookText(kind, failed) }) });
-    } catch (e) { console.error('invariant webhook failed', e.message); }
+        // AbortSignal.timeout (the verify.js pattern): a HUNG webhook endpoint would otherwise hold this
+        // await for undici's ~300s default header timeout — and this runs inside worker sweeps, so one
+        // hung endpoint stalls the whole tick behind an alarm that was supposed to be best-effort.
+        const res = await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
+          headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(10_000),
+          body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed, text: webhookText(kind, failed), content: webhookText(kind, failed) }) });
+        // fetch does NOT throw on an HTTP error status — a Discord 502 or a Slack 429 comes back as a
+        // resolved response with ok=false, which is precisely the transient failure this loop exists
+        // for. A non-retryable 400 gets retried too (twice, ~5s total): telling the codes apart buys
+        // nothing worth the branch, and the payload-shape 400s have their own regression above.
+        if (res && res.ok === false && i < attempts - 1) { await new Promise((r) => setTimeout(r, retryDelaysMs[i])); continue; }
+        if (res && res.ok === false) console.error(`invariant webhook failed after ${attempts} attempts`, `HTTP ${res.status}`);
+        break;
+      } catch (e) {
+        if (i === attempts - 1) console.error(`invariant webhook failed after ${attempts} attempts`, e.message);
+        else await new Promise((r) => setTimeout(r, retryDelaysMs[i]));
+      }
+    }
   }
 }
 

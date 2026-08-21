@@ -85,6 +85,27 @@ function bodyFor(type, p) {
   }
 }
 
+// ── "MAY WE POST TO THIS ENDPOINT?" — ONE implementation, asked TWICE (bulletproof audit, SSRF) ──
+// Checked at SUBSCRIBE time (the R28/blue-team M4 guard: https-only, no localhost/.local, no private/
+// link-local/CGNAT/IPv4-mapped IP literal, and a best-effort DNS-resolve check) and RE-CHECKED at SEND
+// time in pushToAccount — because validate-at-subscribe-only leaves DNS REBINDING open between check
+// and send: a hostname that resolved public at subscribe can resolve to the metadata endpoint by the
+// time the worker actually POSTs. The literal guard is the hard net; a hostname lookup failure does
+// NOT block (failing closed on a DNS blip would drop legit subscriptions — push.js's recorded call).
+export async function endpointAllowed(endpoint) {
+  let host = '';
+  try { const u = new URL(endpoint); if (u.protocol !== 'https:') return false; host = u.hostname; } catch { return false; }
+  const bare = host.replace(/^\[|\]$/g, '');
+  const isIpLiteral = bare.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(bare);
+  if (host === 'localhost' || host.endsWith('.local')) return false;
+  if (isIpLiteral) return !isPrivateAddr(bare);
+  try {
+    const addrs = await dns.lookup(host, { all: true });
+    if (addrs.some((a) => isPrivateAddr(a.address))) return false;
+  } catch { /* DNS lookup failed — rely on the literal guard */ }
+  return true;
+}
+
 // ── SUBSCRIBE / UNSUBSCRIBE — the browser's PushSubscription, stored per account (endpoint is the key). ──
 export async function saveSubscription(pool, accountId, sub) {
   if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
@@ -93,24 +114,7 @@ export async function saveSubscription(pool, accountId, sub) {
   // (red-team R28 LOW-3) the endpoint is attacker-chosen and the worker POSTs to it — reject anything
   // that isn't a real https push host so it can't be pointed at an internal address (a blind SSRF from
   // the worker, e.g. http://169.254.169.254/…). A genuine Web-Push endpoint is always https.
-  let host = '';
-  try { const u = new URL(sub.endpoint); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { throw new GameError('bad_sub', 'Invalid push subscription.'); }
-  // BLUE-TEAM M4: the old check caught IPv4 dotted-quads + localhost, but IPv6 literals ([::1],
-  // [fd00::1], [::ffff:169.254.169.254]) and internal-RESOLVING hostnames slipped through — a blind
-  // SSRF from the worker. Reject an internal IP LITERAL synchronously; for a hostname, reject if it
-  // RESOLVES to an internal address (best-effort — a lookup failure does NOT block, since the literal
-  // guard is the hard net and failing closed on a DNS blip would drop legit subscriptions).
-  const bare = host.replace(/^\[|\]$/g, '');
-  const isIpLiteral = bare.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(bare);
-  if (host === 'localhost' || host.endsWith('.local')) throw new GameError('bad_sub', 'Invalid push subscription.');
-  if (isIpLiteral) {
-    if (isPrivateAddr(bare)) throw new GameError('bad_sub', 'Invalid push subscription.');
-  } else {
-    try {
-      const addrs = await dns.lookup(host, { all: true });
-      if (addrs.some((a) => isPrivateAddr(a.address))) throw new GameError('bad_sub', 'Invalid push subscription.');
-    } catch (e) { if (e instanceof GameError) throw e; /* DNS lookup failed — rely on the literal guard */ }
-  }
+  if (!(await endpointAllowed(sub.endpoint))) throw new GameError('bad_sub', 'Invalid push subscription.');
   await pool.query(
     `INSERT INTO push_subscriptions (id, account_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (endpoint) DO UPDATE SET account_id=$2, p256dh=$4, auth=$5`,
@@ -139,8 +143,17 @@ async function pushToAccount(pool, accountId, title, body, url) {
   const subs = (await pool.query('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE account_id=$1', [accountId])).rows;
   if (!subs.length) return 0;
   const payload = JSON.stringify({ title, body, url: url || '/' });
-  for (const s of subs) await deliver(pool, s, payload);
-  return subs.length;
+  let sent = 0;
+  for (const s of subs) {
+    // SEND-TIME SSRF recheck (the same endpointAllowed the subscribe path asks) — validate-at-subscribe-only
+    // leaves DNS REBINDING open: a hostname that resolved public when stored can resolve private now, and
+    // the worker is the process that actually POSTs to it. A skipped endpoint is not pruned — it may be a
+    // transient resolver failure of the private kind; the next sweep re-asks.
+    if (!(await endpointAllowed(s.endpoint))) continue;
+    await deliver(pool, s, payload);
+    sent++;
+  }
+  return sent;
 }
 
 // build ONE digest push from an account's batch of claimed notifications — a per-account digest, so a
