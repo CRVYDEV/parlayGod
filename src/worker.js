@@ -52,6 +52,7 @@ import { sweepLoans } from './loans.js';
 import { sweepAuctions, sweepConsignments } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
 import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js';
+import { stampFairness } from './fairness.js';
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
@@ -279,6 +280,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // BLUE-TEAM C2: stamp the liveness beat now that the DB is reachable this tick — /health and the ops
     // dashboard read its age so a monitor can catch the worker going dark (it is the sole alarm source).
     await safe('heartbeat', () => pool.query('UPDATE worker_heartbeat SET beat_at = now() WHERE id = 1'));
+    // THE FAIR DRAW (NetNet rec F) — stamp today's draw commitment early in the tick, so the server's
+    // own record of "the draw was fixed before your ticket" exists from the day's first minutes even
+    // if nobody has read the board yet. Idempotent (day-PK, SELECT-then-INSERT); a re-run stamps nothing.
+    await safe('fair draw stamp', () => stampFairness(pool));
     const r = await safe('buyback', () => runBuyback(pool));
     if (r) console.log(`🔁 street take: window +$${Math.round(r.toWindow)}`);
     // the legacy-pool merge is its OWN step, not the buyback's: gating a $OMR migration behind the

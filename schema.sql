@@ -3597,3 +3597,13 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
 -- both are OFF persistAccount's positional list (written by direct SQL under the held account lock).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_until TIMESTAMPTZ;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_mult NUMERIC NOT NULL DEFAULT 1;
+
+-- ═══ THE FAIR DRAW (NetNet research rec F, 2026-08-21): the worker-stamped commitment record for
+-- the daily seed draw (src/fairness.js). Day-keyed and account-agnostic — no character_id, so it is
+-- outside the death-disposition guard by construction and holds no value (§10.4-zero). A NEW table,
+-- so CREATE TABLE IF NOT EXISTS is live-DB-safe (only new COLUMNS on existing tables need ALTERs).
+CREATE TABLE IF NOT EXISTS fair_commitments (
+  day INT PRIMARY KEY,
+  commitment TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

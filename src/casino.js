@@ -11,6 +11,7 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
+import { fairSummary } from './fairness.js';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
 import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized, usd } from './rules.js';
 
@@ -1442,6 +1443,9 @@ export async function denInfo(pool, characterId) {
     numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: `${CASINO.NUMBERS_PAYOUT}:1`,
       nearBand: CASINO.NUMBERS_NEAR_BAND, nearMult: CASINO.NUMBERS_NEAR_MULT,
       yesterday: numbersDrawOf(today - 1) },
+    // THE FAIR DRAW (NetNet rec F) — folded into the den board rather than a second client fetch on
+    // a POLLED screen (the poll-cost rule); the full reveal + verification lives on keyless /v1/fairness.
+    fair: await fairSummary(pool),
     // THE VIG POT — the live progressive pot (a PUBLIC number: the marquee is the whole point) +
     // the terms that ride with it. A plain unlocked read: the board quotes, the claim charges.
     jackpot: { pot: Math.floor(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0]?.jackpot || 0)),

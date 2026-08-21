@@ -9,6 +9,7 @@ import { buildServer } from '../src/server.js';
 import { CASINO, STABLE, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
+import { stampFairness, fairCommitment } from '../src/fairness.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -852,6 +853,51 @@ const invFut = (await runLedgerInvariants(pool, { alert: false })).checks.find((
 assert(invFut && invFut.ok, `futurity escrow reconciles post-settle (lhs ${invFut?.lhs}, rhs ${invFut?.rhs})`);
 
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
+// ══ THE FAIR DRAW (NetNet rec F): commit today, reveal yesterday, verify like an OUTSIDER ══
+// The test plays the third party the board is FOR: it recomputes the commitment from the documented
+// formula in `how` with node's own crypto — never by calling the server's helper on both sides,
+// which would be self-consistent under any mutation (the vacuity class).
+{
+  const day = dayOf();
+  const txnCount = async () => Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  const txn0 = await txnCount();
+  let fb = (await call('GET', '/v1/fairness')); // KEYLESS — an outsider needs no token
+  assert.equal(fb.code, 200, 'the fairness board is keyless');
+  fb = fb.body;
+  // TODAY IS SEALED: exactly {commitment, day, recorded} — a leaked results/nonce here would let
+  // everyone buy the winning number on a 600:1 book.
+  assert.deepEqual(Object.keys(fb.today).sort(), ['commitment', 'day', 'recorded'],
+    "today is SEALED — the board must never carry today's draw or nonce");
+  assert(/^[0-9a-f]{64}$/.test(fb.today.commitment), 'the commitment is a sha256 hex');
+  // YESTERDAY VERIFIES from the reveal alone, by the published formula:
+  const rv = fb.yesterday.reveal;
+  const recomputed = crypto.createHash('sha256').update(`${rv.nonce}:${JSON.stringify(rv.results)}`).digest('hex');
+  assert.equal(recomputed, fb.yesterday.commitment,
+    'an outside verifier can reproduce the commitment from the documented formula (nonce + results)');
+  assert.equal(rv.results.numbers, numbersDrawOf(day - 1), "the reveal IS yesterday's real draw");
+  assert.equal(rv.results.day, day - 1, 'the reveal is keyed to yesterday');
+  assert(fb.how.includes('sha256'), 'the verification instructions ride with the board');
+  // THE STAMP: the worker records today once, idempotently; the board then reads the RECORD.
+  assert.equal((await stampFairness(pool)).stamped, true, 'the worker stamps today');
+  assert.equal((await stampFairness(pool)).stamped, false, 'a re-run stamps nothing (idempotent)');
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM fair_commitments WHERE day=$1', [day])).rows[0].n), 1, 'one record per day');
+  fb = (await call('GET', '/v1/fairness')).body;
+  assert.equal(fb.today.recorded, true, 'the board reads the stored record');
+  assert.equal(fb.today.commitment, fairCommitment(day), 'the stored record matches the computation');
+  // A TAMPERED RECORD SURFACES — the one way it happens is a MARKET_SEED rotation rewriting every
+  // historical draw, and a fairness board that hid that would be worse than none.
+  await pool.query('INSERT INTO fair_commitments (day, commitment) VALUES ($1, $2)', [day - 1, 'deadbeef-not-the-real-commitment']);
+  fb = (await call('GET', '/v1/fairness')).body;
+  assert.equal(fb.yesterday.mismatch, true, 'a tampered record must surface as mismatch, never be hidden');
+  assert.equal(fb.yesterday.recordedCommitment, 'deadbeef-not-the-real-commitment', 'the stored value is shown so an outsider can see the disagreement');
+  await pool.query('DELETE FROM fair_commitments WHERE day=$1', [day - 1]); // undo the tamper
+  // the den board folds the one-line summary (no second fetch on a polled screen)
+  const denF = (await call('GET', '/v1/casino', { token })).body.fair;
+  assert(/^[0-9a-f]{64}$/.test(denF.today), "the den board carries today's seal");
+  assert.equal(denF.yesterday.numbers, numbersDrawOf(day - 1), "and yesterday's revealed number");
+  assert.equal(await txnCount(), txn0, 'THE FAIR DRAW moves no value — zero ledger rows across the whole flow');
+}
+
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
 const me = await meOf(token);
@@ -870,5 +916,5 @@ assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 const trFinal = inv.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trFinal?.ok, `poker tourney escrow holds at the end (drift ${trFinal?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent) + step four THE FUTURITY (the crowd-bet marquee — owners nominate player racers for a burned casino:futurity:nom fee, the town bets parimutuel, the worker races the field and pays the winner's backers the losing pool net of vig / the owner a promoter purse / half-vig→buyback; the district/own_event/bad_runner/already_bet gates, the distinct-posts regression + slot cap, and the new futurity-escrow §10.4 check mid-window + closing to 0), §10.4 identity + vocabulary + treasury + den + tourney-escrow + futurity-escrow checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent) + step four THE FUTURITY (the crowd-bet marquee — owners nominate player racers for a burned casino:futurity:nom fee, the town bets parimutuel, the worker races the field and pays the winner's backers the losing pool net of vig / the owner a promoter purse / half-vig→buyback; the district/own_event/bad_runner/already_bet gates, the distinct-posts regression + slot cap, and the new futurity-escrow §10.4 check mid-window + closing to 0), THE FAIR DRAW (keyless commit/reveal board — today SEALED to exactly {day, commitment, recorded}, yesterday's reveal recomputed by an OUTSIDE verifier with node's own crypto, the worker stamp idempotent, a tampered record surfaced as mismatch, the den fold, zero ledger rows), §10.4 identity + vocabulary + treasury + den + tourney-escrow + futurity-escrow checks hold`);
 await app.close();

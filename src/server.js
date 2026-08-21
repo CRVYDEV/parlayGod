@@ -35,6 +35,7 @@ import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import * as Dispatch from './dispatch.js';
 import { cityEventBoard, resultsBoard } from './events.js';
+import { fairnessBoard } from './fairness.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -2429,6 +2430,11 @@ export async function buildServer() {
   // ── THE RESULTS SHOW — the payoff beat. The public "what just happened" board (recent marquee results);
   // a personalized outcome ("your bet paid $X") rides the notification stream, never this board. §10.4-free. ──
   app.get('/v1/results', async () => ({ results: await resultsBoard(pool) }));
+  // ── THE FAIR DRAW (NetNet rec F) — commit/reveal over the daily Numbers draw. Keyless BY DESIGN:
+  // the whole point is that an outsider can verify without trusting a token this server issued;
+  // today is SEALED (commitment only), yesterday carries the full reveal. §10.4-free; the H4
+  // default throttle covers any keyless /v1 GET. ──
+  app.get('/v1/fairness', async () => fairnessBoard(pool));
   // ── THE MENTOR (MOVE 1) — the positive first interaction. ──
   app.get('/v1/mentor', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Mentor.mentorBoard(ch, client)));

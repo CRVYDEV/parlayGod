@@ -15930,3 +15930,42 @@ across the entire lifecycle** (SQL omr grants create baseline drift, so every cl
 the scale/loadtest posture). Four mutations, each caught at its own named assertion (the take
 debit dropped; the collect seize dropped; the death loot leg dropped; the escrow term dropped
 from omrBuckets). Lever pinned + tabled.
+
+**THE FAIR DRAW — a commit/reveal board over the daily Numbers draw (NetNet rec F, 2026-08-21) —
+BUILT** (`src/fairness.js` — the 156th src module, `fair_commitments` — the 240th table (a NEW table,
+so `CREATE TABLE IF NOT EXISTS` is live-DB-safe — the boot-crash rule bites only on columns added to
+EXISTING tables), keyless `GET /v1/fairness` + a worker stamp + a `fair` fold on `GET /v1/casino`;
+`test/casino.js` THE FAIR DRAW block; ZERO levers, so no BALANCE.md entry — the drop publishes proof,
+it tunes nothing). A player — or an agent, who reads these boards — can now PROVE the house did not
+move a draw after seeing the bets: `commitment(day) = sha256(nonce(day) + ':' +
+JSON.stringify(results(day)))` where `nonce(day) = HMAC-SHA256(MARKET_SEED, 'fair:'+day)` — one-way,
+so a revealed nonce exposes nothing about MARKET_SEED or any other day, and without it the 0–999
+results space would be brute-forceable from the hash alone. **TODAY IS SEALED** (the board serves
+exactly `{day, commitment, recorded}` — the drawn number decides a 600:1 book, the near-miss band and
+the VIG POT, so leaking it would let everyone buy the winner; the key set is test-PINNED);
+**YESTERDAY carries the full reveal** (results + nonce + a published `how` string naming the exact
+formula and canonical key order). **The worker stamps** a day-PK record (`stampFairness`,
+SELECT-then-INSERT — the recordReckoning pg-mem lesson) so "it said X yesterday" is witnessed
+server-side too; the board is a PURE READ (an unstamped day serves the computed commitment with
+`recorded:false` rather than materializing a row — a read that materializes state is a write wearing
+a read's clothes, the shipmentBoard lesson), and a stored record that no longer matches recomputation
+is SURFACED as `mismatch:true`, never hidden — the one way it happens is a MARKET_SEED rotation,
+which rewrites every historical draw, and a fairness board that papered over that would be worse than
+none. **SCOPE is deliberately the Numbers alone**, and the reasons are properties of the other draws:
+the TRACK winner is drawn from the day's FINAL entry list (players enter runners all day — it is not
+fixed when bets open, so pre-committing it would be a lie), and the weekly FIGHT can be bought by the
+boss holding neon (THE FIX overrides the seed — a committed "result" would be false exactly when the
+mechanic fires). The Numbers is the flagship anyway: the 600:1 book, the near-miss and the jackpot
+all settle off this one number. **§10.4: ZERO** (a hash + a day-keyed ACCOUNT-AGNOSTIC record row —
+no character_id, so it is outside the death-disposition guard by construction; the test pins a zero
+`transactions` delta across the whole flow). The keyless GET rides the H4 default throttle; the Den
+tab's numbers card quotes the sealed commitment + yesterday's verification inline (folded into
+denInfo rather than a second fetch on a POLLED screen — the poll-cost rule). **The test plays the
+OUTSIDE verifier**: it recomputes yesterday's commitment with node's own crypto per the published
+`how` string — never the server's helper on both sides, which would be the helper-vs-helper vacuity
+class — and drives the tamper case by planting a wrong record and asserting `mismatch` surfaces.
+Three mutations, each caught at its own named assertion (the nonce dropped from the commitment
+payload → the outside verifier fails; today's reveal leaked onto the board → the sealed key-set pin
+fails; the mismatch check forced false → the tamper assertion fails). **This closes the NetNet
+recommendation set** (E risk factors / A the commitment / D the near miss / C the vig pot / B the
+$OMR pledge / F the fair draw — all six built; G/H stand as open decision rows in SIGN-OFF.md).
