@@ -76,6 +76,26 @@ back. For current architecture, the invariants, and the open technical-debt regi
    — a savepoint is a safety net, a pushed commit is the floor. After a loss:
    `tools/savepoint.sh --recover` (or `~/.omerta-savepoint.sh --recover` if the tree is gone) prints
    every remote savepoint branch, every local snapshot and every dangling blob, in that order.
+10. **NEVER ASSUME. MEASURE, THEN TEST.** Founder-directed 2026-08-21, after a finding in this file
+    turned out to be a guess: a `describe()` branch was called silent from READING one branch, and an
+    earlier branch ~700 lines up already handled it — the "fix" was dead code, and only a mutation
+    caught it. The rule has four enforceable parts, each earned by a specific failure already recorded
+    here:
+    - **A claim you have not REPRODUCED is not a finding.** Drive the real route against a running
+      engine and read the actual output. This applies to clean bills of health too: a sweep that
+      reaches nothing reads exactly like a sweep that passes, so every extractor states what it
+      matched and asserts a non-zero floor.
+    - **Check the NEIGHBOURS before you claim a path is uncovered.** `describe()`, the gate chains and
+      the watcher poison list are flat `if` chains with early returns — an earlier sibling can already
+      own the shape you are about to add a branch for.
+    - **Every mutation must ASSERT ITS ANCHOR LANDED.** A mutation that silently did not apply reads
+      exactly like a fix that holds; that has happened three times. Mutate on a scratchpad copy
+      (`cp` out, `cp` back), never `git checkout`, and run with `set -o pipefail` — a piped exit code
+      is the tail's, not the run's.
+    - **Every fix ships with a unit test that FAILS BY NAME when the fix is reverted.** Assert against
+      what the SERVER actually sent or what the DATABASE actually holds, never a literal restatement,
+      and never against the reply under test when a table can answer instead. If the mutation survives,
+      that is a claim about the TEST before it is a claim about the code.
 
 ## Where things stand
 M1–M4 complete and tested (`npm test` runs all four journeys). M2 shipped the
