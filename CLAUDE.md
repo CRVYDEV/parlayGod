@@ -50,22 +50,32 @@ back. For current architecture, the invariants, and the open technical-debt regi
    went green. A red CI that nobody reads is worse than no CI, because it manufactures confidence.
 9. **UNCOMMITTED WORK MUST NOT BE DESTROYABLE. Run `tools/savepoint.sh` after every meaningful edit
    and ALWAYS before any git command that can discard** — checkout, restore, reset, stash, merge,
-   rebase, clean. Four separate times a whole session's work was wiped here: twice by
-   `git checkout <file>` used to undo a mutation, once by an external `git merge -s ours`, once by a
-   container restart reverting the tree to an old lineage. Each time the remedy written down was a
-   PARAGRAPH, and each next occurrence proved that a rule with no enforcement is not a rule. The
-   enforcement is one command, and the git semantics behind it are MEASURED, not assumed:
+   rebase, clean. FIVE separate times a whole session's work was wiped here: twice by
+   `git checkout <file>` used to undo a mutation, once by an external `git merge -s ours`, and TWICE
+   by a container restart reverting the checkout to an old lineage. Each time the remedy written down
+   was a PARAGRAPH, and each next occurrence proved that a rule with no enforcement is not a rule.
+   The enforcement is one command with THREE layers, ordered by what each survives, every claim
+   MEASURED rather than assumed:
    ```
-   unstaged + `git checkout -- f`  → reverts to HEAD.   THE WORK IS GONE, UNRECOVERABLY.
-   STAGED   + `git checkout -- f`  → reverts to the INDEX.  THE WORK SURVIVES.
-   STAGED   + `reset --hard`       → gone from disk, but the blob is DANGLING and recoverable
-                                     (`tools/savepoint.sh --recover`).
+   L1  THE INDEX (git add -A)      unstaged + `git checkout -- f` → reverts to HEAD. GONE.
+                                   STAGED   + `git checkout -- f` → reverts to the INDEX. SURVIVES.
+                                   STAGED   + `reset --hard`      → dangling blob, still recoverable.
+   L2  A MIRROR under $HOME        survives git itself going wrong (bad merge, wrong-lineage
+                                   checkout). NOT /tmp — a container restart wipes that.
+   L3  refs/heads/savepoint/<br>   the ONLY layer off this machine, so the only one that survives
+                                   the container being replaced. `git stash create` snapshots the
+                                   working tree into a commit object without touching the tree.
    ```
-   So `git add -A` alone turns the disaster that actually happened into a no-op, and the ones it
-   cannot prevent into something one command from recovery; the scratchpad mirror underneath covers
-   the case where git ITSELF is what went wrong. **And commit each fix the moment its mutation
-   passes rather than batching a whole drop** — a savepoint is a safety net, a commit is the floor.
-   After a loss: `tools/savepoint.sh --recover` prints every dangling blob and every snapshot.
+   L1 alone turns the most frequent disaster into a no-op. But on 2026-08-21 the fifth occurrence
+   defeated L1 AND L2 at once — the restart replaced the tree, wiped /tmp, and **took the savepoint
+   script with it**, so the tool was missing at the one moment it mattered (it now installs a copy to
+   `~/.omerta-savepoint.sh`). The work came back only because it had been PUSHED, which is the whole
+   argument for L3 and for the sentence that follows. Note L3 uses `refs/heads/savepoint/*`, not a
+   `refs/wip/*` namespace: this session's git proxy answers 403 to anything outside `refs/heads/*`.
+   **And commit and PUSH each fix the moment its mutation passes rather than batching a whole drop**
+   — a savepoint is a safety net, a pushed commit is the floor. After a loss:
+   `tools/savepoint.sh --recover` (or `~/.omerta-savepoint.sh --recover` if the tree is gone) prints
+   every remote savepoint branch, every local snapshot and every dangling blob, in that order.
 
 ## Where things stand
 M1–M4 complete and tested (`npm test` runs all four journeys). M2 shipped the
