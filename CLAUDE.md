@@ -48,6 +48,34 @@ back. For current architecture, the invariants, and the open technical-debt regi
    ```
    (`initdb`/`pg_ctl` refuse to run as root — hence `su postgres`.) After pushing, confirm the run
    went green. A red CI that nobody reads is worse than no CI, because it manufactures confidence.
+9. **UNCOMMITTED WORK MUST NOT BE DESTROYABLE. Run `tools/savepoint.sh` after every meaningful edit
+   and ALWAYS before any git command that can discard** — checkout, restore, reset, stash, merge,
+   rebase, clean. FIVE separate times a whole session's work was wiped here: twice by
+   `git checkout <file>` used to undo a mutation, once by an external `git merge -s ours`, and TWICE
+   by a container restart reverting the checkout to an old lineage. Each time the remedy written down
+   was a PARAGRAPH, and each next occurrence proved that a rule with no enforcement is not a rule.
+   The enforcement is one command with THREE layers, ordered by what each survives, every claim
+   MEASURED rather than assumed:
+   ```
+   L1  THE INDEX (git add -A)      unstaged + `git checkout -- f` → reverts to HEAD. GONE.
+                                   STAGED   + `git checkout -- f` → reverts to the INDEX. SURVIVES.
+                                   STAGED   + `reset --hard`      → dangling blob, still recoverable.
+   L2  A MIRROR under $HOME        survives git itself going wrong (bad merge, wrong-lineage
+                                   checkout). NOT /tmp — a container restart wipes that.
+   L3  refs/heads/savepoint/<br>   the ONLY layer off this machine, so the only one that survives
+                                   the container being replaced. `git stash create` snapshots the
+                                   working tree into a commit object without touching the tree.
+   ```
+   L1 alone turns the most frequent disaster into a no-op. But on 2026-08-21 the fifth occurrence
+   defeated L1 AND L2 at once — the restart replaced the tree, wiped /tmp, and **took the savepoint
+   script with it**, so the tool was missing at the one moment it mattered (it now installs a copy to
+   `~/.omerta-savepoint.sh`). The work came back only because it had been PUSHED, which is the whole
+   argument for L3 and for the sentence that follows. Note L3 uses `refs/heads/savepoint/*`, not a
+   `refs/wip/*` namespace: this session's git proxy answers 403 to anything outside `refs/heads/*`.
+   **And commit and PUSH each fix the moment its mutation passes rather than batching a whole drop**
+   — a savepoint is a safety net, a pushed commit is the floor. After a loss:
+   `tools/savepoint.sh --recover` (or `~/.omerta-savepoint.sh --recover` if the tree is gone) prints
+   every remote savepoint branch, every local snapshot and every dangling blob, in that order.
 
 ## Where things stand
 M1–M4 complete and tested (`npm test` runs all four journeys). M2 shipped the
@@ -15385,6 +15413,100 @@ field names here, which removes the false positive without weakening what the ch
 to end in real Chromium (the guest dialog correctly offers NO "everywhere"; the provider dialog offers
 all three; `token_version` really moved 0 → 1; zero page errors). Four mutations, four distinct named
 failures. Suite green, sim drift-0, mobile 81/81. Driven actions 224 → 226.
+
+**WAVE 53 — WAVE 52'S ROOT CAUSE TAKEN AS A CLASS, AND IT FOUND TWO MORE IN THE SAME
+NEIGHBOURHOOD (`public/index.html` + `test/client.js`, 2026-08-21).** Wave 52's finding was that the
+stake line was WRONG; its root cause was that neither `/v1/stake` nor `/v1/unstake` had ever been
+driven — an earlier wave had fixed the unstake line **by inspection** and never read its neighbour
+three lines away. So this wave swept that as a class rather than a story: **which routes in that same
+neighbourhood does the ledger not drive at all?** Fourteen, on the Going Legit cluster, and the
+monument's three rails were the tell — `megaproject/omr` is driven and `megaproject/goods` is not,
+which is exactly "the wave fixed the rails and drove one of them".
+
+**THE STORE'S $OMR RAIL SAID "done."** — the one rail that lets a player pay a real-money price out of
+what they earned, burning $OMR, reporting neither the price nor what arrived. **Its sibling three
+lines up has read since it shipped**: `payPlex` answers `{kind, omrSpent}` and `payPackagePlex`
+answers `{sku, name, omrSpent}`, so the branch above (which requires `kind`) walks straight past the
+whole packages rail. The forgotten-sibling shape at its plainest. It needed **no server field** — the
+grant is published per sku on `/v1/rules`, so the line now names what arrived off the catalog the
+game already ships.
+
+**AND GETTING MADE READ LIKE A ONE-TIME CEREMONY.** It is a SUBSCRIPTION — dues in $OMR, thirty days,
+then it lapses — and the player read *"You're made. The room knows your name."*: true, well-written,
+and naming NEITHER term. That happens because `describe()` falls through to the server's own `message`
+when nothing matches, so a fluent flavour line is exactly what hides a missing branch. The reply has
+carried `omr` and `madeSeconds` all along. This is the pad / the nut / the envelope class on a
+recurring obligation, and the server's sentence still leads (it already distinguishes a first payment
+from a renewal) with the terms appended.
+
+**MY OWN ASSERTION WENT VACUOUS AND THE MUTATION IS WHAT CAUGHT IT.** The store check asked whether
+the line contained `grant.wireDays` — **30** — and the mutation that deleted the whole grant clause
+**PASSED**, because the sku is NAMED *"The Street Wire (30d)"* and carries its own 30. *A substring
+the flavour already supplies proves nothing about the field the fix reads.* It now isolates the clause
+AFTER the price separator, with a guard asserting the price did not land in that half (or the check
+would be measuring the wrong one). Four mutations, four named failures once it was repaired.
+
+**Three of my probe's "findings" were my own errors and are recorded rather than reported**: the
+monument's freight rail refused because I posted to `/v1/goods/:id/buy` (the route is `/v1/goods/buy`
+with `goodId` in the body), the vault refused because it takes `omr` not `amount`, and the landmark
+refused because my figure was under its floor. *A finding produced by a tool you wrote and did not
+check is not a finding* — for the sixth session running. The fixture's $OMR also went 1,000 → 20,000,
+because the Store's rail is priced off the ETH fee at the market rate (~6,200 for a month of the Wire)
+and an unaffordable action is SKIPPED, which reads on the summary line exactly like a covered one.
+Driven actions 226 → 228.
+
+**PLAY WAVE 54 — the sweep to the edge, and the line that was BACKWARDS (founder-directed 2026-08-21:
+"sweep the undriven routes").** Waves 51–53 each fixed a cluster and each ended by naming the same root
+cause — *a route nobody has driven has a line nobody has read* — which is RT#7's shape exactly: a class
+established, applied where it was discovered, never swept to its edge. So this wave enumerated the class
+instead of another cluster. **The measurement first, and my own extractors were wrong twice before they
+were right**: a static regex over the ledger reported 49 driven rows against a real 105 (dynamic rows are
+resolved at drive time and invisible to a regex), so the authoritative list came from INSTRUMENTING THE
+RUN rather than parsing it. Against the 392 mutating routes the console can press: **105 driven, 289
+NOT** — of which 138 need an id and 151 are literal, and a blind probe with the client's own declared
+bodies reaches only 6 of them, because the rest want money, rank, a target or a live event. Breadth alone
+was never going to finish this; what it did was point at which of the most-pressed buttons in the game
+had never once been read — `heal`, `garage/boost`, `casino/dice`, `kitchen/cook`, `streak/claim`,
+`pen/work` among them.
+**THE FINDING IS NOT SILENCE. It is a line that is BACKWARDS on the button a panicking player presses.**
+Driven with real heat, `POST /v1/kitchen/laylow` — the game's primary way DOWN from the Bureau — answered
+**`heat +55`**. The player pays $5,000 and 25 energy to cool off and is told their heat went UP by the
+amount that was LEFT. Root cause, and it is worth more than the instance: **the reply field `heat` means
+a DELTA on one route and a LEVEL on two others.** The deal returns the heat a sale ADDED, so the client's
+generic formatter renders any `heat` as `heat +N` — correct there, and the deal states its own heat
+inline so that push is SKIPPED for it. Which means **the generic formatter's only live consumer was the
+one route it described backwards.** Its neighbour `cleanpapers` said `"done."` while burning **60 $OMR**
+— a price that appeared on no screen in the game: not the button (`clean papers ($OMR)`), not a confirm,
+not the reply, not `/v1/rules`. The forgotten-sibling shape again, and the terms class on the PREMIUM
+currency. Fixed at the SOURCE rather than patched around: the level is `heatNow`, the drop is `cooled`
+(the real one, smaller than the nominal when the clamp bites), clean papers returns its `omr` price, both
+verbs get explicit branches, the generic push is documented delta-only, and the two buttons quote the
+live levers through a new `rules.cooling` block so a price cannot drift from the till that charges it.
+**THE EXISTING TEST WAS SEEDED ON THE ONE VALUE WHERE THE BUG IS INVISIBLE.** `test/growth.js` asserted
+`body.heat === 25` after laying low from **heat 50** — where the drop (25) and the resulting level (25)
+are the same number, so no assertion could tell them apart, and its own comment ("−25 heat") described
+the delta while the code checked the level. Re-seeded at **80 → cooled 25, landing on 55**: two different
+numbers, so the fields can never be swapped again without failing there. Three mutations, each caught at
+its own named assertion — and **the first attempt failed at the PRECONDITION rather than at the assertion
+that names the class**, the "a failure that teaches nothing" shape, so the precondition now proves only
+that the row RAN and is deliberately independent of the field naming it guards. Driven actions 228 → 230;
+suite green, sim drift-0, mobile 81/81. No SQL touched, so the PG gates do not apply.
+**AND THE UNCOMMITTED-WORK LOSS HAPPENED AGAIN, MID-WAVE — the fifth time, and it defeated both layers of
+the fix written for the first four.** A container restart replaced the checkout with an Aug-17 lineage:
+the tree reverted, `/tmp` was wiped so the scratchpad mirror went with it, and **the savepoint script
+itself vanished, because it lived in the tree it was meant to protect** — missing at the one moment it
+mattered. The work came back for exactly one reason: it had been PUSHED. So the tool now has three
+layers, ordered by what each survives and each measured rather than argued — the index (staged,
+`git checkout -- f` restores the INDEX and the work survives; unstaged it restores HEAD and the work is
+gone), a mirror moved from `/tmp` to `$HOME`, and **a commit object built by `git stash create` pushed to
+`refs/heads/savepoint/<branch>`** — off this machine, and therefore the only layer a replaced container
+leaves standing. Proven on this repository by running the exact destruction and recovering every line;
+the namespace is `refs/heads/savepoint/*` and not `refs/wip/*` because the session's git proxy answers
+403 to any ref outside `refs/heads/*`, found by trying it, and a failed push reports as a FAILURE rather
+than printing a success it did not earn. It installs itself to `~/.omerta-savepoint.sh` so the next
+revert cannot take the recovery tool along with the work. **Ground rule #9 keeps the sentence that
+actually saved this session, promoted: commit AND PUSH each fix the moment its mutation passes. A
+savepoint is a safety net; a pushed commit is the floor.**
 
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a

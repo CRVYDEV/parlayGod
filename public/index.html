@@ -2574,6 +2574,32 @@
       return body.kind === 'respawn'
         ? `\u{1F489} revive insurance paid — ${fmt(body.omrSpent)} $OMR. One killing blow gets walked off; you hold ${body.respawnTokens}.`
         : `paid ${fmt(body.omrSpent)} $OMR — the ${body.kind} is settled`;
+    // THE STORE, PAID IN EARNED $OMR — and its sibling THREE LINES UP has read since it shipped.
+    // `payPlex` answers {kind, omrSpent} and `payPackagePlex` answers {sku, name, omrSpent}, so the
+    // branch above (which requires `kind`) walks straight past the whole PLEX-for-packages rail and
+    // it said "done." — a purchase that BURNS $OMR, on the one rail that lets a player pay a
+    // real-money price out of what they earned, reporting neither the price nor what it bought. The
+    // grant is published per sku on /v1/rules, so what arrived is stated without a server field: a
+    // player who has just spent earned $OMR should not have to go and look up what they got.
+    if (body && body.ok && body.omrSpent !== undefined && body.sku) {
+      const g = (rules?.store || []).find((p) => p.sku === body.sku)?.grant || {};
+      const got = [];
+      if (g.respawnTokens) got.push(`${g.respawnTokens} revive${g.respawnTokens === 1 ? '' : 's'}`);
+      if (g.passDays) got.push(`${g.passDays} days on the Ledger`);
+      if (g.wireDays) got.push(`${g.wireDays} days on the Street Wire`);
+      if (g.patron) got.push('the patron\'s ring');
+      if (g.cosmetic) got.push(`the ${String(g.cosmetic).replace(/_/g, ' ')} decor`);
+      return `\u{1F6CD} ${txt(body.name || body.sku)} — ${fmt(body.omrSpent)} $OMR${got.length ? ` · ${got.join(' + ')}` : ''}`;
+    }
+    // GETTING MADE IS A SUBSCRIPTION, and the line read like a one-time ceremony. describe() falls
+    // through to the server's `message` when nothing matches, so a player saw "You're made. The room
+    // knows your name." — true, well-written, and naming NEITHER of its two terms: the dues that were
+    // just burned, and the date it LAPSES. That is the pad / the nut / the envelope class on a
+    // RECURRING obligation, and the reply has carried `omr` and `madeSeconds` all along. The server's
+    // own sentence leads (it already distinguishes a first payment from a renewal); the terms follow.
+    if (body && body.ok && body.made === true && body.omr !== undefined)
+      return `${body.message || "You're made."} — ${fmt(body.omr)} $OMR in dues${
+        body.madeSeconds ? `, and your standing runs ${minsTxt(body.madeSeconds)}` : ''}`;
     if (body && body.unbonding !== undefined && body.unbondSeconds !== undefined)
       return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
     // THE VAULT CARD says "cheaper cover, not a safe harbour", the SERVER's own published note says
@@ -3112,6 +3138,20 @@
     // a corner deal already states its heat inside its own line, so the generic push made every deal
     // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
     // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.
+    // THE TWO COOLING VERBS, and they are why the push below is documented rather than left to be
+    // inferred. Both used to report their RESULTING heat in a field named `heat`, which this
+    // formatter renders as a delta — so laying low, the game's primary way DOWN from the Bureau,
+    // told a player who had just paid to cool off that their heat had gone UP by what was left.
+    // Now the server sends `cooled` (the real drop, smaller than the nominal when the clamp bites)
+    // and `heatNow` (where it landed), and each verb says what it bought.
+    if (body.cooled !== undefined && body.heatNow !== undefined) {
+      if (body.omr !== undefined)                 // clean papers: the deep wipe, paid in $OMR
+        return `🧾 papers are clean — ${body.cooled} heat wiped, ${fmt(body.omr)} $OMR`;
+      const where = body.heatNow > 0 ? `heat down to ${body.heatNow}` : 'and you\'re a ghost';
+      return `🌙 laid low — cooled ${body.cooled}, ${where} · $${fmt(body.cost)}${
+        body.amnesty ? ' (the Commission\'s amnesty halved it)' : ''}`;
+    }
+    // `heat` is a DELTA — what an action ADDED. A route reporting a LEVEL must not use this name.
     if (body.heat && !bits.some((b) => /heat/.test(b))) bits.push(`heat +${body.heat}`);
     if (body.kind === 'social' && body.pending) bits.push(body.registered
       ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
@@ -5127,8 +5167,16 @@
         !!me.crewCold || Number(me.crewWageOwed || 0) > 0 || (me.crew || 0) > 0)}
 
       <h2 style="margin-top:12px">Heat (${me.heat})</h2>
-      <button class="act" data-do="POST /v1/kitchen/laylow">lay low</button>
-      <button class="act" data-do="POST /v1/kitchen/cleanpapers">clean papers ($OMR)</button>`;
+      ${(() => {                      // the terms ride with the price — both were unpriced buttons
+        const c = rules?.cooling || {};
+        const cash = c.laylowCash ? ` — $${fmt(c.laylowCash)}` : '';
+        const nrg = c.laylowEnergy ? ` · ${c.laylowEnergy} energy` : '';
+        const cool = c.laylowCool ? `, cools ${c.laylowCool}` : '';
+        const omr = c.cleanPapersOmr ? ` — ${fmt(c.cleanPapersOmr)} $OMR` : ' ($OMR)';
+        return `<div class="d" style="margin-bottom:6px">Heat fades on its own. <b>Lay low</b> takes a bite out of it for cash; <b>clean papers</b> wipes the file to zero for $OMR. The cash price is the base — the Fast Talker skill, a Man of Honor's standing and a Commission amnesty each cut it.</div>
+      <button class="act" data-do="POST /v1/kitchen/laylow">lay low${cash}${cool}${nrg}</button>
+      <button class="act" data-do="POST /v1/kitchen/cleanpapers" data-confirm="Clean your papers?\n\nThis wipes your heat to ZERO and burns ${fmt(c.cleanPapersOmr || 0)} $OMR — the premium currency, and there is no refund.">clean papers${omr} · wipes it all</button>`;
+      })()}`;
     wireSects(t);
 
     t.querySelectorAll('[data-mkbuy]').forEach((b) => b.onclick = () =>

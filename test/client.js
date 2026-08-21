@@ -2403,6 +2403,28 @@ const ACTIONS = [
   // what found its neighbour. $OMR from the tribute rows above.
   ['POST', '/v1/stake', { amount: 25 }],
   ['POST', '/v1/unstake', null],
+  // THE SAME NEIGHBOURHOOD, DRIVEN THE SAME WAY, and it found two more. GETTING MADE is a
+  // SUBSCRIPTION — dues in $OMR, thirty days, then it lapses — and it read like a one-time ceremony
+  // because describe() falls through to the server's own `message` when nothing matches. The reply
+  // has carried `omr` and `madeSeconds` all along. And THE STORE'S $OMR RAIL — the one that lets a
+  // player pay a real-money price out of what they earned — said "done.", though its sibling THREE
+  // LINES UP (`payPlex`, which answers `kind` where this answers `sku`) has read since it shipped.
+  // Both are real buttons: the Store shelf's pay-in-$OMR control and the Made card.
+  ['POST', '/v1/made', null],
+  ['POST', '/v1/store/plex/wire_month', null],
+  // THE TWO COOLING VERBS, and the worse of the two is why this sweep stopped hunting silence. The
+  // reply field `heat` means a DELTA — the deal returns what a sale ADDED, and the client renders
+  // any `heat` as "heat +N". LAY LOW returned the resulting LEVEL under that same name, so the
+  // game's primary way DOWN from the Bureau told a player who had just paid $4,500 and 25 energy to
+  // cool off that their heat had gone UP by what was left: "heat +55". Not silence — a confident,
+  // WRONG line, on the button a panicking player presses, and the mute check cannot see it because
+  // it reads as an answer. Its neighbour CLEAN PAPERS said "done." while burning 60 $OMR whose
+  // price appeared on no screen in the game. One field with two meanings, one formatter that could
+  // not tell them apart, and the whole thing invisible because neither route was ever driven.
+  // Seeded here because both refuse below their heat floor, and clean papers must run SECOND — it
+  // wipes to zero, which would starve lay low of anything to cool.
+  ['POST', async () => { await app.pool.query('UPDATE characters SET heat=80 WHERE id=$1', [charId]); return '/v1/kitchen/laylow'; }, null],
+  ['POST', '/v1/kitchen/cleanpapers', null],
   // DECLARING WAR said "done." — the loudest thing a boss can do, in a block where the pact, the
   // treaty and the oathbreak all state their terms in full. Resolved at drive time because the
   // TARGET has to be chosen against live state: the seeded rival is under a sworn pact with the
@@ -2500,7 +2522,10 @@ await app.pool.query('UPDATE characters SET ammo=600, energy=100 WHERE id=$1', [
     `INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ('dockrats', $1, now())
        ON CONFLICT (npc_id) DO UPDATE SET strength = $1, strength_at = now(), enraged_until = NULL`,
     [Math.ceil(dr.max * WORLD.ROUT_FLOOR_BPS / 10000) + 20]); }
-await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+// 20,000 rather than 1,000 because the Store's $OMR rail is priced off the ETH fee at the market
+// rate — a month of the Street Wire runs ~6,200 — and an action that cannot be afforded is SKIPPED,
+// which reads on the summary line exactly like a covered one (the lesson two comments up).
+await app.pool.query('UPDATE account_persistent SET omr=20000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
 // The two loudest PvP actions need somebody to aim at, and the fixture's second street is scoped to
 // the seed block — so resolve one here rather than restructure the file. Found by playing: putting a
 // price on another player's head, and starting the 3h hunt that every shot is gated on, BOTH said
@@ -3814,6 +3839,83 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   assert(stLine.includes(String(lootComm)) && stLine.includes(String(lootIdle)),
     'and it has to state the real relation off the live rates rather than a mood — a player deciding '
     + `whether to commit needs both numbers. Expected ${lootComm}/${lootIdle}, got: ${JSON.stringify(stLine)}`);
+}
+// THE SAME NEIGHBOURHOOD's other two, found by driving the routes beside the one that was wrong.
+// GETTING MADE is a subscription and its line has to carry BOTH terms — the dues and the window —
+// because describe() falls through to the server's flavour `message` when nothing matches, and that
+// sentence names neither. THE STORE'S $OMR RAIL had no branch at all: a purchase that BURNS $OMR
+// reporting neither the price nor what arrived, three lines from a sibling that reads.
+{
+  const mLine = said.get('/v1/made'), made = paidBody.get('/v1/made');
+  assert(made && made.made === true && made.omr > 0,
+    'the made row must actually have paid dues — a skipped row reads on the summary line exactly '
+    + 'like a covered one, which is how the line beside it stayed wrong for fifty waves');
+  assert(mLine.includes(fmtLike(made.omr)),
+    `a RECURRING obligation has to name what it just cost (${made.omr} $OMR). Got: ${JSON.stringify(mLine)}`);
+  assert(made.madeSeconds > 0 && /\d+\s*[dhm]/.test(mLine),
+    'and when it LAPSES — the pad, the nut and the envelope are all here because a recurring cost '
+    + `that never states its clock is the game withholding its own terms. Got: ${JSON.stringify(mLine)}`);
+
+  const pLine = said.get('/v1/store/plex/wire_month'), plex = paidBody.get('/v1/store/plex/wire_month');
+  assert(plex && plex.omrSpent > 0 && plex.sku,
+    'the PLEX row must actually have bought something — the shelf is priced off the ETH fee at the '
+    + 'market rate, so an under-funded fixture skips it and the skip reads as coverage');
+  assert(pLine.includes(fmtLike(plex.omrSpent)),
+    `earned $OMR just burned — the line has to say how much (${plex.omrSpent}). Got: ${JSON.stringify(pLine)}`);
+  const grant = (rulesBody.store || []).find((p) => p.sku === plex.sku)?.grant || {};
+  assert(grant.wireDays > 0, 'this assertion is meaningless unless the sku actually grants something '
+    + `— /v1/rules publishes no wireDays for ${plex.sku}`);
+  // ASSERTED AGAINST THE GRANT CLAUSE, not the whole line — the first cut looked for the number
+  // anywhere and PASSED under the mutation that deleted the clause, because the sku is NAMED "The
+  // Street Wire (30d)" and carries its own 30. A substring that the flavour already supplies proves
+  // nothing about the field the fix reads. The clause is what follows the price separator.
+  const gotClause = pLine.split('·').slice(1).join('·');
+  assert(!gotClause.includes(String(plex.omrSpent).slice(0, 4)),
+    'this split is meant to isolate the GRANT from the price — if the price landed in it the check '
+    + `below is measuring the wrong half. Got: ${JSON.stringify(gotClause)}`);
+  assert(gotClause.includes(String(grant.wireDays)),
+    'and WHAT it bought, off the catalog the server already publishes — a player who has just spent '
+    + `earned $OMR should not have to go and look it up. Expected ${grant.wireDays} in the clause after `
+    + `the price, got: ${JSON.stringify(pLine)}`);
+}
+// THE COOLING VERBS. The mute check is structurally blind to this one: "heat +55" reads as an
+// answer, so nothing here would have caught the game's primary heat-REDUCTION verb reporting an
+// INCREASE. What is asserted is the property that was false — the line must describe a DROP, and
+// it must cross against the server's own two numbers rather than a literal.
+{
+  const lay = paidBody.get('/v1/kitchen/laylow');
+  const layLine = said.get('/v1/kitchen/laylow') || '';
+  // The precondition proves the row RAN, and is deliberately independent of the field naming below —
+  // asserting the new fields here would make every mutation fail on the precondition instead of on
+  // the assertion that names the class, which is a failure that teaches nothing.
+  assert(lay && lay.cost > 0,
+    `the laylow row must actually run, or every assertion below is vacuous. Got: ${JSON.stringify(lay && lay.cost)}`);
+  assert(lay.cooled > 0 && lay.heatNow !== undefined,
+    'lay low must report the DROP (`cooled`) and where it LANDED (`heatNow`). Reporting the level in '
+    + 'a field named `heat` is what made this line read as an increase — that name means a delta. '
+    + `Got keys: ${JSON.stringify(Object.keys(lay).filter((k) => k !== 'character' && k !== 'events'))}`);
+  assert(!/heat \+|\+\d+ heat/.test(layLine),
+    'LAY LOW READ AS AN INCREASE. `heat` in a reply means a DELTA (what an action ADDED); this route '
+    + 'reported the resulting LEVEL under that name, so the generic formatter rendered the heat left '
+    + `OVER as heat gained. Got: ${JSON.stringify(layLine)}`);
+  assert(layLine.includes(String(lay.cooled)) && layLine.includes(String(lay.heatNow)),
+    'a player who just paid to cool off needs both numbers the server sent — how much came off '
+    + `(${lay.cooled}) and where it landed (${lay.heatNow}). Got: ${JSON.stringify(layLine)}`);
+  assert(layLine.includes(fmtLike(lay.cost)),
+    `…and what it cost (${lay.cost}). Got: ${JSON.stringify(layLine)}`);
+  // Clean papers burns the PREMIUM currency, and its price appeared on no screen in the game — not
+  // the button, not a confirm, not the reply. The reply carries it now, so the line can state it.
+  const cp = paidBody.get('/v1/kitchen/cleanpapers');
+  const cpLine = said.get('/v1/kitchen/cleanpapers') || '';
+  assert(cp && cp.omr > 0 && cp.cooled > 0,
+    `the cleanpapers row must run with real heat to wipe. Got: ${JSON.stringify(cp)}`);
+  assert(cpLine.includes(String(cp.omr)) && cpLine.includes(String(cp.cooled)),
+    `a $OMR burn must name the spend (${cp.omr}) and what it bought (${cp.cooled} heat wiped). `
+    + `Got: ${JSON.stringify(cpLine)}`);
+  // and the terms ride with the price: both buttons were unpriced before this wave.
+  assert(/rules\?\.cooling/.test(html),
+    'the Kitchen buttons must quote the LIVE cooling levers — restating $5,000 or 60 $OMR in the '
+    + 'client is how a price drifts from the till that charges it');
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),

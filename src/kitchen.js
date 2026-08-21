@@ -267,18 +267,30 @@ export async function layLow(ch, client, h) {
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
   ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - M4.LAYLOW_ENERGY;
-  ch.heat = Math.max(0, Number(ch.heat) - M4.LAYLOW_COOL);
+  const before = Number(ch.heat);
+  ch.heat = Math.max(0, before - M4.LAYLOW_COOL);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'laylow' });
-  return { ok: true, heat: Math.round(Number(ch.heat)), cost, ...(amnesty ? { amnesty: true } : {}) };
+  // `heat` MEANS A DELTA in a reply — the deal returns the heat a sale ADDED, and the client's
+  // generic formatter renders any `heat` field as "heat +N". This route returned the resulting
+  // LEVEL under that same name, so the game's primary heat-REDUCTION verb told a player who had
+  // just paid to cool off that their heat went UP by the amount that was left. One field name,
+  // two meanings, and one formatter that cannot tell them apart. So the level is `heatNow` and the
+  // delta is `cooled` — the real drop, which is smaller than LAYLOW_COOL when the clamp bites.
+  return { ok: true, cooled: Math.round(before - Number(ch.heat)), heatNow: Math.round(Number(ch.heat)),
+    cost, ...(amnesty ? { amnesty: true } : {}) };
 }
 
 export async function cleanPapers(ch, client, h) {
   if (Number(ch.heat || 0) < 1) throw new GameError('cold', 'Your papers are already spotless.');
   if (Number(h.acct.omr) < M4.CLEANPAPERS_OMR) throw new GameError('omr', `Clean Papers cost ${M4.CLEANPAPERS_OMR} $OMR.`);
   h.acct.omr = Number(h.acct.omr) - M4.CLEANPAPERS_OMR;
+  const wiped = Math.round(Number(ch.heat));
   ch.heat = 0;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -M4.CLEANPAPERS_OMR, reason: 'cleanpapers' });
-  return { ok: true, heat: 0 };
+  // Same field discipline as layLow above, and the price rides back too: this burns the PREMIUM
+  // currency and the old reply named neither the spend nor what it bought, so the whole line read
+  // "done." — a $OMR burn reported as nothing at all.
+  return { ok: true, cooled: wiped, heatNow: 0, omr: M4.CLEANPAPERS_OMR };
 }
 
 // ═══ THE KITCHEN → Tier 4 ═══
