@@ -809,3 +809,19 @@ as the shipped watcher enforces); retrofit for every existing minted account con
 
 **Directed builds created by these answers (all three ✅ BUILT 2026-08-16):** the Solana snapshot +
 ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C turf perks.
+
+## THE 2026-08-21 RETIREMENTS — the Den's cash-only line and never-by-chance (founder-directed)
+
+Prompted by the NetNet Capital research (`omerta-netnet-research.md`). Founder, verbatim: *"Remove
+the dens cash only rules and our never by chance rule. Then start building out all the
+recommendations you have."* Both retired the standard way — record kept, promissory copy rewritten
+factual in both codices, ZERO behavior change until a product ships:
+
+| Rule | Status | What changes / what does not |
+|---|---|---|
+| The Den: "cash only, never $OMR" | **RETIRED** | A $OMR-denominated den game is designable. Every shipped den game stays cash-denominated; the suites' "$OMR untouched" pins describe the live product. |
+| "Never distribute by chance" (RWA/wage/paid-random) | **RETIRED** | Randomized paid products are designable. The rarity upgrade and broker weights stay deterministic as built; the EU/UK loot-box FACTS and the launch checklist's counsel rows survive (external), so any random-for-money or stock-by-chance product publishes odds and clears counsel first. |
+
+The same directive is the build authorization for the NetNet-research recommendations A–F
+(recorded per drop in BALANCE.md as each ships); G/H were framed "decide, don't default" and stay
+open rows, not builds.

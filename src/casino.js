@@ -1,5 +1,8 @@
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile (design: omerta-gambling-den-design.md).
-// HARD RULES: cash only, never $OMR (the hard line); every roll server-side + rng_audit'd
+// Every game shipped to date is cash-denominated — no route here touches $OMR. (The old "cash
+// only, never $OMR" hard line was RETIRED by the founder 2026-08-21; a $OMR game is designable
+// now, but until one ships the "$OMR untouched" test pins describe the live product.)
+// HARD RULES that stand: every roll server-side + rng_audit'd
 // (ground rule #3); every stake a §10.4 sink (casino:bet:<game>), every payout a faucet
 // (casino:win:<game>), both with character_id so the per-character cash check reconciles. The
 // street's 1% cut (→ the buyback/yield loop) and the fronts' rakeback are paid ONLY from the

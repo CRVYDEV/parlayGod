@@ -188,6 +188,13 @@ price-responsive emission anywhere.
 These are NetNet's most distinctive mechanics, and each collides with a decision this project has
 already made and recorded. Listed so they are not re-litigated by accident:
 
+> **AMENDED 2026-08-21 (founder-directed, same day as this doc): items #2 and #3's blocking rules
+> were RETIRED** — the Den's "cash only, never $OMR" line and the game-wide never-by-chance rule
+> (see SIGN-OFF.md § THE 2026-08-21 RETIREMENTS). A $OMR-denominated den product and randomized
+> paid products are now designable. What survives is fact, not rule: the EU/UK loot-box exposure
+> and the launch checklist's counsel rows on chance-distributed real assets are external, so any such
+> build publishes its odds and clears counsel. Items #1 and #4–#7 stand as written.
+
 1. **Premium-gated rebasing emissions (the core OHM mechanism).** Supply printed against market
    premium is the "discredited half" of OlympusDAO that OMERTÀ's bond design explicitly kept out
    (the reserve bond took POL acquisition WITHOUT the reflexive mint). NetNet's version is more

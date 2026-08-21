@@ -127,8 +127,9 @@ can be checked. It is pure status: it changes no speed, no value, no race, nothi
 scarcity, and scarcity is what a collector pays for.
 
 You can buy your way up the ladder with $OMR (`POST /v1/nft/:kind/:id/upgrade`), and the price buys
-exactly the next tier — a known item for a known price, never a roll. **Nothing in this game sells a
-random outcome for money**, and that is a rule rather than a habit.
+exactly the next tier — a known item for a known price, never a roll. That is how the upgrade is built
+today. (The old game-wide "nothing sells a random outcome for money" rule was retired by the founder on
+2026-08-21 — any future product that does sell one will carry its own published odds, stated before you pay.)
 
 You can also take one **ON-CHAIN** (`POST /v1/nft/:kind/:id/withdraw`, on the same rail gear uses),
 and this is the real decision:
@@ -527,8 +528,10 @@ loot cuts deeper), and **The Levy** (the buyback's family split goes to the seat
 
 ## 11. The Den
 
-Player-against-house and player-against-player gambling at the Neon Mile. **CASH ONLY, never $OMR** (this is a
-legal rule). Every result is calculated on the server and recorded. The house adds 1% of stakes to the
+Player-against-house and player-against-player gambling at the Neon Mile. Every game at the den today is
+**cash-denominated** — no den game touches $OMR. (The old blanket "cash only, never $OMR" rule was retired by
+the founder on 2026-08-21; a $OMR-denominated game is now a designable product, and if one ships it will be
+documented here with its own terms.) Every result is calculated on the server and recorded. The house adds 1% of stakes to the
 street-tax pool, **only from real profit**. `GET /v1/casino` [public].
 
 - **Street craps** (`/v1/casino/dice`) — the pass line in one action, 1:1, edge about 1.41%, 1 nerve, $100 to

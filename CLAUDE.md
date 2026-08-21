@@ -5631,7 +5631,12 @@ because breaking one is very hard to walk back.*
   eligibility gate is HARD:** the issuer restricts who may hold these, so R3 delivery must check
   eligibility — a barred account plays, earns and holds the status fully but can never extract; R1
   (status only) ships to everyone. And **never distribute the token by chance** (RNG/loot/casino stay
-  in cash/$OMR) — unchanged, and it matters more with a real asset at stake.
+  in cash/$OMR) — *RETIRED as a binding rule by the founder 2026-08-21 (see THE TWO RULES RETIRED,
+  end of this log): chance-based products in $OMR or real assets are now designable. What survives
+  the retirement is FACT, not preference — a random-for-real-money product is a regulated shape, so
+  any such build publishes its odds and goes through the launch checklist's counsel rows; every
+  shipped surface (the deterministic rarity upgrade, the deterministic broker weights) keeps its
+  current behavior until a specific product decision changes it.*
 
 **FULL-SURFACE RED-TEAM (`AUDIT-full-surface.md`, 2026-07-20)** — a max-effort whole-project audit,
 FIVE independent lenses in parallel (§10.4/economy, concurrency/locks, smart-contracts+chain,
@@ -15794,3 +15799,22 @@ because a sweep that publishes only its hits cannot be audited: check H was the 
 comparison in any harness, and `tools/pollcost.js` already guards the same hazard in its own words
 (*"derived is not measured, so sit on the worst screen for a real window … and count what actually goes
 out"*), which is why its figures survived the very change that broke this one.
+
+**THE TWO RULES RETIRED — the Den's cash-only line and never-by-chance (founder-directed
+2026-08-21: "Remove the dens cash only rules and our never by chance rule").** Prompted by the
+NetNet Capital research (`omerta-netnet-research.md`), whose two largest rejected mechanics were
+blocked by exactly these rules. Retired the standard way (the §4.3/PLEX pattern — the record
+stays, the copy moves, the behavior does NOT move until a product does): **(1) the Den's "cash
+only, never $OMR" hard line** — every den game shipped to date is cash-denominated and STAYS so
+(the suites' "$OMR untouched" pins now describe the live product, not a rule); what changes is
+that a $OMR-denominated den product is designable. **(2) the "never distribute by chance" rule**
+— the deterministic rarity upgrade and the deterministic broker weights keep their shipped
+behavior (each site's comment now says the rule is retired AND why that surface stays as built);
+what changes is that a randomized paid product is designable. **What the retirement does NOT
+retire, stated at every amended site:** the EU/UK loot-box exposure and the securities posture
+around chance-distributed real assets are facts about the world, so any future random-for-money
+or stock-by-chance product publishes its odds up front and goes through the launch checklist's
+counsel rows (external to the retired internal rule). Both codices' promissory copy ("CASH ONLY,
+never $OMR", "Nothing in this game sells a random outcome for money") was rewritten to factual
+copy in the same commit — a retired rule left standing as a player-facing promise is the
+pad-copy class. Recorded in SIGN-OFF.md; the research doc's rejections #2/#3 carry the reversal.

@@ -7,7 +7,8 @@ import * as G from '../game.js';
 import * as Ring from '../ring.js';
 
 export function register(app, { pool, auth }) {
-    // THE GAMBLING DEN (Neon Mile, cash only — never $OMR): street craps + the daily Numbers.
+    // THE GAMBLING DEN (Neon Mile, cash-denominated today — the "never $OMR" hard line was
+    // retired 2026-08-21): street craps + the daily Numbers.
     app.post('/v1/casino/dice', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.playDice(ch, req.body?.amount, client, h)));
     app.post('/v1/casino/numbers', { preHandler: auth }, async (req) =>

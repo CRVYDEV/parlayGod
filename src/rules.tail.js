@@ -242,8 +242,11 @@ export const CONSTANTS = {
   // (An explicit founder override of the prototype's flat 2%/12h.)
   BANK_TAPER_ABOVE: 10000000, BANK_TAPER_KEEP: 0.10,
 };
-// THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
-// hard line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
+// THE GAMBLING DEN — player-vs-house games at the Neon Mile. Every game shipped to date is
+// CASH-DENOMINATED (the old "cash only, never $OMR" hard line was RETIRED by the founder
+// 2026-08-21 — a $OMR-denominated den product is now designable; until one ships, no den route
+// touches $OMR and the suites' "$OMR untouched" pins describe the live product, not a rule),
+// server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
 // reconciles per character; 1% of every stake goes to the street-tax pool (the buyback loop),
 // the rest of the house edge burns. Dice = the real pass-line (edge ~1.41%, entertainment-thin);
 // the Numbers pays the historically accurate 600:1 on 999:1 odds (~40% edge — a daily flutter).
@@ -5245,13 +5248,15 @@ export const vouchRankOf = (n) => VOUCH_RANKS.reduce((a, r) => (Number(n) >= r.a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing
 // and both are enforced here rather than remembered:
 //
-//   1. SELL DETERMINISTIC, DROP RANDOM. Rarity is rolled server-side and rng_audit'd when an item is
-//      EARNED IN PLAY — a boosted car, a bought boat, a resident's ride you steal. **No ETH path
-//      anywhere in this game grants or re-rolls a rarity**, because selling random traits for real
-//      money is a loot box and is genuinely contested in the EU/UK. The `rarity:upgrade` sink below
-//      is the reason that line survives contact with the OMR bridge: it is a KNOWN outcome for a
-//      KNOWN price (pay, get exactly the next tier), never a roll. Do not make it random "for
-//      excitement" — that one change converts a cosmetic into a gambling product.
+//   1. SELL DETERMINISTIC, DROP RANDOM — as SHIPPED. Rarity is rolled server-side and rng_audit'd
+//      when an item is EARNED IN PLAY — a boosted car, a bought boat, a resident's ride you steal —
+//      and the `rarity:upgrade` sink is a KNOWN outcome for a KNOWN price (pay, get exactly the
+//      next tier), never a roll. NOTE (2026-08-21): the game-wide "never distribute by chance" RULE
+//      was retired by the founder, so a randomized paid product is now designable — but THIS
+//      upgrade stays deterministic as built (changing it is its own product decision, not a
+//      cleanup), and the FACT that selling random traits for real money is a loot box genuinely
+//      contested in the EU/UK survives the rule's retirement: any future random-for-money product
+//      publishes its odds and goes through the launch checklist's counsel rows.
 //   2. IN-GAME ITEMS ARE LOOTABLE; EXTRACTED NFTs ARE SAFE BUT INERT. Extraction takes the item OUT
 //      OF PLAY: it stops racing, melting, fencing, hauling and being stolen, and in exchange it stops
 //      dying with the street. That is the existing gear precedent applied to property, and it is what
@@ -5565,8 +5570,10 @@ export const BROKERS = {
 export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id)) || null;
 export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
 
-/// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
-/// that keeps a stock distribution out of loot-box territory entirely.
+/// The published weight. Deterministic in both terms — deliberately, as shipped. (The game-wide
+/// never-by-chance rule was retired 2026-08-21, but THIS distribution stays deterministic: a stock
+/// allocation drawn by lot is exactly the loot-box shape the launch checklist's counsel rows gate,
+/// and those rows are external to the retired internal rule.)
 export const brokerWeight = (tierId, gains = {}) => {
   const t = brokerTier(tierId);
   if (!t) return 0;
