@@ -823,5 +823,12 @@ factual in both codices, ZERO behavior change until a product ships:
 | "Never distribute by chance" (RWA/wage/paid-random) | **RETIRED** | Randomized paid products are designable. The rarity upgrade and broker weights stay deterministic as built; the EU/UK loot-box FACTS and the launch checklist's counsel rows survive (external), so any random-for-money or stock-by-chance product publishes odds and clears counsel first. |
 
 The same directive is the build authorization for the NetNet-research recommendations A–F
-(recorded per drop in BALANCE.md as each ships); G/H were framed "decide, don't default" and stay
-open rows, not builds.
+(recorded per drop in BALANCE.md as each ships); G/H were framed "decide, don't default" and were
+**DECIDED 2026-08-21** (founder, via the options prompt after F shipped):
+
+| Rec | Founder's answer | Resolution |
+|---|---|---|
+| G — the backing/queue gauge | **Leave as-is** | No change. The number already exists in the vig invariants and the tokenhealth board; nothing goes public (a NAV-like figure on a game token risks investment framing — the copy rules' posture stands). Recorded so it is a decision, not a default. |
+| H — countercyclical formulaic dials | **Build the desk's upper leg** | BUILT same day — THE UPPER LEG (BALANCE.md § THE UPPER LEG): the lot's policy bounds scale by the euphoria premium (latest real print vs the 30d average), clip-sized at `DESK_SURGE.MAX_X`, float ceiling at `FLOAT_CAP_MAX_BPS`, asleep below `START_BPS` or under `MIN_PRINTS`. Human-in-the-loop stays everywhere else (THE DAILY OFFERING is untouched — the GM's hand on the only mint). All four `DESK_SURGE.*` are sign-off levers. |
+
+The NetNet set is now fully resolved: A–F built, G recorded as-is, H built.

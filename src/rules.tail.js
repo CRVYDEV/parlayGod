@@ -3377,6 +3377,32 @@ export const DESK_BUYBACK = {
   // against the band's own anchor. An execution below 0.20x anchor is not a dip, it is a broken feed.
   PRICE_FLOOR_BPS: 2000,
 };
+// ── THE UPPER LEG (NetNet rec H, founder-directed 2026-08-21: "Build the desk's upper leg") ────
+// The band's third edge, and the one the desk was missing: it already BUYS below LOWER and SELLS at
+// or above UPPER, but the LOT was blind to HOW FAR above — a genuine squeeze and an ordinary day
+// both sold the same clip. NetNet's PremiumSeller insight (sell MORE into genuine euphoria,
+// clip-sized, TWAP-bounded) completes the symmetry as a FORMULA over the desk's own price history:
+// when the LATEST real print sits `START_BPS` above the window's AVERAGE, the lot's policy bounds
+// scale by that premium — the returned-inventory bound AND the float-cap ceiling — clipped at
+// `MAX_X` / `FLOAT_CAP_MAX_BPS`, and NEVER the shelf bound (wall 2 is not a policy). Nothing mints:
+// this only decides how much of the shelf goes up today, so wall 1 ("no faucet") is untouched by
+// construction. NetNet's ordering rule — the treasury's sell threshold must sit ABOVE any emission
+// throttle, so the protocol never competes with itself — is satisfied trivially here: there is no
+// price-responsive emission anywhere (the Street Wage is retired; bonds are GM-throttled by THE
+// DAILY OFFERING), and this comment is where that rule lives if one is ever proposed.
+export const DESK_SURGE = {
+  START_BPS: 11000,        // euphoria begins at 1.10x the window average — below that it is ordinary
+                           // noise, and the dead-zone rule applies (a desk that scales on noise
+                           // churns its own market). Founder sign-off lever.
+  MAX_X: 3,                // CLIP-SIZED: however hot the print, the lot's policy bounds never scale
+                           // past 3x — the NetNet discipline that separates "sell into strength"
+                           // from "dump into a spike somebody manufactured".
+  FLOAT_CAP_MAX_BPS: 300,  // the surged daily ceiling: at most 3% of float/day (vs the base 1%).
+                           // The anti-dump wall stretches, it never disappears.
+  MIN_PRINTS: 5,           // fewer REAL prints than this in the window and there is no average worth
+                           // trusting — a single print is both spot and reference, so "euphoria"
+                           // computed from it is a division by itself. Thin windows read surge 1.
+};
 // The Dutch clock: linear from OPEN down to RESERVE across DURATION_MS, then flat at RESERVE.
 // Returns ETH per $OMR. Clamped at both ends so a late/early call can never quote outside the band.
 const round8 = (n) => Math.round(n * 1e8) / 1e8
