@@ -1,6 +1,6 @@
 {
   "model": "bytedance/seedance-2.5/image-to-video",
-  "spentUsd": 195.98000000000008,
+  "spentUsd": 212.5700000000001,
   "clips": [
     {
       "plate": "hero-poster",
@@ -269,6 +269,55 @@
       "ar": "16:9",
       "t2v": true,
       "url": "https://v3b.fal.media/files/b/0aa7357a/O_MJ9oVWn7lTfFX-x8Hdk_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-alleyjob",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735c4/k9D47erqY80qfXdGP5cQs_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-arrival",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735dc/ehGkn9auSovfrrG66HbKF_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-induction",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735c8/8QtGuqq-G3W6yEip-1kmx_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-tommygun",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735dc/nTMM5e3nxkpSe8LZ4Pd7L_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-respect",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735c8/UWPlNv-cNwNAfzvQzSimG_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-penthouse",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735c8/y8O2RkcUeShAqZHq2Z_gZ_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-toast",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa735c8/qYAI_vRp0_UCshWCSpwxz_video.mp4",
       "est": 2.37
     }
   ],

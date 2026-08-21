@@ -120,6 +120,14 @@ const BESPOKE = {
   'mm-knockout':  `a smoky 1940s boxing arena, a fighter ducks a swing and lands a hard cross, his opponent crashing to the canvas as the crowd surges up with flashing camera bulbs, dynamic ringside camera whip, ${ACTION}`,
   'mm-jailbreak': `a prisoner scrambles over a high stone prison wall on a knotted rope at night, a searchlight beam sweeping just past him, he drops and sprints into the fog, urgent handheld tracking, ${ACTION}`,
   'mm-boatchase': `a small smuggler's speedboat slams across black harbour swells at night, crates strapped down under tarps, a cutter's searchlight beam sweeping after it, spray exploding over the bow, low chase camera, ${ACTION}`,
+  // the launch TRAILER's story-arc footage (2026-08-21, the masterpiece budget): arrive → rise.
+  'mm-arrival':   `a young man in a worn coat steps off a night bus into pouring rain, one battered suitcase in hand, the vast neon city looming beyond the wet street, he looks up at it, slow push-in from behind, ${ACTION}`,
+  'mm-alleyjob':  `a figure snatches a leather billfold from a drunk businessman in a narrow rain-slick alley and sprints away vaulting a fallen crate, urgent handheld chase camera, ${ACTION}`,
+  'mm-induction': `a candlelit back-room ceremony, a young man's cupped hands holding a burning card, stern faces of suited men watching around a table, the flame lighting them from below, slow orbit, ${ACTION}`,
+  'mm-tommygun':  `muzzle flashes strobe from the windows of a speeding 1940s sedan on a rain-slick street at night, shell casings bouncing, storefront glass shattering, low fast tracking alongside, ${ACTION}`,
+  'mm-respect':   `a busy 1940s restaurant falls silent as a man in a tailored coat walks through, patrons rising, waiters stepping back, men tipping their hats as he passes, slow steadicam follow, ${ACTION}`,
+  'mm-penthouse': `a man in a tailored suit stands silhouetted at a floor-to-ceiling penthouse window, whiskey glass in hand, the endless neon city glittering far below in the rain, slow push-in past his shoulder, ${ACTION}`,
+  'mm-toast':     `a mafia family around a long candlelit dinner table raise their glasses in a toast, laughter and cigar smoke, warm lamplight on dark wood panelling, slow push down the table, ${ACTION}`,
 };
 
 // ── the cuts: each carries its own aspect + a mostly-distinct footage set ─────────────────────────
@@ -345,6 +353,29 @@ const VIDEOS = {
     { p: 'hero-backdrop',    use: 3.2, off: 0.5, title: 'OMERTÀ',
       cta: 'every path is open · extraction opens at launch · omerta.fun' },
   ] },
+  // 8 — THE TRAILER: the flagship ~31s cinematic (2026-08-21, the masterpiece budget). A STORY
+  // ARC, not a tour: arrive with nothing → first jobs → crew up → get made → war → the name →
+  // the seat → the city at your feet. Seven new hero-grade t2v shots carry the arc; the strongest
+  // existing bespoke footage fills between. No mechanism copy here — the trailer sells the
+  // FANTASY; the money/life cuts carry the mechanics. Closer states extraction opens at launch.
+  trailer: { w: 1920, h: 1080, ar: '16:9', overline: 'THE RISE', shots: [
+    { p: 'mm-arrival',    use: 3.0, off: 0.4, sub: 'YOU ARRIVE WITH NOTHING' },
+    { p: 'mm-alleyjob',   use: 2.4, off: 0.4, sub: 'TAKE WHAT’S YOURS' },
+    { p: 'mm-chase',      use: 2.2, off: 0.4 },
+    { p: 'mm-crew',       use: 2.4, off: 0.4, sub: 'FIND YOUR PEOPLE' },
+    { p: 'mm-induction',  use: 3.0, off: 0.4, sub: 'GET MADE' },
+    // mm-tommygun was rendered for this slot and Seedance softened the gunfire out of it (a clean
+    // cruising sedan, no muzzle flash on any frame) — the hit that starts the war is told with the
+    // library's falling-fedora shot instead, and the sedan clip stays in the library as b-roll.
+    { p: 'cine-whacked',  use: 2.2, off: 1.2 },
+    { p: 'cine-war',      use: 2.4, off: 0.5, sub: 'GO TO WAR' },
+    { p: 'mm-respect',    use: 2.6, off: 0.4, sub: 'EARN THE NAME' },
+    { p: 'mm-seats',      use: 2.2, off: 0.5, sub: 'TAKE THE SEAT' },
+    { p: 'mm-penthouse',  use: 3.0, off: 0.4, sub: 'THE CITY AT YOUR FEET' },
+    { p: 'mm-toast',      use: 2.4, off: 0.4, sub: 'ONE FAMILY. ONE CODE.' },
+    { p: 'hero-backdrop', use: 3.6, off: 0.5, title: 'OMERTÀ',
+      cta: 'one life · no respawns · extraction opens at launch · omerta.fun' },
+  ] },
 };
 
 // a clip file is (plate, aspect) — 16:9 sources and 9:16 sources are distinct renders
@@ -409,6 +440,17 @@ const NARRATION = {
       'Then the city goes legit. The compound. Your street\u2019s deed. '
       + 'A real book \u2014 earned by playing.' },
     { at: 83.4, window: 3.8, text: 'Omert\u00e0. Every path is open.' },
+  ],
+  // the TRAILER: sparse, punchy \u2014 the fantasy, not the mechanics.
+  trailer: [
+    { at: 0.4,  window: 9.4, text:
+      'You arrive with nothing. In this city \u2014 that\u2019s all you need.' },
+    { at: 10.2, window: 7.0, text:
+      'Run with a crew. Get made. And when it comes to blood \u2014 answer.' },
+    { at: 17.8, window: 7.0, text:
+      'Earn the name \u2014 until the whole city answers to you.' },
+    { at: 24.6, window: 3.4, text: 'One family. One code.' },
+    { at: 28.0, window: 3.4, text: 'Omert\u00e0. One life. Make it count.' },
   ],
 };
 // fal TTS (the real voice): MiniMax speech-02-hd, a deep trailer read. Cached in the LIB beside the

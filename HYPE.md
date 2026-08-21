@@ -1,9 +1,10 @@
 # OMERTÀ — launch hype videos
 
-One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **seven cuts** —
+One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **eight cuts** —
 five short hype cuts, each with its **own footage set and its own music track**, the long-form
-**money explainer** (`hype-money.mp4`), and **the LIFE tour** (`hype-life.mp4` — every activity,
-path and loop in the game), all built from the same library.
+**money explainer** (`hype-money.mp4`), **the LIFE tour** (`hype-life.mp4` — every activity,
+path and loop in the game), and **the launch TRAILER** (`hype-trailer.mp4` — the ~31s story-arc
+flagship), all built from the same library.
 
 ## Build
 
@@ -40,6 +41,7 @@ the phone frame edge-to-edge — cleaner than a blur-fill of near-black footage)
 | `hype-short.mp4` | 1080×1920 | ~10s | social | vertical, fastest cut for X/TikTok/Reels |
 | `hype-money.mp4` | 1920×1080 | ~77s | explainer | the FULL money map — every fee, every flow, the RWA arc |
 | `hype-life.mp4` | 1920×1080 | ~87s | the tour | EVERY activity, path and loop — six act cards, Streets → Legit |
+| `hype-trailer.mp4` | 1920×1080 | ~31s | the flagship | the story arc — arrive with nothing → get made → the city at your feet |
 
 The five hype cuts have **distinct footage** (no reused shots between cuts except the shared OMERTÀ
 end-plate) so they don't feel repetitive when posted together; the explainer, being ~5× longer, draws
@@ -72,6 +74,23 @@ and the fight-card shot points at it. Narration: 7 act-boundary segments (`NARRA
 closer's window was widened 84.4→83.4 to fit the real read (the piper placeholder timed tighter).
 Same copy rules; the closer states **extraction opens at launch**. Founder signs wording + voice +
 a licensed track before anything goes public.
+
+### The launch trailer (`hype-trailer.mp4`, 2026-08-21)
+
+The flagship ~31s cinematic, first of the four assets the founder approved off the masterpiece
+budget. A STORY ARC, not a tour — arrive with nothing → first jobs → crew up → get made → the hit →
+war → the name → the seat → the city at your feet → the family toast — so it sells the FANTASY and
+carries no mechanism copy (the money/life cuts own the mechanics; the closer states **extraction
+opens at launch**). Seven new hero-grade Seedance 2.5 t2v shots carry the arc (`mm-arrival`,
+`mm-alleyjob`, `mm-induction`, `mm-tommygun`, `mm-respect`, `mm-penthouse`, `mm-toast`); the
+strongest existing footage fills between. One render lesson worth keeping: **Seedance softened the
+gunfire out of `mm-tommygun`** — every frame of the drive-by prompt came back a clean cruising
+sedan, no muzzle flash — so the hit-that-starts-the-war beat uses the library's falling-fedora shot
+(`cine-whacked`) instead and the sedan stays as b-roll; frame-read every violent prompt before
+cutting it in. Narration: 5 sparse segments (`NARRATION.trailer`) in the real MiniMax voice —
+"One family. One code." read 3.2s against its first 2.0s window, so the segment moved 25.6→24.6
+with a 3.4s window (the fit-check failing the build is what caught it). Founder signs wording +
+voice + a licensed track before anything goes public.
 
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 
