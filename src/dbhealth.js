@@ -26,7 +26,12 @@ const PG_CODES = new Set([
   '57P01', '57P02', '57P03',                                     // admin shutdown / crash shutdown / cannot connect now
   '53300',                                                       // too many connections
 ]);
-const ERRNOS = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE']);
+// EAI_AGAIN/EAI_FAIL are TRANSIENT DNS resolution failures — exactly the failure text from the recorded
+// 2026-07-30 production incident ("Temporary failure in name resolution"). Without them (and without the
+// `getaddrinfo` syscall below) a DNS-flavored outage to the DB host answered 500 `internal` instead of
+// 503 `db_down`, defeating the whole outage-legibility split for that one flavor of outage.
+const ERRNOS = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE',
+  'EAI_AGAIN', 'EAI_FAIL']);
 // node-pg raises several of these as a plain Error with no code at all, so text is the only signal left.
 const MESSAGES = [
   /connection terminated/i,          // pool client died mid-query, or during connect
@@ -48,9 +53,12 @@ export function isDbDown(err) {
   // that fails, which catches cases the errno list alone misses — a stopped Postgres on a unix socket
   // raises ENOENT (the socket file is simply gone), and ENOENT on its own is far too broad to trust
   // (a missing template file is not an outage). Pairing it with the syscall keeps this precise.
-  if (err.syscall === 'connect') return true;
+  // DNS errors carry syscall 'getaddrinfo', NOT 'connect' — a name that cannot resolve right now is
+  // the same "the database is not reachable" from a caller's seat, and here the syscall is inherently
+  // narrow (only name resolution stamps it), so no ENOENT-style breadth concern applies.
+  if (err.syscall === 'connect' || err.syscall === 'getaddrinfo') return true;
   // an aggregate connect failure (multiple addresses tried) buries the errno one level down
-  if (Array.isArray(err.errors) && err.errors.some((e) => ERRNOS.has(e?.code) || e?.syscall === 'connect')) return true;
+  if (Array.isArray(err.errors) && err.errors.some((e) => ERRNOS.has(e?.code) || e?.syscall === 'connect' || e?.syscall === 'getaddrinfo')) return true;
   const msg = String(err.message || '');
   return MESSAGES.some((re) => re.test(msg));
 }

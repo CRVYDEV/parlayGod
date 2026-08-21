@@ -144,6 +144,20 @@ import { dirname, join } from 'node:path';
 
 const uid = () => crypto.randomUUID();
 
+// ── WS BACKPRESSURE — the slow-consumer guard (bulletproof audit, Backpressure) ─────────────────
+// Bus fan-out writes into each socket with fire-and-forget `socket.send`. `ws` buffers UNBOUNDEDLY
+// for a consumer that stops reading (a phone that lost radio mid-TCP, a laptop lid closed at the
+// exact wrong moment) — the heartbeat reaps a DEAD socket in ~2×WS_PING_MS, but a socket that pongs
+// while never draining (pongs are tiny control frames; the kernel can still accept them while the
+// data direction is stalled) accumulates every streets/chat/activity event in process memory until
+// the box notices. The cap: once a socket has WS_MAX_BUFFER bytes queued, DROP further bus events
+// for it rather than queueing more. Dropping is safe BY DESIGN here — every durable event is a
+// notifications row delivered by the 30s poll backfill; the WS is presentation, not the record.
+// Exported so the predicate is unit-testable against fake sockets (bufferedAmount can't be inflated
+// on a loopback socket in-suite); the wiring itself is pinned by a labelled source check.
+export const WS_MAX_BUFFER = Number(process.env.WS_MAX_BUFFER || 256 * 1024);
+export const wsSendable = (socket) => !!socket && (socket.bufferedAmount || 0) < WS_MAX_BUFFER;
+
 export async function buildServer() {
   // ── PREFLIGHT (src/preflight.js) ────────────────────────────────────────────────────────────
   // Every deploy check lives there as DATA, because the guards were never the weak part — the LIST
@@ -171,7 +185,20 @@ export async function buildServer() {
   // guest-mint Sybil limiter and the public-route DoS limiter). A hop count of 1 takes the address
   // the LB actually connected from (the appended real client), ignoring a spoofed leftmost entry.
   // (If Render is ever >1 hop, this degrades to a shared-bucket — safe — never to spoofable.)
-  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' ? 1 : false });
+  // forceCloseConnections MUST be an explicit false (bulletproof pass, 2026-08-21). Fastify 5.10's
+  // default resolves to 'idle', and its close path only honors 'idle' when a custom serverFactory
+  // exists — without one, truthy 'idle' falls into the closeAllConnections() branch and DESTROYS
+  // ACTIVE requests (fastify.js:387-392). Measured, not read: a request parked on a row lock had its
+  // socket cut and app.close() resolved in 0ms. With false, close() waits for in-flight requests;
+  // the drain (main block below) reaps idle keep-alives itself so close is never held hostage by an
+  // idle browser's 72s keep-alive socket. tools/chaos.js scenario 6 drives the whole sequence.
+  // (bulletproof audit) TRUST_PROXY also accepts a HOP COUNT ("2"), because a CDN in front changes the
+  // chain: client → Cloudflare → Render LB → app is TWO trusted hops, and trustProxy:1 there reads
+  // Cloudflare's egress IP as the client — every per-IP throttle collapses onto ~a dozen CF addresses.
+  // "on" stays 1 (the plain Render deploy); a number is the explicit hop count for a fronted deploy.
+  const tp = process.env.TRUST_PROXY === 'on' ? 1 : (Number(process.env.TRUST_PROXY) > 0 ? Number(process.env.TRUST_PROXY) : false);
+  const app = Fastify({ logger: false, trustProxy: tp,
+    forceCloseConnections: false });
   Push.initPush();   // WEB PUSH — arm VAPID signing if VAPID_* is configured; dormant otherwise.
 
   // BLUE-TEAM H2: a security-header baseline on every response (only /admin had any). Set defensively
@@ -555,9 +582,47 @@ export async function buildServer() {
     const retry = G.deadlockToRetry(err);
     if (retry !== err && retry instanceof G.GameError)
       return reply.code(400).send({ error: retry.code, message: retry.message });
-    req.log?.error?.(err); console.error(err);
+    // The route rides in the log line (bulletproof pass, 2026-08-21): `logger: false` is deliberate
+    // (request logging costs more than it tells at this scale), so this line is the ONLY record a 500
+    // leaves — and a bare stack with no route is a stack you diagnose by grepping the tree for the
+    // function name at 2am. Method + url is what turns "something threw" into "the withdraw rail
+    // threw". Never the token, never the body: a 500's body can carry money amounts and the log is
+    // the one place we never want them.
+    req.log?.error?.(err); console.error(`[500] ${req.method} ${req.url}`, err);
     return reply.code(500).send({ error: 'internal' });
   });
+  // ── PRODUCTION LOAD SIGNAL (bulletproof audit: Metrics/Latency/P99/Memory) ──────────────────────
+  // The app measured latency and throughput thoroughly in harnesses (loadtest/pollcost) and observed
+  // NOTHING in production — a slow-burn degradation (pool nearing the cliff, RSS creep, a 4xx storm)
+  // was visible only on the platform's own graphs. This is the cheapest honest fix: minute-bucketed
+  // request/error counters (exact) + a fixed ring of recent latencies (percentiles over the most
+  // recent ≤4096 requests — at sustained ≥13 req/s that window is shorter than 5 minutes, which keeps
+  // the percentile honest about RECENT behaviour rather than silently averaging in the past), all
+  // surfaced on /health so the uptime monitor DEPLOY.md already recommends trends them for free.
+  // Deliberately NOT a per-4xx log line: refusals are ordinary gameplay here (every gate is a 400),
+  // so a 4xx sampler would flood the logs with noise people learn to ignore — the counters carry the
+  // storm signal, and only genuinely SLOW requests (>1s) earn a log line with their route.
+  const reqRing = new Array(4096); let reqRingI = 0;
+  const minuteBuckets = new Map(); // minute-epoch → { n, e4, e5 }
+  app.addHook('onResponse', async (req, reply) => {
+    const ms = reply.elapsedTime || 0;
+    reqRing[reqRingI] = ms; reqRingI = (reqRingI + 1) % reqRing.length;
+    const min = Math.floor(Date.now() / 60_000);
+    let b = minuteBuckets.get(min);
+    if (!b) { minuteBuckets.set(min, b = { n: 0, e4: 0, e5: 0 }); for (const k of minuteBuckets.keys()) if (k < min - 6) minuteBuckets.delete(k); }
+    b.n++; if (reply.statusCode >= 500) b.e5++; else if (reply.statusCode >= 400) b.e4++;
+    if (ms > 1000) console.warn(`[slow] ${req.method} ${req.url} ${reply.statusCode} ${Math.round(ms)}ms`);
+  });
+  const loadStats = () => {
+    const nowMin = Math.floor(Date.now() / 60_000);
+    let n = 0, e4 = 0, e5 = 0;
+    for (const [k, b] of minuteBuckets) if (k > nowMin - 5) { n += b.n; e4 += b.e4; e5 += b.e5; }
+    const xs = reqRing.filter((v) => v !== undefined).sort((a, b) => a - b);
+    return { req5m: n, err4xx5m: e4, err5xx5m: e5,
+      p95Ms: xs.length ? Math.round(xs[Math.min(xs.length - 1, Math.floor(xs.length * 0.95))]) : 0,
+      maxMs: xs.length ? Math.round(xs[xs.length - 1]) : 0 };
+  };
+
   // GET /health — the question "is it up?" answered directly, keyless, for a human or an uptime monitor.
   // 200 with `ok:true` when a query round-trips; 503 with `ok:false` when it does not, so a monitor can
   // alert on status alone. DEPLOY.md covers the one judgement call: point an UPTIME MONITOR at this, and
@@ -586,6 +651,10 @@ export async function buildServer() {
       db: db.ok ? 'up' : (db.down ? 'unreachable' : 'error'),
       dbLatencyMs: db.ms,
       uptimeSeconds: Math.round(process.uptime()),
+      // rssMb: the memory-leak early-warning gauge (bulletproof audit) — a creep here is visible days
+      // before an OOM restart that would otherwise read as a random outage. load: the request-side SLIs.
+      rssMb: Math.round(process.memoryUsage().rss / 1048576),
+      load: loadStats(),
       at: new Date().toISOString(),
     };
     const code = db.ok ? 200 : 503;
@@ -2170,7 +2239,10 @@ export async function buildServer() {
       if (!me) { socket.close(4004, 'no_character'); return; }
       const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
       const cm = (await pool.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [accountId])).rows[0];
-      const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
+      // wsSendable: the slow-consumer backpressure cap (see the module-scope predicate). A socket
+      // with WS_MAX_BUFFER queued gets its bus events DROPPED, not queued — the 30s poll backfill
+      // re-derives anything durable, so the drop costs a live tick and never a notification.
+      const send = (channel) => (event) => { try { if (wsSendable(socket)) socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
       const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')],
         ['activity', send('activity')], ['chat', send('chat')]]; // the public wire: town-wide action ticker + the troll box
       if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
@@ -2891,4 +2963,37 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`OMERTÀ backend (M1–M5) listening on :${port}`);
+
+  // GRACEFUL SHUTDOWN (bulletproof pass, 2026-08-21). Render sends SIGTERM on every deploy, and
+  // Node's default handler is immediate exit — every in-flight request dies with a connection reset
+  // instead of its answer, on the one moment (a deploy) this fires for every player at once. The
+  // WORKER needs no drain: its sweeps are claim-then-act idempotent and tools/chaos.js proves them
+  // correct under SIGKILL, which is strictly harsher. The API is where draining buys something real:
+  // `app.close()` stops the listener (a new connect is refused, which is what tells Render's router
+  // to shift traffic) and waits for in-flight requests to finish; @fastify/websocket's own onClose
+  // hook takes the live sockets down. The hard timer is the wall — a request that outlives the
+  // window (a wedged lock, a slow chain RPC) must not hold the deploy hostage past what the
+  // platform would allow anyway (Render SIGKILLs ~30s after SIGTERM; we exit at 10s so the kill is
+  // never the thing that ends us). Proven in tools/chaos.js scenario 6: a request BLOCKED on a held
+  // row lock when SIGTERM lands still gets its answer, and a connection attempted after it is
+  // refused — measured, not assumed.
+  let draining = false;
+  const drain = (sig) => {
+    if (draining) return;
+    draining = true;
+    const windowMs = Number(process.env.DRAIN_MS || 10_000);
+    console.log(`[${sig}] draining — listener closed, in-flight requests get ${windowMs}ms to finish`);
+    const hard = setTimeout(() => { console.error('[drain] window expired with requests still in flight — exiting'); process.exit(1); }, windowMs);
+    hard.unref?.();
+    // With forceCloseConnections:false (the factory — active requests must survive close), nothing
+    // reaps IDLE keep-alive sockets, and close() would wait on an idle browser's connection for up
+    // to the 72s keepAliveTimeout — longer than the drain window, so every deploy would end at the
+    // hard timer. Reap idle connections ourselves, repeatedly: a connection that finishes its last
+    // request becomes idle and is taken on the next sweep.
+    const reap = setInterval(() => { try { app.server.closeIdleConnections?.(); } catch { /* closing */ } }, 250);
+    reap.unref?.();
+    app.close().then(() => process.exit(0), (e) => { console.error('[drain] close failed:', e.message); process.exit(1); });
+  };
+  process.on('SIGTERM', () => drain('SIGTERM'));
+  process.on('SIGINT', () => drain('SIGINT'));
 }
