@@ -1152,6 +1152,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.stake(ch, req.body?.amount, client, h)));
   app.post('/v1/unstake', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.unstake(ch, client, h)));
+  // THE COMMITMENT (2026-08-21): lock the staked balance for a published window — it counts ×mult
+  // toward the ladder and refuses to unstake until the window passes. Loot exposure UNCHANGED.
+  app.post('/v1/stake/lock', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.lockStake(ch, req.body?.tier, client, h)));
   app.post('/v1/claim-rewards', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.claimRewards(ch, client, h)));
   app.post('/v1/gear/:id/mint', { preHandler: auth }, async (req) =>

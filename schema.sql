@@ -3572,3 +3572,14 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN N
 -- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
+
+-- ═══ THE COMMITMENT (NetNet research rec A, 2026-08-21): time-lock tiers on the STAKED balance.
+-- A locked stake counts ×mult toward the MADE_LADDER rungs (STAKE_LOCKS in rules.tail.js) and
+-- refuses to unstake until the window passes. DELIBERATELY NOT a loot shield: whack:loot's
+-- committed-rate leg debits `staked` directly and never consults these columns, so a locked stake
+-- is looted exactly like an unlocked one — the retired "staked is safe" harbour must not come back
+-- through a lock (test/made.js pins it). Account-level → survives death (the bloodline keeps its
+-- word). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson) — and
+-- both are OFF persistAccount's positional list (written by direct SQL under the held account lock).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_until TIMESTAMPTZ;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_mult NUMERIC NOT NULL DEFAULT 1;

@@ -2600,6 +2600,11 @@
     if (body && body.ok && body.made === true && body.omr !== undefined)
       return `${body.message || "You're made."} — ${fmt(body.omr)} $OMR in dues${
         body.madeSeconds ? `, and your standing runs ${minsTxt(body.madeSeconds)}` : ''}`;
+    // THE COMMITMENT — must sit ABOVE the stake branch below: this reply also carries `staked`, so
+    // without its own discriminator (`lock`) it would render as an ordinary stake (the byte-shape
+    // collision class). States all three terms: the boost, the one-way window, and no loot shield.
+    if (body && body.ok && body.lock && body.lockSeconds !== undefined)
+      return `\u{1F91D} your word is given — ${body.lockName || body.lock}: ${fmt(body.staked)} staked counts as ${fmt(body.effectiveStake)} on the ladder (×${body.mult}) for ${minsTxt(body.lockSeconds)}. It cannot come out until then, and a killer still loots it at the committed rate.`;
     if (body && body.unbonding !== undefined && body.unbondSeconds !== undefined)
       return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
     // THE VAULT CARD says "cheaper cover, not a safe harbour", the SERVER's own published note says
@@ -9215,10 +9220,14 @@
         <div class="d">Power runs on $OMR you <b>HOLD</b>, not what you spend — ${fmt(Math.floor(me.ladder?.staked || 0))} staked.
           ${me.ladder?.fx ? `Carrying <b>+${me.ladder.fx.trunk}</b>, energy cap <b>+${me.ladder.fx.energy}</b>, nerve <b>+${me.ladder.fx.nerve}</b>, garage <b>+${me.ladder.fx.garage}</b>${me.ladder.fx.fenceBps ? `, the fence pays <b>+${(me.ladder.fx.fenceBps / 100).toFixed(1)}%</b>` : ''}.` : 'Stake $OMR to climb it.'}</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">${me.ladder?.next
-          ? `<b>${fmt(me.ladder.next.need)}</b> more staked reaches <b>${me.ladder.next.name}</b>.`
+          ? `<b>${fmt(me.ladder.next.need)}</b> more reaches <b>${me.ladder.next.name}</b>.`
           : 'Top rung — nothing above this at any price.'} Being made climbs it ${me.ladder?.madeRungs ?? 1} rung as a shortcut, never higher. Staked $OMR is looted lighter than idle — but it is never safe.</div>
         <div class="row" style="margin-top:6px"><input id="lad-amt" type="number" min="1" placeholder="$OMR to stake" size="10">
-          <button class="act" id="lad-go">stake it</button></div></div>
+          <button class="act" id="lad-go">stake it</button></div>
+        <div class="d" style="margin-top:8px"><b>THE COMMITMENT</b> — lock the stake for a window and it counts <b>×mult</b> on the ladder.
+          ${me.ladder?.lock ? `Your word is given: <b class="neon">×${me.ladder.lock.mult}</b> for another <b>${mins(me.ladder.lock.seconds)}</b> — ${fmt(me.ladder?.effective || 0)} effective on the rungs. It cannot come out until then, and a killer still loots it at the committed rate.` : `A locked stake cannot be unstaked until the window passes — and it is still looted at the committed rate when you die. Commitment buys rungs, not safety.`}</div>
+        ${(me.ladder?.lockTiers || []).length && Number(me.ladder?.staked || 0) > 0 ? `<div class="row" style="margin-top:4px">
+          ${(me.ladder.lockTiers).map((t) => `<button class="act" data-stakelock="${t.id}" title="lock for ${t.days} days — counts ×${t.mult} on the ladder">${t.name} — ${t.days}d ×${t.mult}</button>`).join(' ')}</div>` : ''}</div>
       <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:11px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
       <div class="card">${me.wallet
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
@@ -9438,6 +9447,15 @@
     } }
     $('#lad-go').onclick = () =>
       act('POST', '/v1/stake', { amount: Number($('#lad-amt').value) }).then(() => renderPortfolio());
+    // THE COMMITMENT — the confirm states the terms BEFORE the press (the terms-ride-with-the-price
+    // rule): the window is one-way, and the lock is never a loot shield.
+    $$('[data-stakelock]').forEach((b) => { b.onclick = async () => {
+      const t = (me.ladder?.lockTiers || []).find((x) => x.id === b.dataset.stakelock); if (!t) return;
+      if (!await ask('Give your word?',
+        `Lock your stake for ${t.days} days: it counts ×${t.mult} on the ladder, CANNOT be unstaked until the window passes, and is still looted at the committed rate if you die. A live commitment only ever gets longer or stronger.`,
+        { yes: 'lock it in', danger: true })) return;
+      act('POST', '/v1/stake/lock', { tier: t.id }).then(() => renderPortfolio());
+    }; });
     // the brokers' desk — activate (or extend/upgrade) a window at the picked tier
     t.querySelectorAll('[data-brokertier]').forEach((b) => b.onclick = () =>
       act('POST', '/v1/brokers/activate', { tier: Number(b.dataset.brokertier) }).then(() => renderPortfolio()));

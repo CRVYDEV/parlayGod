@@ -3463,10 +3463,38 @@ export const MADE_LADDER = {
   ],
   MADE_RUNGS: 1,   // dues climb the ladder by this many rungs — the shortcut, never a gate
 };
-// The rung INDEX (-1 = none). Pure, account-in / number-out, so every touchpoint reads one function
-// and they cannot disagree — the energyCapOf/view/accrual discipline.
-export const madeRungIdx = (acct, now = Date.now()) => {
+// ═══ THE COMMITMENT (NetNet research rec A, founder-directed 2026-08-21) — time-lock tiers on
+// the staked balance, the WinNET lock-boost shape pointed at the game's own float. A player who
+// LOCKS their stake for a published window counts it ×mult toward the ladder above — commitment
+// buys rungs, not just balance — and cannot unstake until the window passes. Three walls keep it
+// honest: (1) LOOT EXPOSURE IS UNCHANGED — whack:loot's committed-rate leg debits `staked` directly
+// and never reads the lock, so a locked stake is looted exactly like an unlocked one; the lock must
+// never become the retired "staked is safe" harbour (test/made.js pins it by killing a locked
+// holder). (2) The multiplier moves the LADDER READ only — a status/capacity axis — never the
+// balance itself: `staked` stays the §10.4 bucket and no currency moves at lock time (zero ledger
+// rows, test-pinned). (3) While a lock is active it may only be UPGRADED (new expiry ≥ current AND
+// mult ≥ current) — a commitment is a commitment, not a dial you turn down when a killer shows up.
+// All numbers are founder sign-off levers (BALANCE.md § THE COMMITMENT; pinned in test/levers.js).
+export const STAKE_LOCKS = {
+  TIERS: [
+    { id: 'week',    days: 7,  mult: 1.25, name: 'The Handshake' },
+    { id: 'month',   days: 30, mult: 1.5,  name: 'The Word' },
+    { id: 'quarter', days: 90, mult: 2.0,  name: 'The Oath' },
+  ],
+};
+export const stakeLockActive = (acct, now = Date.now()) =>
+  !!(acct?.stake_lock_until && new Date(acct.stake_lock_until).getTime() > now);
+// The ONE effective-stake reader — the ladder, the board and the coach all read this, so the rung
+// the sheet shows and the rung the till grants cannot disagree (the energyCapOf discipline).
+export const effectiveStake = (acct, now = Date.now()) => {
   const staked = Number(acct?.staked || 0);
+  return stakeLockActive(acct, now) ? staked * Number(acct.stake_lock_mult || 1) : staked;
+};
+// The rung INDEX (-1 = none). Pure, account-in / number-out, so every touchpoint reads one function
+// and they cannot disagree — the energyCapOf/view/accrual discipline. Reads the EFFECTIVE stake
+// (THE COMMITMENT above): a locked balance counts ×mult toward the rungs.
+export const madeRungIdx = (acct, now = Date.now()) => {
+  const staked = effectiveStake(acct, now);
   let idx = -1;
   MADE_LADDER.RUNGS.forEach((r, i) => { if (staked >= r.min) idx = i; });
   if (isMade(acct, now)) idx += MADE_LADDER.MADE_RUNGS;

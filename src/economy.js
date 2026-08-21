@@ -11,7 +11,7 @@ import {
   LIMITED_RUNS, runOf, limitedRunP,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
-  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult,
+  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult, STAKE_LOCKS, stakeLockActive, effectiveStake,
   OPERATIONS, opSlotsOf, nextOpSlotLevel , jailed, usd } from './rules.js';
 
 const uid = () => crypto.randomUUID();
@@ -488,9 +488,50 @@ export function stake(ch, amount, client, h) {
 // unreachable, and it MATTERED that it was gone rather than merely unused: it read as the live drain
 // for a pool that in fact has only one exit now, the legacy-pool merge on the worker tick. Deleted so
 // nobody reasons from it. `stake:reward` stays in the §10.4 vocabulary — historical rows are real.
+// ═══ THE COMMITMENT (NetNet rec A, 2026-08-21) — lock the staked balance for a published window.
+// A locked stake counts ×mult toward the MADE_LADDER (rules.tail.js effectiveStake — the ONE reader
+// the ladder, the board and the coach share) and refuses to unstake until the window passes.
+// ZERO §10.4 surface: no currency moves at lock time (test-pinned — zero ledger rows), the lock
+// only changes what the ladder READS and what unstake REFUSES. And deliberately NOT a loot shield:
+// whack:loot debits `staked` directly and never consults these columns (test/made.js kills a
+// locked holder and asserts the committed rate still lands). The two columns are OFF
+// persistAccount's positional list, so the direct SQL write here — under withCharacter's held
+// account lock — is clobber-safe; h.acct is updated in memory so this request's own view agrees.
+export async function lockStake(ch, tierId, client, h) {
+  const tier = STAKE_LOCKS.TIERS.find((t) => t.id === tierId);
+  if (!tier) throw new GameError('bad_tier', 'No such commitment. The windows are: '
+    + STAKE_LOCKS.TIERS.map((t) => `${t.id} (${t.days}d, ×${t.mult})`).join(', ') + '.');
+  const staked = Number(h.acct.staked || 0);
+  if (!(staked > 0)) throw new GameError('none', 'Nothing staked — stake $OMR first, then give your word on it.');
+  const now = Date.now();
+  const until = new Date(now + tier.days * 86400000);
+  if (stakeLockActive(h.acct, now)) {
+    // an active lock may only be UPGRADED — longer AND at least as strong. A commitment is not a
+    // dial you turn down when a killer shows up (the wall the design names).
+    const curUntil = new Date(h.acct.stake_lock_until).getTime();
+    const curMult = Number(h.acct.stake_lock_mult || 1);
+    if (until.getTime() < curUntil || tier.mult < curMult)
+      throw new GameError('committed', 'Your word is already given — a live commitment only ever gets LONGER or STRONGER, never weaker.');
+  }
+  await client.query('UPDATE account_persistent SET stake_lock_until=$2, stake_lock_mult=$3 WHERE account_id=$1',
+    [ch.account_id, until, tier.mult]);
+  h.acct.stake_lock_until = until; h.acct.stake_lock_mult = tier.mult;
+  return { ok: true, lock: tier.id, lockName: tier.name, mult: tier.mult, days: tier.days,
+    lockSeconds: Math.ceil((until.getTime() - now) / 1000),
+    staked, effectiveStake: effectiveStake(h.acct, now) };
+}
 export async function unstake(ch, client, h) {
   const staked = Number(h.acct.staked), rewards = Number(h.acct.rewards);
   if (staked <= 0 && rewards <= 0) throw new GameError('none', 'Nothing staked.');
+  // THE COMMITMENT: a locked stake does not come out until the window passes. The refusal names
+  // the time left (the terms-ride-with-the-refusal rule) — and it is the WHOLE point of the lock,
+  // which is why the ladder paid you ×mult for it.
+  if (staked > 0 && stakeLockActive(h.acct)) {
+    const left = Math.ceil((new Date(h.acct.stake_lock_until).getTime() - Date.now()) / 1000);
+    throw new GameError('locked',
+      `You gave your word on that stake — it stays put another ${Math.ceil(left / 3600)}h. That commitment is what the ladder is paying you for.`,
+      { lockSeconds: left });
+  }
   // Make-Risk-Pay: principal still ALWAYS returns whole (a bucket move, never pool-gated) — but it
   // UNBONDS for UNSTAKE_CD_MS first: no yield, and LOOTABLE (whack:loot reaches liquid + unbonding)
   // until the window passes and accrual releases it to `omr`. The stake→extract path now always

@@ -273,6 +273,9 @@ const SIGNED = [
   // invisible to the reader check, so the PARENT is the pin — the MASTERY.PERKS precedent).
   ['MADE_LADDER.RUNGS', [{"min":60,"name":"Earner","trunk":1,"energy":5,"nerve":1,"garage":1,"fenceBps":0},{"min":180,"name":"Operator","trunk":2,"energy":10,"nerve":2,"garage":2,"fenceBps":0},{"min":450,"name":"Capo","trunk":3,"energy":15,"nerve":3,"garage":3,"fenceBps":250},{"min":900,"name":"Kingmaker","trunk":4,"energy":20,"nerve":4,"garage":4,"fenceBps":500}]],
   ['MADE_LADDER.MADE_RUNGS', 1],
+  // THE COMMITMENT (2026-08-21, NetNet rec A): lock tiers on the staked balance — the mult moves the
+  // ladder READ only, never the balance or the loot rate; whole-array pin (the RUNGS shape).
+  ['STAKE_LOCKS.TIERS', [{"id":"week","days":7,"mult":1.25,"name":"The Handshake"},{"id":"month","days":30,"mult":1.5,"name":"The Word"},{"id":"quarter","days":90,"mult":2.0,"name":"The Oath"}]],
   // DYNASTY §9 — THE PROVENANCE WARDS. Fictional community names (the §9.5 guessability posture —
   // a renamed ward that starts identifying a real collection is a copy violation, so the whole map
   // is the pin; bracket-accessed leaves are invisible to the reader check, the MADE_LADDER.RUNGS

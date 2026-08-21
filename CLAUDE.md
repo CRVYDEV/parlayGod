@@ -15818,3 +15818,30 @@ counsel rows (external to the retired internal rule). Both codices' promissory c
 never $OMR", "Nothing in this game sells a random outcome for money") was rewritten to factual
 copy in the same commit — a retired rule left standing as a player-facing promise is the
 pad-copy class. Recorded in SIGN-OFF.md; the research doc's rejections #2/#3 carry the reversal.
+
+**THE COMMITMENT — time-lock tiers on the staked balance (NetNet research rec A, founder-directed
+2026-08-21: "start building out all the recommendations") — BUILT** (`STAKE_LOCKS`/`stakeLockActive`/
+`effectiveStake` in the rules tail, `economy.js:lockStake` + the unstake refusal,
+`POST /v1/stake/lock`, two ALTER-added `account_persistent` columns (`stake_lock_until`/
+`stake_lock_mult` — the boot-crash lesson, both OFF persistAccount's positional list so the direct-SQL
+write under the held account lock is clobber-safe), the ladder board's `effective`/`lock`/`lockTiers`,
+a COMMITMENT card + confirm on Going Legit, a describe() branch; `test/made.js` §5c +
+`test/social.js`; BALANCE.md § THE COMMITMENT). The WinNET lock-boost shape (a longer lock earns a
+bigger weight) pointed at the game's own float: LOCK the stake for a published window (7d ×1.25 /
+30d ×1.5 / 90d ×2.0 — founder sign-off levers, whole-array pinned) and the MADE_LADDER reads it
+×mult through ONE `effectiveStake` reader shared by `madeRungIdx`, the board and the coach — so the
+rung the sheet shows and the rung the perks grant structurally cannot disagree. **Three walls, each
+mutation-verified by name:** (1) **NOT a loot shield** — `whack:loot`'s committed-rate leg debits
+`staked` directly and never consults the lock, so a locked holder is looted at exactly
+`OMR_LOOT_COMMITTED` (test/social.js swears the oath through the real route, kills the holder, and
+asserts the 20% still lands — the retired "staked is safe" harbour must never come back through a
+side door); (2) **ZERO §10.4 surface** — the lock moves no currency and writes no ledger row
+(row-count-pinned); the mult changes what the ladder READS, never the balance; (3) **ONE-WAY** —
+unstake refuses `locked` with the machine-readable `lockSeconds` payload (the district-refusal rule),
+and a live lock only ever UPGRADES (longer AND at least as strong → else `committed`), lapsing on its
+own back to the raw read. The boost is proven at a REAL till (the sheet's energy CAP grows by the
+rung delta when 120 locked ×1.5 crosses rung 2's 180), not merely on a board. The client-ledger rows
+drive lock-then-expire-then-unstake through a lazy SQL resolver, because without the expiry the
+unstake row would be REFUSED and read on the summary line as covered (the declared-but-never-driven
+class, headed off at design time); the lock line's assertions pin the boost, the window and the
+no-shield claim. Suite green + pgquery + pgcheck 47/47 on a FRESH real Postgres (the ALTERs apply).

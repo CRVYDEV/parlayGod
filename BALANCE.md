@@ -6296,3 +6296,26 @@ scarcity and would also break the arbitrage board, convoy manifest values, the T
 and a signed §7.11 surface. And nothing here is ever marketed as scarce-and-appreciating — the deeds
 doc's §6 rule stands: the map grows, the objects are described as what they are, never as what they
 might be worth.
+
+## THE COMMITMENT — time-lock tiers on the staked balance (NetNet research rec A, 2026-08-21)
+
+The WinNET lock-boost shape (a longer lock earns a bigger weight) pointed at the game's own float:
+a player who LOCKS their stake for a published window counts it ×mult toward the MADE_LADDER rungs
+and cannot unstake until the window passes. The multiplier moves the LADDER READ only — a
+status/capacity axis — never the balance itself: `staked` stays the §10.4 bucket, no currency moves
+at lock time (zero ledger rows, test-pinned), and **loot exposure is UNCHANGED** — `whack:loot`'s
+committed-rate leg debits `staked` directly and never consults the lock, so a locked stake is looted
+exactly like an unlocked one (test/social.js kills a locked holder and asserts the committed rate
+still lands). That wall is the whole design: the lock must never become the retired "staked is safe"
+harbour through a side door. While a lock is live it may only be UPGRADED (longer AND at least as
+strong) — a commitment is not a dial you turn down when a killer shows up. What the game buys:
+deeper HOLD demand on the float (the ladder already keys on holding; this pays patience on top),
+which is what makes OMR_LOOT_COMMITTED and killing a made man mean anything.
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `STAKE_LOCKS.TIERS` | **7d ×1.25 / 30d ×1.5 / 90d ×2.0** | The patience curve. The top mult halves the stake a rung wants (900 → 450 held for 90 days), so the dial is how much of the ladder a promise may substitute for a balance. Raising a mult deepens the float; a mult high enough that the top rung is reachable on a trivial locked balance would cheapen the ceiling claim — keep `top.min / maxMult` well above the first rung. |
+
+**What is deliberately absent:** any loot discount, any unstake-early-for-a-fee escape (the window
+is the price), and any yield — the lock pays in RUNGS, which are capacity/status, so the sim-signed
+economy is untouched (zero new reasons, zero new faucets, §10.4 has no surface here).
