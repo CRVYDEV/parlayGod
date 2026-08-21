@@ -16215,3 +16215,23 @@ integration pins use the STABLE literal variants (`graybeard`/`ironhand` — the
 fixture wallets is math, not state) plus family-membership assertions, so a variant drift fails
 loudly without the test restating the function under test. Codices synced in the same commit (both
 Forge passages: twelve faces, the stable-function rule, the affinity schooling).
+
+**THE GUARD'S OWN LESSON, IN A THIRD COSTUME — a figure restated from a mid-merge artifact
+(2026-08-21).** Merging `origin/main` into the forge branch conflicted in five files, and the docs
+guard was run while the merge was still UNRESOLVED. `git ls-files --cached` lists a CONFLICTED path
+once per stage (base/ours/theirs), so the four conflicted markdown files counted THREE TIMES EACH:
+the guard reported **218** where the repository holds **210**, and the number looked authoritative
+enough that SPEC.md was restated to it — overwriting an earlier INDEPENDENT `find` measurement that
+had said 210 all along and was right. CI then failed on exactly that figure, which is the guard
+working: the pg-mem job read 210 from a clean checkout while every local run agreed with itself at
+218. **This is the third time this one file has been bitten by the same class** — a claim that is
+true in one environment and false in another — after the vendored-OpenZeppelin README (which broke
+CI for ten commits) and the untracked-new-doc case, both recorded in its own header. The fix is a
+`new Set`: a file is one file in every state of the index, merge in progress or not. Reproduced
+before fixing and verified after, in a throwaway clone driven into the real conflicted state
+(`raw 218 / deduped 210`, over-counting by exactly the four conflicted files × 2 extra stages) —
+and the reproduction needed the real main SHA, because a clone of a local repo carries that repo's
+STALE `origin/main` ref and the merge is a silent no-op that reads exactly like "the bug does not
+reproduce". **The rule earned twice over: a guard that asserts a number about "the project" must ask
+git what the project is AND must not believe the index mid-operation — and a figure measured once
+independently should not be overwritten by a tool's reading without asking why they disagree.**
