@@ -1,7 +1,7 @@
 // OMERTÀ — launch hype video builder. See HYPE.md.
 //
 //   FAL_KEY=… node tools/hype.js --fal       → generate the Seedance 2.5 motion library (parallel,
-//                                              capped, per-clip aspect) then build ALL 5 cuts
+//                                              capped, per-clip aspect) then build ALL cuts
 //   node tools/hype.js --all                 → rebuild all 5 from the library (no spend)
 //   node tools/hype.js --cut streets         → rebuild one
 //   …--music track.mp3                       → use a real track instead of the synth bed
@@ -10,7 +10,7 @@
 // The library (public/art/hype/<plate>[__9x16].mp4) is Seedance 2.5 image-to-video of the game's own
 // noir plates — real camera + scene motion. Landscape cuts use 16:9 sources; the vertical short uses
 // 9:16 sources generated natively (no cropping). Jobs run in PARALLEL with a hard --cap + a ledger.
-// Every cut is a FAST edit of the shared library, so 5 videos cost ONE round of generation.
+// Every cut is a FAST edit of the shared library, so the videos cost ONE round of generation.
 //
 // COPY: the founder lifted the no-earnings rule (2026-08-14) and asked for earnings + the $OMR value
 // flywheel. Copy is mechanism-true and number-free. Founder signs the wording + a licensed track.
@@ -76,7 +76,7 @@ const LIBRARY = {
   'npc-madame':         `a glamorous 1940s femme fatale slowly exhales cigarette smoke in a dim lounge, a catchlight in her eyes, slow push-in, ${NOIR}`,
 };
 
-// ── the 5 cuts: each carries its own aspect + a mostly-distinct footage set ────────────────────────
+// ── the cuts: each carries its own aspect + a mostly-distinct footage set ─────────────────────────
 // shot = { p: plate, use: seconds shown, off: start offset, sub|title|cta: copy }
 const VIDEOS = {
   // 1 — THE CITY: the cinematic trailer, atmosphere/world
@@ -128,6 +128,72 @@ const VIDEOS = {
     { p: 'interior-estate',     use: 1.5, off: 0.6, sub: 'TAKE IT OFF SOMEBODY.' },
     { p: 'hero-backdrop',       use: 2.6, off: 0.5, title: 'OMERTÀ', cta: 'omerta.fun' },
   ] },
+  // 6 — THE MONEY MAP: the fees/flows EXPLAINER (founder-directed 2026-08-21). Longer and slower
+  // than the hype cuts — it WALKS the whole economy rather than teasing it. The scene list is the
+  // money router's own waterfall (src/router.js — every live inflow source), then the $OMR demand
+  // loop, then the RWA arc (treasury → ticker ballot → stock buys → play-weighted broker splits →
+  // Street Deed vaults). The one declared source deliberately OMITTED is `trade` — it is RETIRED
+  // (the sell tax is the one hook), and marketing a dead flow would be the empty-state honesty rule
+  // broken on film. Copy is mechanism-true + number-free (the HYPE.md rule): no bps, no prices, no
+  // value-per-$OMR figure; the closer states extraction opens at launch (the rail is not open yet).
+  money: { w: 1920, h: 1080, ar: '16:9', shots: [
+    { p: 'hero-poster',      use: 2.4, off: 0.3, sub: 'EVERY DOLLAR IN THIS CITY IS ON THE BOOKS',
+      sub2: 'the full money map — nothing moves off the ledger' },
+    // ═══ ACT I — the eight live inflows (router waterfall order) ═══
+    { p: 'citymap',          use: 2.2, off: 0.6, kicker: 'I · WHERE REAL MONEY COMES IN' },
+    { p: 'crest',            use: 2.8, off: 0.5, sub: 'GETTING MADE COSTS REAL ETH',
+      sub2: 'identity fees on a published schedule — nobody skips the toll' },
+    { p: 'interior-store',   use: 2.8, off: 0.5, sub: 'THE STORE SELLS FOR ETH',
+      sub2: 'cosmetics · access · consumables — never power' },
+    { p: 'crime-bonds',      use: 2.8, off: 0.5, sub: 'RESERVE BONDS RAISE ETH',
+      sub2: 'discounted $OMR, vested — the only spigot that mints supply' },
+    { p: 'interior-trade',   use: 2.8, off: 0.5, sub: 'EVERY $OMR SELL PAYS THE TAX',
+      sub2: 'taken inside the swap — collected in ETH' },
+    { p: 'interior-market',  use: 2.8, off: 0.5, sub: 'THE DESK AUCTIONS $OMR DAILY',
+      sub2: 'a falling-price auction over recycled supply — paid in ETH' },
+    { p: 'district-canal',   use: 2.8, off: 0.6, sub: 'THE HOUSE POOL EARNS TRADING FEES',
+      sub2: 'protocol-owned liquidity — depth the game itself provides' },
+    { p: 'crime-depository', use: 2.8, off: 0.5, sub: 'THE BANK TAKES A CUT OF YIELD',
+      sub2: 'a performance fee on protocol profit' },
+    { p: 'boat-freighter',   use: 2.8, off: 0.5, sub: 'CASHING OUT PAYS AN EXIT TOLL',
+      sub2: 'and fresh tokens pay a surcharge to leave early' },
+    // ═══ ACT II — where it goes: the four destinations + the $OMR demand loop ═══
+    { p: 'heist-goldvault',  use: 2.2, off: 0.5, kicker: 'II · WHERE IT GOES' },
+    { p: 'interior-empire',  use: 2.8, off: 0.5, sub: 'FOUR DESTINATIONS, ALL DECLARED',
+      sub2: 'the vig · the treasury · liquidity · operations — every split published' },
+    { p: 'crime-counting',   use: 2.8, off: 0.5, sub: 'THE VIG BUYS $OMR OFF THE MARKET',
+      sub2: 'real revenue → the withdrawal reserve + the prize pool' },
+    { p: 'interior-law',     use: 2.8, off: 0.5, sub: 'EXTRACTION NEVER EXCEEDS INFLOW',
+      sub2: 'a full-reserve queue — it signs only what revenue backed' },
+    { p: 'crime-mint',       use: 2.8, off: 0.5, sub: 'THE MONEY PRINTER IS RETIRED',
+      sub2: 'no wage, no emission schedule — supply enters by being bought' },
+    { p: 'crime-laundry',    use: 2.8, off: 0.5, sub: 'CASH CAN NEVER BUY $OMR',
+      sub2: 'the one conversion runs the other way — grinding can’t inflate the token' },
+    { p: 'interior-den',     use: 2.8, off: 0.7, sub: 'EVERY SINK LANDS BACK ON THE DESK',
+      sub2: 'dues · the compound · seals · intel · vanity — resold at tomorrow’s auction' },
+    { p: 'interior-family',  use: 2.8, off: 0.5, sub: 'FAMILY BUYBACKS PAY THE TOP FAMILIES',
+      sub2: 'a community cut buys $OMR for the seasonal family pool' },
+    { p: 'cine-payday',      use: 2.8, off: 0.5, sub: 'BANK PROFIT PAYS THE PLAYERS WHO PLAY',
+      sub2: 'bought $OMR, split by real activity — money alone takes nothing' },
+    { p: 'estate-4',         use: 2.8, off: 0.5, sub: 'POWER KEYS ON HELD $OMR',
+      sub2: 'stake it for rank — and staked wealth is lootable. risk is the point' },
+    // ═══ ACT III — the RWA arc: play accumulates real-world assets ═══
+    { p: 'estate-6',         use: 2.2, off: 0.5, kicker: 'III · REAL-WORLD ASSETS' },
+    { p: 'interior-legit',   use: 2.8, off: 0.5, sub: 'THE TREASURY STACKS ETH',
+      sub2: 'its slice of every fee, bond, sell and yield' },
+    { p: 'crime-ballot',     use: 2.8, off: 0.5, sub: 'THE FAMILIES VOTE THE TICKER',
+      sub2: 'the commission picks the day’s stock' },
+    { p: 'crime-ticker',     use: 2.8, off: 0.5, sub: 'THE TREASURY BUYS TOKENIZED STOCK',
+      sub2: 'real fills only, behind hard price walls' },
+    { p: 'interior-streets', use: 2.8, off: 0.5, sub: 'YOUR SHARE IS EARNED BY PLAYING',
+      sub2: 'activated brokers split every buy by activity — idle money takes nothing' },
+    { p: 'district-brick',   use: 2.8, off: 0.5, sub: 'DELIVERED INTO YOUR STREET’S VAULT',
+      sub2: 'the deed is an NFT — sell the street, the book travels with it' },
+    { p: 'heist-vault',      use: 2.8, off: 0.5, sub: 'OR BURN $OMR FOR TREASURY ETH',
+      sub2: 'the vault only ever owes what it already holds' },
+    { p: 'hero-backdrop',    use: 3.4, off: 0.5, title: 'OMERTÀ',
+      cta: 'the ledger is public · extraction opens at launch · omerta.fun' },
+  ] },
 };
 
 // a clip file is (plate, aspect) — 16:9 sources and 9:16 sources are distinct renders
@@ -160,9 +226,19 @@ function titlePng(shot, i, w, h) {
   if (shot.title) {
     body += line(w / 2, h / 2 + titleSize * 0.2, titleSize, titleSize * 0.09, '#f4efe6', shot.title);
     if (shot.cta) body += line(w / 2, h / 2 + titleSize * 0.75, ctaSize, ctaSize * 0.25, '#c9a24b', shot.cta.toUpperCase());
+  } else if (shot.kicker) {
+    // an ACT HEADER for the explainer cut — centered, between the sub and the title in weight, with
+    // a small gold overline so a chapter card reads as structure rather than as another caption.
+    const kSize = Math.round(w * 0.052);
+    body += line(w / 2, h / 2 - kSize * 0.55, ctaSize, ctaSize * 0.3, '#c9a24b', 'THE MONEY MAP');
+    body += line(w / 2, h / 2 + kSize * 0.45, kSize, kSize * 0.07, '#f4efe6', shot.kicker);
   } else if (shot.sub) {
     const y = portrait ? h * 0.72 : h - Math.round(h * 0.13);
-    body += line(w / 2, y, subSize, subSize * 0.06, '#f4efe6', shot.sub);
+    // sub2 is the explainer's DETAIL line — the mechanism under the headline. The headline shifts up
+    // just enough to make room; a sub-only shot renders exactly as before.
+    const lift = shot.sub2 ? Math.round(subSize * 0.85) : 0;
+    body += line(w / 2, y - lift, subSize, subSize * 0.06, '#f4efe6', shot.sub);
+    if (shot.sub2) body += line(w / 2, y - lift + Math.round(subSize * 0.95), Math.round(subSize * 0.62), subSize * 0.04, '#c9a24b', shot.sub2);
   } else return null;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
     + `<defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${Math.round(subSize * 0.18)}"/></filter></defs>${body}</svg>`;
@@ -219,7 +295,9 @@ function assembleCut(clips, out, music) {
     // on the reveal — the classic trailer "music bed + logo BRAAAM", so every cut lands a payoff even
     // when the track's own dynamics don't. Input 0 = concat video; 1 = track; 2 = riser; 3 = impact.
     const riseStart = Math.max(0, titleAt - 2.2).toFixed(3);
-    ain = ['-i', music,
+    // -stream_loop: the beds are 60s and the explainer cut runs longer — loop the track and let the
+    // atrim below cut it to the video's own length (a no-op for the short cuts).
+    ain = ['-stream_loop', '-1', '-i', music,
       '-f', 'lavfi', '-i', `anoisesrc=d=${D}:color=pink:amplitude=1`,
       '-f', 'lavfi', '-i', `aevalsrc='0.95*sin(2*PI*44*t)*exp(-2.0*t)+0.6*sin(2*PI*88*t)*exp(-3.2*t)':d=${D}:s=44100`];
     fc = `[1:a]loudnorm=I=-15:TP=-1.2:LRA=11,afade=in:st=0:d=0.5,afade=out:st=${(total - 1.2).toFixed(3)}:d=1.2,atrim=0:${D},asetpts=N/SR/TB[bed];`
