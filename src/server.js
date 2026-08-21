@@ -1416,6 +1416,13 @@ export async function buildServer() {
     // and the wage cap (an ABSENT owner owes up to a week while the corner only earns while stocked)
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX, wagePerHr: M4.CREW_WAGE_PER_HR,
       coldHours: M4.CREW_WAGE_COLD_MS / 3600000, wageCapHours: M4.CREW_WAGE_CAP_MS / 3600000 },
+    // THE TWO COOLING VERBS' TERMS. Both are pressed from the Kitchen and neither named a price
+    // anywhere — the clean-papers button read "clean papers ($OMR)" while burning 60 of them, which
+    // is the terms class (the pad, the nut, the envelope) on the PREMIUM currency. Published so the
+    // buttons quote the live lever instead of restating it; the cash figure is the BASE, and the
+    // skill, the honor tier, the amnesty decree and the season can each discount it at the till.
+    cooling: { laylowCash: M4.LAYLOW_CASH, laylowEnergy: M4.LAYLOW_ENERGY, laylowCool: M4.LAYLOW_COOL,
+      cleanPapersOmr: M4.CLEANPAPERS_OMR },
     // D11 (2026-08-05): the in-game stock book is retired — the positive claim, so a client can
     // render what replaced it (the v3 `emission: {faucet: null}` precedent).
     portfolio: null,

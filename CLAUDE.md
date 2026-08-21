@@ -15455,6 +15455,59 @@ because the Store's rail is priced off the ETH fee at the market rate (~6,200 fo
 and an unaffordable action is SKIPPED, which reads on the summary line exactly like a covered one.
 Driven actions 226 → 228.
 
+**PLAY WAVE 54 — the sweep to the edge, and the line that was BACKWARDS (founder-directed 2026-08-21:
+"sweep the undriven routes").** Waves 51–53 each fixed a cluster and each ended by naming the same root
+cause — *a route nobody has driven has a line nobody has read* — which is RT#7's shape exactly: a class
+established, applied where it was discovered, never swept to its edge. So this wave enumerated the class
+instead of another cluster. **The measurement first, and my own extractors were wrong twice before they
+were right**: a static regex over the ledger reported 49 driven rows against a real 105 (dynamic rows are
+resolved at drive time and invisible to a regex), so the authoritative list came from INSTRUMENTING THE
+RUN rather than parsing it. Against the 392 mutating routes the console can press: **105 driven, 289
+NOT** — of which 138 need an id and 151 are literal, and a blind probe with the client's own declared
+bodies reaches only 6 of them, because the rest want money, rank, a target or a live event. Breadth alone
+was never going to finish this; what it did was point at which of the most-pressed buttons in the game
+had never once been read — `heal`, `garage/boost`, `casino/dice`, `kitchen/cook`, `streak/claim`,
+`pen/work` among them.
+**THE FINDING IS NOT SILENCE. It is a line that is BACKWARDS on the button a panicking player presses.**
+Driven with real heat, `POST /v1/kitchen/laylow` — the game's primary way DOWN from the Bureau — answered
+**`heat +55`**. The player pays $5,000 and 25 energy to cool off and is told their heat went UP by the
+amount that was LEFT. Root cause, and it is worth more than the instance: **the reply field `heat` means
+a DELTA on one route and a LEVEL on two others.** The deal returns the heat a sale ADDED, so the client's
+generic formatter renders any `heat` as `heat +N` — correct there, and the deal states its own heat
+inline so that push is SKIPPED for it. Which means **the generic formatter's only live consumer was the
+one route it described backwards.** Its neighbour `cleanpapers` said `"done."` while burning **60 $OMR**
+— a price that appeared on no screen in the game: not the button (`clean papers ($OMR)`), not a confirm,
+not the reply, not `/v1/rules`. The forgotten-sibling shape again, and the terms class on the PREMIUM
+currency. Fixed at the SOURCE rather than patched around: the level is `heatNow`, the drop is `cooled`
+(the real one, smaller than the nominal when the clamp bites), clean papers returns its `omr` price, both
+verbs get explicit branches, the generic push is documented delta-only, and the two buttons quote the
+live levers through a new `rules.cooling` block so a price cannot drift from the till that charges it.
+**THE EXISTING TEST WAS SEEDED ON THE ONE VALUE WHERE THE BUG IS INVISIBLE.** `test/growth.js` asserted
+`body.heat === 25` after laying low from **heat 50** — where the drop (25) and the resulting level (25)
+are the same number, so no assertion could tell them apart, and its own comment ("−25 heat") described
+the delta while the code checked the level. Re-seeded at **80 → cooled 25, landing on 55**: two different
+numbers, so the fields can never be swapped again without failing there. Three mutations, each caught at
+its own named assertion — and **the first attempt failed at the PRECONDITION rather than at the assertion
+that names the class**, the "a failure that teaches nothing" shape, so the precondition now proves only
+that the row RAN and is deliberately independent of the field naming it guards. Driven actions 228 → 230;
+suite green, sim drift-0, mobile 81/81. No SQL touched, so the PG gates do not apply.
+**AND THE UNCOMMITTED-WORK LOSS HAPPENED AGAIN, MID-WAVE — the fifth time, and it defeated both layers of
+the fix written for the first four.** A container restart replaced the checkout with an Aug-17 lineage:
+the tree reverted, `/tmp` was wiped so the scratchpad mirror went with it, and **the savepoint script
+itself vanished, because it lived in the tree it was meant to protect** — missing at the one moment it
+mattered. The work came back for exactly one reason: it had been PUSHED. So the tool now has three
+layers, ordered by what each survives and each measured rather than argued — the index (staged,
+`git checkout -- f` restores the INDEX and the work survives; unstaged it restores HEAD and the work is
+gone), a mirror moved from `/tmp` to `$HOME`, and **a commit object built by `git stash create` pushed to
+`refs/heads/savepoint/<branch>`** — off this machine, and therefore the only layer a replaced container
+leaves standing. Proven on this repository by running the exact destruction and recovering every line;
+the namespace is `refs/heads/savepoint/*` and not `refs/wip/*` because the session's git proxy answers
+403 to any ref outside `refs/heads/*`, found by trying it, and a failed push reports as a FAILURE rather
+than printing a success it did not earn. It installs itself to `~/.omerta-savepoint.sh` so the next
+revert cannot take the recovery tool along with the work. **Ground rule #9 keeps the sentence that
+actually saved this session, promoted: commit AND PUSH each fix the moment its mutation passes. A
+savepoint is a safety net; a pushed commit is the floor.**
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and

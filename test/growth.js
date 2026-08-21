@@ -407,12 +407,27 @@ assert(raidNotes.some((n) => n.type === 'raid'), 'raid notified');
 assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='raid'")).rows[0].n) >= 1, 'raid telemetered');
 
 // ── laylow + clean papers ──
-await seedCh(chef.id, 'heat=50, energy=200, jail_until=NULL');
+// Seeded at 80, not 50, and that is the whole point: at heat 50 a −25 cool LANDS on 25, so the drop
+// and the resulting level are the same number and an assertion cannot tell them apart. This route
+// returned the LEVEL in a field named `heat` — which the client renders as a delta, so laying low
+// reported "heat +25" — and the one test covering it was seeded on the single value where that is
+// invisible. 80 → cooled 25, landing on 55: two different numbers, so the fields cannot be swapped
+// again without failing here.
+await seedCh(chef.id, 'heat=80, energy=200, jail_until=NULL');
 r = await call('POST', '/v1/kitchen/laylow', { token: chef.token });
-assert.equal(r.code, 200); assert.equal(r.body.heat, 25, '−25 heat for $5k + 25 energy');
+assert.equal(r.code, 200);
+assert.equal(r.body.cooled, 25, '−25 heat for $5k + 25 energy');
+assert.equal(r.body.heatNow, 55, 'and it must report where the heat LANDED, not what it cost');
+assert.equal(r.body.heat, undefined, '`heat` means a DELTA in a reply — a level must not use that name');
 await pool.query(`UPDATE account_persistent SET omr = omr + 72 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 r = await call('POST', '/v1/kitchen/cleanpapers', { token: chef.token });
-assert.equal(r.code, 200); assert.equal(r.body.heat, 0, 'papers retyped, heat wiped');
+assert.equal(r.code, 200);
+assert.equal(r.body.heatNow, 0, 'papers retyped, heat wiped');
+// It burns the PREMIUM currency and the old reply named neither the spend nor what it bought, so the
+// whole line read "done." — a $OMR burn reported as nothing at all, on a button whose price ("clean
+// papers ($OMR)") appeared on no screen in the game.
+assert.equal(r.body.cooled, 55, 'and it must say how much heat that bought — the 55 lay low left');
+assert.equal(r.body.omr, M4.CLEANPAPERS_OMR, 'and what it cost, so the line can state a price the player never saw');
 
 // ── heist (§5.1): 8h cooldown ──
 await seedCh(chef.id, 'jail_until=NULL, health=100');

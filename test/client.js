@@ -2412,6 +2412,19 @@ const ACTIONS = [
   // Both are real buttons: the Store shelf's pay-in-$OMR control and the Made card.
   ['POST', '/v1/made', null],
   ['POST', '/v1/store/plex/wire_month', null],
+  // THE TWO COOLING VERBS, and the worse of the two is why this sweep stopped hunting silence. The
+  // reply field `heat` means a DELTA — the deal returns what a sale ADDED, and the client renders
+  // any `heat` as "heat +N". LAY LOW returned the resulting LEVEL under that same name, so the
+  // game's primary way DOWN from the Bureau told a player who had just paid $4,500 and 25 energy to
+  // cool off that their heat had gone UP by what was left: "heat +55". Not silence — a confident,
+  // WRONG line, on the button a panicking player presses, and the mute check cannot see it because
+  // it reads as an answer. Its neighbour CLEAN PAPERS said "done." while burning 60 $OMR whose
+  // price appeared on no screen in the game. One field with two meanings, one formatter that could
+  // not tell them apart, and the whole thing invisible because neither route was ever driven.
+  // Seeded here because both refuse below their heat floor, and clean papers must run SECOND — it
+  // wipes to zero, which would starve lay low of anything to cool.
+  ['POST', async () => { await app.pool.query('UPDATE characters SET heat=80 WHERE id=$1', [charId]); return '/v1/kitchen/laylow'; }, null],
+  ['POST', '/v1/kitchen/cleanpapers', null],
   // DECLARING WAR said "done." — the loudest thing a boss can do, in a block where the pact, the
   // treaty and the oathbreak all state their terms in full. Resolved at drive time because the
   // TARGET has to be chosen against live state: the seeded rival is under a sworn pact with the
@@ -3864,6 +3877,45 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
     'and WHAT it bought, off the catalog the server already publishes — a player who has just spent '
     + `earned $OMR should not have to go and look it up. Expected ${grant.wireDays} in the clause after `
     + `the price, got: ${JSON.stringify(pLine)}`);
+}
+// THE COOLING VERBS. The mute check is structurally blind to this one: "heat +55" reads as an
+// answer, so nothing here would have caught the game's primary heat-REDUCTION verb reporting an
+// INCREASE. What is asserted is the property that was false — the line must describe a DROP, and
+// it must cross against the server's own two numbers rather than a literal.
+{
+  const lay = paidBody.get('/v1/kitchen/laylow');
+  const layLine = said.get('/v1/kitchen/laylow') || '';
+  // The precondition proves the row RAN, and is deliberately independent of the field naming below —
+  // asserting the new fields here would make every mutation fail on the precondition instead of on
+  // the assertion that names the class, which is a failure that teaches nothing.
+  assert(lay && lay.cost > 0,
+    `the laylow row must actually run, or every assertion below is vacuous. Got: ${JSON.stringify(lay && lay.cost)}`);
+  assert(lay.cooled > 0 && lay.heatNow !== undefined,
+    'lay low must report the DROP (`cooled`) and where it LANDED (`heatNow`). Reporting the level in '
+    + 'a field named `heat` is what made this line read as an increase — that name means a delta. '
+    + `Got keys: ${JSON.stringify(Object.keys(lay).filter((k) => k !== 'character' && k !== 'events'))}`);
+  assert(!/heat \+|\+\d+ heat/.test(layLine),
+    'LAY LOW READ AS AN INCREASE. `heat` in a reply means a DELTA (what an action ADDED); this route '
+    + 'reported the resulting LEVEL under that name, so the generic formatter rendered the heat left '
+    + `OVER as heat gained. Got: ${JSON.stringify(layLine)}`);
+  assert(layLine.includes(String(lay.cooled)) && layLine.includes(String(lay.heatNow)),
+    'a player who just paid to cool off needs both numbers the server sent — how much came off '
+    + `(${lay.cooled}) and where it landed (${lay.heatNow}). Got: ${JSON.stringify(layLine)}`);
+  assert(layLine.includes(fmtLike(lay.cost)),
+    `…and what it cost (${lay.cost}). Got: ${JSON.stringify(layLine)}`);
+  // Clean papers burns the PREMIUM currency, and its price appeared on no screen in the game — not
+  // the button, not a confirm, not the reply. The reply carries it now, so the line can state it.
+  const cp = paidBody.get('/v1/kitchen/cleanpapers');
+  const cpLine = said.get('/v1/kitchen/cleanpapers') || '';
+  assert(cp && cp.omr > 0 && cp.cooled > 0,
+    `the cleanpapers row must run with real heat to wipe. Got: ${JSON.stringify(cp)}`);
+  assert(cpLine.includes(String(cp.omr)) && cpLine.includes(String(cp.cooled)),
+    `a $OMR burn must name the spend (${cp.omr}) and what it bought (${cp.cooled} heat wiped). `
+    + `Got: ${JSON.stringify(cpLine)}`);
+  // and the terms ride with the price: both buttons were unpriced before this wave.
+  assert(/rules\?\.cooling/.test(html),
+    'the Kitchen buttons must quote the LIVE cooling levers — restating $5,000 or 60 $OMR in the '
+    + 'client is how a price drifts from the till that charges it');
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
