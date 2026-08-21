@@ -1,6 +1,8 @@
 // ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
 // A SIWE-proven wallet's on-chain HISTORY forges the living street's build: the wallet decides the
-// stat SHAPE (an archetype), grants a small banded BONUS (≤ WALLET_FORGE.BONUS_MAX on the
+// stat SHAPE (one of TWELVE archetypes — four history families × three wallet-hashed variants,
+// founder-directed 2026-08-21 — each also schooling its regimen-discipline AFFINITY with banded
+// head-start XP), grants a small banded BONUS (≤ WALLET_FORGE.BONUS_MAX on the
 // archetype's boost stat), and — founder-directed 2026-08-21 ("I want the wallet to decide the
 // budget as well for an extra perk") — a banded BUDGET perk (≤ BUDGET_MAX extra whole-budget
 // points, spread evenly, never re-aimed) — the founder-signed, bounded retirement of "outside
@@ -30,7 +32,8 @@
 // retryable `contention` via deadlockToRetry.
 import crypto from 'node:crypto';
 import { GameError, notify, deadlockToRetry } from './game.js';
-import { WALLET_FORGE, walletBands, forgeShape, forgeBonus, forgeBudgetExtra, rollStats, levelOf } from './rules.js';
+import { WALLET_FORGE, REGIMEN, walletBands, forgeArchetype, forgeBonus, forgeBudgetExtra, rollStats, levelOf, disciplineLvlOf } from './rules.js';
+import { addXp } from './regimen.js';
 
 // ── the feature reader seam (the __setDeliver/__setReader discipline) ──
 // A reader takes a 0x wallet and resolves { ageDays, txCount } — or throws. Tests inject one;
@@ -94,7 +97,7 @@ export async function forgeBoard(pool, accountId) {
     bonusMax: WALLET_FORGE.BONUS_MAX,
     budgetMax: WALLET_FORGE.BUDGET_MAX,  // the budget perk's ceiling (extra whole-budget points)
     archetypes: Object.fromEntries(Object.entries(WALLET_FORGE.ARCHETYPES)
-      .map(([k, a]) => [k, { name: a.name, muscle: a.muscle, cunning: a.cunning, speed: a.speed, boost: a.boost }])),
+      .map(([k, a]) => [k, { name: a.name, muscle: a.muscle, cunning: a.cunning, speed: a.speed, boost: a.boost, affinity: a.affinity }])),
   };
 }
 
@@ -118,7 +121,10 @@ export async function forgeCharacter(pool, accountId) {
   if (features === undefined) throw new GameError('read_failed', "Couldn't read that wallet's history — try again shortly.");
 
   const tiers = walletBands(features);
-  const arche = forgeShape(tiers);                 // null = a fresh empty wallet → a real random roll
+  // twelve archetypes (founder-directed 2026-08-21): the FAMILY is the bands' answer, the VARIANT
+  // a stable hash of the wallet itself — deterministic per wallet, never a roll. null = a fresh
+  // empty wallet → a real random roll.
+  const arche = forgeArchetype(tiers, wallet);
   const bonus = arche ? forgeBonus(tiers) : 0;
   const budgetExtra = arche ? forgeBudgetExtra(tiers) : 0; // the budget perk — extra WHOLE-budget points
 
@@ -167,14 +173,30 @@ export async function forgeCharacter(pool, accountId) {
     }
     await client.query('UPDATE characters SET muscle=$2, cunning=$3, speed=$4, forged=$5 WHERE id=$1',
       [ch.id, stats.muscle, stats.cunning, stats.speed, arche || 'unknown']);
+    // THE AFFINITY (founder-directed 2026-08-21, "add more stats"): each archetype schools its
+    // regimen discipline with banded head-start XP — status/pacing through the regimen's own
+    // audited addXp (XP is not a currency; zero §10.4 surface). Max 5 bands = 200 XP ≈ level 4
+    // against a cap of 25: schooling, never mastery.
+    let affinity = null;
+    if (arche) {
+      const a = WALLET_FORGE.ARCHETYPES[arche];
+      const affXp = WALLET_FORGE.AFFINITY_XP_PER_BAND * (tiers.ageTier + tiers.velTier);
+      if (affXp > 0) {
+        const total = await addXp(client, ch.id, a.affinity, affXp);
+        // the display NAME rides the reply (the F12 rule — a raw discipline key never reaches a player)
+        const dName = REGIMEN.DISCIPLINES.find((d) => d.id === a.affinity)?.name || a.affinity;
+        affinity = { discipline: a.affinity, name: dName, xp: affXp, level: disciplineLvlOf(total) };
+      }
+    }
     await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
       [crypto.randomUUID(), ch.id, 'wallet_forge', roll, outcome]);
-    await notify(client, ch.id, 'forged', { archetype: arche || 'unknown', name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null, bonus, budgetExtra, ...stats });
+    await notify(client, ch.id, 'forged', { archetype: arche || 'unknown', name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null, bonus, budgetExtra, affinity, ...stats });
     await client.query('COMMIT');
     return {
       forged: arche || 'unknown',
       name: arche ? WALLET_FORGE.ARCHETYPES[arche].name : null,
       bonus, budgetExtra, stats,
+      affinity,                                    // { discipline, xp, level } or null
       tiers,                                       // the BANDS only — the raw features never leave
       spentCredit: !free,
     };

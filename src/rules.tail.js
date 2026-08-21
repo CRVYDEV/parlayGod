@@ -429,14 +429,42 @@ export const WALLET_FORGE = {
                           // budget as well"); with BONUS_MAX the total ceiling is 15+3+3 = 21
   AGE_TIERS_DAYS: [365, 1095],   // wallet age bands: 1y, 3y → ageTier 0/1/2
   VELOCITY_TIERS: [20, 200, 1000], // lifetime tx-count bands → velTier 0/1/2/3
+  AFFINITY_XP_PER_BAND: 40, // the affinity discipline's head-start XP per history band (founder-
+                            // directed 2026-08-21: 12 archetypes + more stats) — max 5 bands = 200 XP
+                            // ≈ discipline level 4 against a cap of 25: schooling, never mastery
   // Each archetype is a FIXED shape (the guessability rule: fictional noir names, never the
-  // feature that earned it) — every shape sums to CREATE_STAT_TOTAL (load-guarded below).
+  // feature that earned it) — every shape sums to CREATE_STAT_TOTAL (load-guarded below), and
+  // each carries an AFFINITY: the regimen discipline the forge schools (banded head-start XP —
+  // status/pacing, XP is not a currency). Twelve archetypes in FOUR history families of three;
+  // the family is a pure function of the bands (forgeShape, unchanged), the VARIANT within it a
+  // stable hash of the wallet itself — deterministic per wallet forever, auditable, never a roll.
   ARCHETYPES: {
-    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning' },
-    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed' },
-    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle' },
-    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning' },
+    // family WHEELMAN — very high velocity, whatever the age
+    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed',   affinity: 'handling' },
+    courier:  { name: 'The Night Courier', muscle: 3, cunning: 5, speed: 7, boost: 'speed', affinity: 'stamina' },
+    redline:  { name: 'The Redline Man', muscle: 4, cunning: 3, speed: 8, boost: 'speed',   affinity: 'vigilance' },
+    // family PATIENT — old and quiet
+    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning', affinity: 'composure' },
+    chessman: { name: 'The Chess Player', muscle: 4, cunning: 8, speed: 3, boost: 'cunning', affinity: 'poise' },
+    graybeard:{ name: 'The Graybeard',   muscle: 3, cunning: 8, speed: 4, boost: 'cunning', affinity: 'presence' },
+    // family WORKHORSE — a working wallet
+    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle',  affinity: 'stamina' },
+    dockboss: { name: 'The Dock Boss',   muscle: 7, cunning: 4, speed: 4, boost: 'muscle',  affinity: 'vigilance' },
+    ironhand: { name: 'The Iron Hand',   muscle: 7, cunning: 5, speed: 3, boost: 'muscle',  affinity: 'conditioning' },
+    // family FIXER — a little history
+    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning', affinity: 'presence' },
+    sharp:    { name: 'The Card Sharp',  muscle: 4, cunning: 6, speed: 5, boost: 'cunning', affinity: 'poise' },
+    runner:   { name: 'The Runner',      muscle: 5, cunning: 4, speed: 6, boost: 'speed',   affinity: 'handling' },
   },
+};
+// The four history families (forgeShape's answer) → their three archetype variants each. The
+// original four ids lead their families, so every archetype already stored on a wallet_rolls row
+// or a living street's `forged` column stays a live key — no migration.
+export const FORGE_FAMILIES = {
+  wheelman: ['wheelman', 'courier', 'redline'],
+  patient:  ['patient', 'chessman', 'graybeard'],
+  workhorse:['workhorse', 'dockboss', 'ironhand'],
+  fixer:    ['fixer', 'sharp', 'runner'],
 };
 { // load guard: every archetype's shape must sum to the SAME budget every random roll gets —
   // a shape over the budget is power bought with a wallet, the exact thing depth B bounds at
@@ -478,6 +506,22 @@ export const forgeBonus = ({ ageTier, velTier }) =>
 // when an archetype landed (an unknown wallet earns a plain random roll, never a bigger one).
 export const forgeBudgetExtra = ({ ageTier, velTier }) =>
   Math.max(0, Math.min(WALLET_FORGE.BUDGET_MAX, ageTier + velTier - 1));
+// Tiers + wallet → the ARCHETYPE (founder-directed 2026-08-21: twelve for variety). The FAMILY is
+// still forgeShape's answer — a pure function of the bands, unchanged — and the VARIANT within it
+// is a stable FNV-1a hash of the lowercased wallet: deterministic per wallet forever, auditable
+// after the fact, NEVER a roll (the sell-deterministic/drop-random rule — a wallet cannot re-ask
+// for a different face). Pure, so the suite drives it without a chain.
+const fnv32 = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+};
+export function forgeArchetype(tiers, wallet = '') {
+  const fam = forgeShape(tiers);
+  if (!fam) return null;
+  const c = FORGE_FAMILIES[fam];
+  return c[fnv32(String(wallet).toLowerCase()) % c.length];
+}
 
 // ── M3 helpers (§7.6–7.9, §5.5) ──
 export const gunObjOf=(id)=>GUNS.find(g=>g.id===id)||null;
@@ -4816,7 +4860,7 @@ export const masteryRankOf = (lvl) => { let n = MASTERY.RANKS[0].name; for (cons
 export const masteryLegendRankOf = (xp) => { let n = MASTERY.LEGEND_RANKS[0].name; for (const r of MASTERY.LEGEND_RANKS) if (Number(xp) >= r.at) n = r.name; return n; };
 
 // ── THE REGIMEN (omerta-training-expansion-design.md, founder-directed 2026-07-30) ──
-// Five trainable DISCIPLINES beyond muscle/cunning/speed. Each has EXACTLY ONE named touchpoint
+// Eight trainable DISCIPLINES beyond muscle/cunning/speed. Each has EXACTLY ONE named touchpoint
 // (the skills/decree discipline — a new single-site modifier, never a retune of a signed formula),
 // and training rides the SAME gym cooldown clock as the core stats — breadth, never rate, so the
 // pacing pass's throughput bound holds by construction. XP is not a currency: zero §10.4 surface.
@@ -4827,17 +4871,27 @@ export const REGIMEN = {
   XP_MIN: 8, XP_MAX: 12,   // xp per gym session (rng-audited roll)
   ENERGY: 10,              // same as a core-stat session
   DRILL_XP: 25,            // a claimed trainer drill ≈ 2.5 sessions — drills stay the efficient path
-  // the five disciplines + their one touchpoint each
+  // the disciplines + their one touchpoint each
   DISCIPLINES: [
     { id: 'stamina',      name: 'Roadwork',     desc: 'Every level adds +1 to your MAX energy — more gym, garage and crew work per day.' },
     { id: 'composure',    name: 'Steady Hands', desc: 'Every 2 levels add +1 to your MAX nerve — a deeper pool for the crime loop.' },
     { id: 'conditioning', name: 'Iron Chin',    desc: 'Healing up costs less — 1% off the Doc\'s bill per level (floor 25% off).' },
     { id: 'marksmanship', name: 'The Range',    desc: 'A steadier shot in a DUEL — a small edge on the rated ladder per level.' },
     { id: 'presence',     name: 'Work the Room', desc: 'The city remembers you — +1 to your DAILY Underworld standing budget per level.' },
+    // ── the 2026-08-21 trio (founder-directed: "add more stats to the characters") — each the
+    // established regimen shape: ONE new single-touchpoint modifier, off the audit-locked surfaces.
+    { id: 'handling',  name: 'White Knuckle', desc: 'A steadier hand at speed — a small edge on YOUR score in any street race per level.' },
+    { id: 'poise',     name: 'Cool Head',     desc: 'Laying low costs less — 1% off per level (floor 25% off).' },
+    { id: 'vigilance', name: 'Night Eyes',    desc: 'Your convoys ride harder to ambush — a little extra guard defense per level.' },
   ],
   CONDITIONING_BPS: 100,   // heal ×(1 − bps·lvl/10⁴), floored…
   CONDITIONING_FLOOR: 0.75,
   DUEL_ADD: 0.6,           // marksmanship: + lvl × this to YOUR duel score (ELO self-corrects)
+  HANDLING_ADD: 0.5,       // handling: + (lvl−1) × this to YOUR race score (the DUEL_ADD twin — variance-buried)
+  POISE_BPS: 100,          // laylow ×(1 − bps·(lvl−1)/10⁴), floored… (the Iron Chin twin on the laylow sink)
+  POISE_FLOOR: 0.75,
+  VIGILANCE_DEF: 0.5,      // + (lvl−1) × this to YOUR convoy's stored guard defense at depart (defense-side —
+                           // an ambush is a pure ownership transfer, so no faucet widens; the fortify argument)
   // THE TRAINER DRILLS — each fixture's daily quest trains ITS discipline; Mickey rounds out your weakest
   TRAINERS: { doc: 'conditioning', armorer: 'marksmanship', harbor: 'stamina', madame: 'presence', fixer: 'composure', cornerman: 'lowest' },
   // drill tasks draw ONLY from self-sufficient bumpDaily kinds — every drill is doable alone on day one
@@ -4852,6 +4906,24 @@ export const REGIMEN = {
 };
 export const disciplineLvlOf = (xp) =>
   Math.min(REGIMEN.CAP, Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / REGIMEN.XP_DIVISOR)) + 1);
+{ // load guard for the forge↔regimen seam (here rather than in WALLET_FORGE's own guard because
+  // REGIMEN is defined this far down the file): twelve archetypes, every affinity a REAL regimen
+  // discipline (a typo'd affinity would school XP into a key nothing reads — silent forever), and
+  // FORGE_FAMILIES must cover every archetype exactly once with no phantom members. Fails the
+  // boot, never a player.
+  const ids = new Set(REGIMEN.DISCIPLINES.map((d) => d.id));
+  const arch = Object.keys(WALLET_FORGE.ARCHETYPES);
+  if (arch.length !== 12) throw new Error(`WALLET_FORGE.ARCHETYPES: ${arch.length} archetypes, the founder-directed catalog is 12`);
+  for (const [k, a] of Object.entries(WALLET_FORGE.ARCHETYPES))
+    if (!ids.has(a.affinity)) throw new Error(`WALLET_FORGE.${k}: affinity '${a.affinity}' is not a regimen discipline`);
+  const members = Object.values(FORGE_FAMILIES).flat();
+  if (members.length !== arch.length || new Set(members).size !== members.length)
+    throw new Error('FORGE_FAMILIES must cover every archetype exactly once');
+  for (const m of members)
+    if (!WALLET_FORGE.ARCHETYPES[m]) throw new Error(`FORGE_FAMILIES names '${m}', which is not an archetype`);
+  for (const fam of Object.keys(FORGE_FAMILIES))
+    if (!WALLET_FORGE.ARCHETYPES[fam]) throw new Error(`FORGE_FAMILIES family '${fam}' must itself be an archetype (backward compat: the original ids lead their families)`);
+}
 // THE CAP HELPERS — view, the coach and accrual all read these, so the three sites cannot disagree.
 // disc is the owned.disciplines xp map (or absent — a headless caller gets the base formula).
 // `ladder` is the MADE_LADDER bonus (D8=D) — passed explicitly rather than read off an account here,

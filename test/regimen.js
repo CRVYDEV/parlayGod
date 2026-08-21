@@ -1,10 +1,12 @@
-// THE REGIMEN (omerta-training-expansion-design.md) — five trainable disciplines on the shared gym
+// THE REGIMEN (omerta-training-expansion-design.md) — eight trainable disciplines on the shared gym
 // clock + the fixtures' daily trainer drills. Proves: the board + public catalog, a session pays
 // banded XP + burns energy + arms the SHARED train_at clock (a discipline session blocks a core-stat
 // session and vice versa — breadth never rate, the pacing wall), the gates (bad_discipline / energy /
 // capped / jailed via cooldown), each touchpoint that can be pinned deterministically (stamina →
-// maxEnergy, composure → maxNerve, conditioning → the Doc's bill, presence → the daily standing
-// budget; marksmanship's duel edge is variance-buried and covered by the levers guard instead),
+// maxEnergy, composure → maxNerve, conditioning → the Doc's bill, poise → the laylow sink to the
+// dollar, presence → the daily standing budget; marksmanship's duel edge and handling's race edge
+// are variance-buried and covered by the levers guard instead; vigilance's stored convoy guards are
+// pinned in test/convoy.js where the depart fixture lives),
 // the trainer drills (not_done / claim pays DRILL_XP to the RIGHT discipline / claimed-once /
 // Mickey trains your weakest), DEATH (disciplines + drill claims die with the street), and §10.4
 // (training writes ZERO transactions rows — XP is not a currency). pg-mem, zero infra.
@@ -42,12 +44,12 @@ const al = await mk('Regimen Al');
 // ── the board + the public catalog ──
 let r = await call('GET', '/v1/regimen', { token: al.token });
 assert.equal(r.code, 200, 'the regimen board is readable');
-assert.equal(r.body.disciplines.length, 5, 'five disciplines');
+assert.equal(r.body.disciplines.length, 8, 'eight disciplines (the 2026-08-21 trio joined the original five)');
 assert(r.body.disciplines.every((d) => d.level === 1 && d.xp === 0 && d.cap === REGIMEN.CAP), 'a fresh street is untrained');
 assert.equal(r.body.drills.length, Object.keys(REGIMEN.TRAINERS).length, 'one drill per trainer');
 assert(r.body.drills.every((d) => d.progress === 0 && !d.done && !d.claimed && d.how && d.n >= 1), 'every drill starts undone with a HOW');
 const rules = (await call('GET', '/v1/rules')).body;
-assert.equal(rules.regimen.disciplines.length, 5, 'the catalog is public on /v1/rules');
+assert.equal(rules.regimen.disciplines.length, 8, 'the catalog is public on /v1/rules');
 assert.equal(rules.regimen.drillXp, REGIMEN.DRILL_XP, 'the drill reward is knowable');
 
 // ── a session: banded XP, energy burned, the SHARED clock armed, no ledger row ──
@@ -119,6 +121,18 @@ const gainedOf = async (id) => Number((await pool.query(
   `SELECT gained FROM npc_gain WHERE character_id='${id}' AND npc_id='doc'`)).rows[0]?.gained || 0);
 assert.equal(await gainedOf(roomA.id), UNDERWORLD.STANDING_DAILY_CAP, 'the base day caps at the signed budget');
 assert.equal(await gainedOf(roomB.id), UNDERWORLD.STANDING_DAILY_CAP + 6, 'Work the Room lvl 7 widens the day by +6');
+// poise → the laylow sink, twins compared to the dollar (the Iron Chin shape on the OTHER cash
+// touchpoint — the DISCOUNTED number is the one ledgered, so §10.4 reconciles the smaller figure)
+const coolA = await mk('Hothead Hank');
+const coolB = await mk('Cool Head Cora');
+await seedXp(coolB.id, 'poise', REGIMEN.XP_DIVISOR * 100); // lvl 11 → 10% off
+for (const t of [coolA, coolB]) await seedCh(t.id, 'heat=50, cash=100000, energy=100');
+const layA = (await call('POST', '/v1/kitchen/laylow', { token: coolA.token })).body.cost;
+const layB = (await call('POST', '/v1/kitchen/laylow', { token: coolB.token })).body.cost;
+assert.equal(layB, Math.floor(layA * 0.9), 'Cool Head lvl 11 takes exactly 10% off laying low');
+const layLedger = Number((await pool.query(
+  `SELECT amount FROM transactions WHERE character_id='${coolB.id}' AND reason='laylow'`)).rows[0].amount);
+assert.equal(layLedger, -layB, 'the DISCOUNTED figure is the one ledgered — board, till and §10.4 agree');
 
 // ── the trainer drills: not_done → do the work → claim pays the RIGHT discipline → once ──
 const txDrill = await txCount(); // the heals above ledgered (they're heals) — drills must add nothing
@@ -161,6 +175,9 @@ assert(after.drills.find((d) => d.npc === 'doc').claimed, 'the board shows the c
 // Mickey the Corner tops up your WEAKEST — with composure zeroed and the rest schooled, he picks it
 await seedXp(al.id, 'composure', 0);
 await seedXp(al.id, 'conditioning', 500); await seedXp(al.id, 'marksmanship', 500); await seedXp(al.id, 'presence', 500);
+// …and the 2026-08-21 trio, so composure is the STRICT minimum (a tie resolves by catalog order —
+// guarantee the precondition rather than lean on it)
+await seedXp(al.id, 'handling', 500); await seedXp(al.id, 'poise', 500); await seedXp(al.id, 'vigilance', 500);
 const mick = (await call('GET', '/v1/regimen', { token: al.token })).body.drills.find((d) => d.npc === 'cornerman');
 assert.equal(mick.discipline, 'composure', 'the board shows Mickey targeting the weakest');
 await seedCounters(al.id, { [doc.kind]: doc.n, [mick.kind]: mick.n });
