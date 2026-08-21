@@ -770,7 +770,7 @@ CREATE TABLE IF NOT EXISTS nft_reimports (
   wallet_address TEXT NOT NULL,                     -- the burner (Redeemed.from), checksummed
   token_id TEXT NOT NULL,                           -- the burned tokenId (string — > 2^53 safe)
   amount INT NOT NULL,
-  kind TEXT NOT NULL,                               -- 'car' | 'boat' (gear is one-way, not redeemable)
+  kind TEXT NOT NULL,                               -- 'car' | 'boat' | 'gear' (gear joined §7 2026-08-21; rarity '' for gear)
   catalog_id TEXT NOT NULL,                         -- decoded model_id / boat kind
   rarity TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',           -- 'pending' | 'applied'
@@ -3586,6 +3586,30 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN N
 -- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
+
+-- ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
+-- The once-per-wallet-EVER latch: a wallet's history forges exactly ONE build, whoever links it
+-- later. Stores ONLY the archetype + banded tiers + bonus — never a raw balance, tx count or age
+-- (the anti-precise-kill-EV rule: the band leaves the reader, the feature does not). Keyed by the
+-- LOWERCASED wallet (the SIWE storage case), account-keyed for the record → no character_id, so it
+-- sits outside the death-disposition guard by construction (a forge outlives the street).
+CREATE TABLE IF NOT EXISTS wallet_rolls (
+  wallet     TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  archetype  TEXT NOT NULL,               -- WALLET_FORGE.ARCHETYPES key, or 'unknown' (random roll)
+  age_tier   INT NOT NULL,
+  vel_tier   INT NOT NULL,
+  bonus      INT NOT NULL,
+  -- the budget perk (founder-directed 2026-08-21): extra whole-budget points the history forged.
+  -- Inline is safe: wallet_rolls was born on this same unmerged branch, so no live DB predates
+  -- the column (the drop_allocations.stamped precedent — inline only when the table is new too).
+  budget     INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- The forged archetype on the living street (display + the view's `forged` field). Direct-SQL
+-- (off persistCharacter's positional list → clobber-safe); dies with the street — the heir rolls
+-- or forges their own. characters is an EXISTING table, so an ALTER (the boot-crash lesson).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS forged TEXT;
 
 -- ═══ THE COMMITMENT (NetNet research rec A, 2026-08-21): time-lock tiers on the STAKED balance.
 -- A locked stake counts ×mult toward the MADE_LADDER rungs (STAKE_LOCKS in rules.tail.js) and

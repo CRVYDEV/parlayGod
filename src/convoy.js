@@ -15,7 +15,8 @@ import crypto from 'node:crypto';
 import { postPower } from './roster.js';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused, usd } from './rules.js';
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused, usd,
+  REGIMEN, disciplineLvlOf } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
 
@@ -157,7 +158,12 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   const laneKey = convoyLaneKey(convoy.origin, convoy.destination);
   const heat = await laneHeat(client, ch.id, laneKey, rep.decayMult);
   const defCut = Math.min(NOTORIETY.CONVOY_DEF_CAP, heat * NOTORIETY.CONVOY_DEF_PER);
-  const guards = Math.max(0, Math.round(tier.def + rigArmor - defCut));
+  // THE REGIMEN (the 2026-08-21 trio): Night Eyes (vigilance) — its ONE touchpoint: the shipper's
+  // discipline adds a little guard defense, baked into the STORED guards at depart exactly like the
+  // rig's armor. Defense-side only — an ambush is a pure ownership transfer, so no faucet widens
+  // (the fortify argument); §10.4-neutral by construction.
+  const vigilanceAdd = (disciplineLvlOf(Number(h.owned?.disciplines?.vigilance || 0)) - 1) * REGIMEN.VIGILANCE_DEF;
+  const guards = Math.max(0, Math.round(tier.def + rigArmor + vigilanceAdd - defCut));
   await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, insured=$4, departed_at=now(), arrives_at=$5 WHERE id=$1",
     [convoy.id, guards, h.owned.gangId || null, !!premium, arrivesAt]);
   await heatLane(client, ch.id, laneKey, rep.decayMult, rep.gainMult);

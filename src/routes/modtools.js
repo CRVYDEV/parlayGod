@@ -308,6 +308,10 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // (never an address the caller supplies — see the four walls in chain.js). Mod-gated, so it lands
     // in `mod_actions` like every other mod mutation.
     app.get('/v1/mod/deeds/stranded', { preHandler: modAuth }, async () => Chain.strandedDeeds(pool));
+    // The car/boat/gear twin: pending nft_reimports with the REASON each is waiting (unlinked wallet /
+    // in-game gear copy held / no living street) — all self-resolving states, so this is a read, not a
+    // recovery lever; the sweep retries forever.
+    app.get('/v1/mod/items/stranded', { preHandler: modAuth }, async () => Chain.strandedItems(pool));
     app.post('/v1/mod/deeds/recover', { preHandler: modAuth }, async (req) =>
       Chain.recoverStrandedDeed(pool, { street: req.body?.street, tokenId: req.body?.tokenId }));
     // Ops/manual reconciliation of an on-chain payment (the worker's watcher does this live from

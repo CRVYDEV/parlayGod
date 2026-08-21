@@ -206,11 +206,24 @@ contract GearVaultTest is Test {
         gear.redeem(CAR_BASE, 0);
     }
 
-    function test_gear_is_NOT_redeemable_it_is_one_way() public {
-        // A gear id (< CAR_BASE): rejected BEFORE the burn, so a player can never burn gear for nothing.
+    // GEAR JOINED THE ROUND TRIP (nft-reimport §7, founder-signed 2026-08-21). A gear burn works and
+    // vacates a live-supply slot — but ONE AT A TIME (amount==1), because gear's in-game form is
+    // account-level SET MEMBERSHIP: each Redeemed event must map to exactly one membership change,
+    // or a batch burn collapses N tokens into one membership and silently destroys the rest.
+    function test_gear_redeems_one_at_a_time() public {
+        _arm(7, 5);
+        _mintTo(holder, 7, 2);
+        vm.prank(holder);
+        vm.expectRevert(bytes("GearVault: gear one at a time"));
+        gear.redeem(7, 2);
+        vm.prank(holder);
+        gear.redeem(7, 1);
+        assertEq(gear.balanceOf(holder, 7), 1, "one burned, one still held");
+        assertEq(gear.redeemed(7), 1, "gear burn vacates a live-supply slot");
+        // gearId 0 stays reserved — never mintable, never redeemable.
         vm.prank(holder);
         vm.expectRevert(bytes("GearVault: not redeemable"));
-        gear.redeem(7, 1);
+        gear.redeem(0, 1);
     }
 
     function test_redeem_credit_lets_EXACTLY_one_re_extraction_bypass_the_cap() public {

@@ -138,8 +138,12 @@ and this is the real decision:
 
 An extracted car is an ERC-1155 in your own wallet. Nobody can steal it, win it in a pink-slip race,
 chop it off your corpse or take it in a war — and it **survives your death**, passing down the
-bloodline. In exchange it never races, hauls, melts, fences or earns again. It is a trophy, not iron.
-Use it or own it; you cannot do both, and there is no way back. You must be MADE to take anything
+bloodline. In exchange it never races, hauls, melts, fences or earns again while it stays on-chain.
+The door swings both ways: whoever **holds** the NFT — you, or whoever bought it on a marketplace —
+can **burn it (redeem)** from their wallet, and the real thing comes back into play on *their*
+account, fresh and stock (tune, trim and damage do not make the trip). Gear makes the same round
+trip: burn a gear NFT and the class joins the burner's account — unless they already run the
+in-game copy, in which case the burn waits until that copy extracts or is lost. You must be MADE to take anything
 on-chain (the same gate as a $OMR withdrawal); a free-trial street plays the whole game and extracts
 nothing.
 - You cannot melt, fence, or repair a car that is **listed** on the market or **pledged** as loan collateral.
@@ -1027,7 +1031,17 @@ bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
   can extract.**
 - **Gear withdrawal** (`/gear/:id/withdraw`) — mints your in-game gear as an ERC-1155 NFT (it leaves the game,
   and it becomes safe and tradeable).
-- **Wallet link** — SIWE (`/wallet/challenge`, sign, `/wallet/verify`). **Character mint**
+- **Wallet link** — SIWE (`/wallet/challenge`, sign, `/wallet/verify`).
+- **The Forge** (`GET /v1/forge`, `/character/forge`) — a linked wallet's on-chain HISTORY can forge
+  your build, once per wallet EVER: its age and mileage (never a balance) cast the stats as one of
+  **twelve named archetypes** (four history families, the exact face a stable function of the wallet
+  itself — the same wallet forges the same face forever), plus a small capped bonus on the
+  archetype's strong suit — and a genuinely deep history forges a slightly BIGGER budget (a few
+  extra points spread across the whole build, hard-capped). Each archetype also SCHOOLS its own
+  regimen discipline with a banded head start (a few levels of a 25-level ladder — schooling, never
+  mastery). Free early; past level 5 it costs a paid re-roll credit. A fresh empty wallet earns
+  an ordinary random roll on the standard budget. Note an ordinary paid RE-ROLL later replaces the
+  whole build — bonus and budget perk included — with a fresh standard roll. **Character mint**
   (`/character/mint`) — a one-off ETH fee makes a free-trial character permanent (able to withdraw). The
   price follows a published schedule (five waves, 0.01 ETH at the founding wave, never above 0.05); the
   Store shows the current one. You can also earn a mint credit outright off the mission ladder. Revive

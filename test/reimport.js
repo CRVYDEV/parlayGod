@@ -58,10 +58,13 @@ const boatRar = RARITY.TIERS[1].id; // 'rare'
 const carToken = nftTokenId('car', CAR.id, carRar);
 const boatToken = nftTokenId('boat', BOAT.id, boatRar);
 
-// ── 1. the decode is the exact inverse of nftTokenId, and gear/out-of-range is rejected ──
+// ── 1. the decode is the exact inverse of nftTokenId, and an unknown token is rejected ──
 assert.deepEqual(nftDecode(carToken), { kind: 'car', catalogId: CAR.id, rarity: carRar }, 'car token decodes');
 assert.deepEqual(nftDecode(boatToken), { kind: 'boat', catalogId: BOAT.id, rarity: boatRar }, 'boat token decodes');
-assert.throws(() => nftDecode(7), /not a re-importable/, 'a gear token (< CAR_BASE) is NOT re-importable');
+// GEAR joined the round trip (§7, 2026-08-21): a gear token resolves through the FROZEN map.
+assert.deepEqual(nftDecode(3), { kind: 'gear', catalogId: 'knuckles', rarity: null }, 'a gear token decodes through GEAR_TOKEN_IDS');
+assert.throws(() => nftDecode(0), /not re-importable/, 'token 0 is reserved (fail-closed)');
+assert.throws(() => nftDecode(99999), /no gear class/, 'an unmapped below-CAR_BASE token throws (fail-closed)');
 assert.throws(() => nftDecode(999999999), /no (car|boat)/, 'an out-of-range token throws (fail-closed)');
 
 // ── 2. happy path: a burn from a wallet with a living character re-creates a fresh STOCK instance ──
@@ -85,9 +88,9 @@ const r2 = await reimportItem(pool, { ref: '0xaaa:0', from: walletA.address, tok
 assert.equal(r2.duplicate, true, 'same log ref is a no-op');
 assert.equal(await carCount(A.cid, CAR.id, carRar), 1, 'still exactly one car — no double re-import');
 
-// ── 4. a gear/undecodable token is skipped WITHOUT throwing, and records nothing ──
-const rGear = await reimportItem(pool, { ref: '0xbad:0', from: walletA.address, tokenId: 7, amount: 1 });
-assert.equal(rGear.skipped, true, 'a gear token is skipped (the contract rejects it; the watcher is defensive)');
+// ── 4. an undecodable token is skipped WITHOUT throwing, and records nothing ──
+const rBad = await reimportItem(pool, { ref: '0xbad:0', from: walletA.address, tokenId: 99999, amount: 1 });
+assert.equal(rBad.skipped, true, 'an unmapped token is skipped (fail-closed; the watcher is defensive)');
 assert.equal(Number((await pool.query("SELECT COUNT(*) c FROM nft_reimports WHERE id='0xbad:0'")).rows[0].c), 0, 'no record for an undecodable token');
 
 // ── 5. PENDING → APPLIED: a burn from a wallet with no living character WAITS, then the sweep applies it ──
@@ -108,6 +111,59 @@ assert.equal((await pool.query("SELECT status, applied_character FROM nft_reimpo
 assert.equal(await txCount() - beforeSweep, 0, '§10.4-neutral through the sweep too');
 // sweeping again applies nothing (already applied — the FOR UPDATE re-check)
 assert.equal((await sweepReimports(pool)).applied, 0, 'no re-apply of an already-applied re-import');
+
+// ── 6. GEAR (§7, founder-signed 2026-08-21) — the THREE-CASE rule, account-level ──
+// Gear is account-level SET MEMBERSHIP, so a gear burn needs a linked wallet and NOT a living
+// character. Wallet C links to a bare guest account (no character ever created) to prove it.
+const walletC = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6');
+const { body: { token: tokenC } } = await call('POST', '/v1/auth/guest');
+const chC = await call('POST', '/v1/wallet/challenge', { token: tokenC });
+const sigC = await walletC.signMessage({ message: chC.body.message });
+assert.equal((await call('POST', '/v1/wallet/verify', { token: tokenC, body: { address: walletC.address, signature: sigC } })).code, 200, 'C links with NO character');
+const acctC = (await pool.query('SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [walletC.address])).rows[0].account_id;
+
+// CASE 1 — no row: the burn lands the class on the ACCOUNT, live (minted_onchain=false), with no
+// living character anywhere (a car would WAIT here; gear must not).
+const gBefore = await txCount();
+const g1 = await reimportItem(pool, { ref: '0xgear:1', from: walletC.address, tokenId: 4, amount: 1 }); // dice
+assert.equal(g1.applied, true, 'case 1: a gear burn applies with NO living character (account-level)');
+let row = (await pool.query('SELECT minted_onchain FROM account_gear WHERE account_id=$1 AND gear_id=$2', [acctC, 'dice'])).rows[0];
+assert.equal(row.minted_onchain, false, 'case 1: the class joined the account, live in-game');
+assert.equal((await pool.query("SELECT applied_character FROM nft_reimports WHERE id='0xgear:1'")).rows[0].applied_character, null, 'gear attaches to the ACCOUNT — applied_character stays NULL');
+
+// CASE 2 — the burner's OWN row is extracted: the burn un-flags it (their token came home), never
+// a second row (the PK is the membership).
+await pool.query('INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ($1,$2,true)', [acctC, 'knuckles']);
+const g2 = await reimportItem(pool, { ref: '0xgear:2', from: walletC.address, tokenId: 3, amount: 1 }); // knuckles
+assert.equal(g2.applied, true, 'case 2: applied');
+row = (await pool.query('SELECT minted_onchain FROM account_gear WHERE account_id=$1 AND gear_id=$2', [acctC, 'knuckles'])).rows[0];
+assert.equal(row.minted_onchain, false, 'case 2: the extracted row is un-flagged — the token came home');
+assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM account_gear WHERE account_id=$1 AND gear_id=$2', [acctC, 'knuckles'])).rows[0].c), 1, 'case 2: still exactly ONE membership row');
+
+// CASE 3 — the burner already RUNS the in-game copy: the burn WAITS (pending) — it is not lost, and
+// the sweep applies it the moment the copy extracts (simulated by flipping the flag).
+const g3 = await reimportItem(pool, { ref: '0xgear:3', from: walletC.address, tokenId: 4, amount: 1 }); // dice again
+assert.equal(g3.pending, true, 'case 3: an in-game copy held → the burn waits');
+assert.equal((await pool.query("SELECT status FROM nft_reimports WHERE id='0xgear:3'")).rows[0].status, 'pending', 'case 3: recorded pending');
+assert.equal((await sweepReimports(pool)).applied, 0, 'case 3: the sweep leaves it pending while the copy is held');
+await pool.query('UPDATE account_gear SET minted_onchain=true WHERE account_id=$1 AND gear_id=$2', [acctC, 'dice']); // they extract it
+assert.equal((await sweepReimports(pool)).applied, 1, 'case 3: the sweep applies the waiting burn once the copy extracts');
+row = (await pool.query('SELECT minted_onchain FROM account_gear WHERE account_id=$1 AND gear_id=$2', [acctC, 'dice'])).rows[0];
+assert.equal(row.minted_onchain, false, 'case 3: the waiting burn landed — the class is live again');
+assert.equal(await txCount() - gBefore, 0, '§10.4-NEUTRAL: the whole gear flow writes ZERO ledger rows (set membership is ownership, not currency)');
+
+// ── 7. the operator's read: pending burns NAME their reason (GET /v1/mod/items/stranded) ──
+const { strandedItems } = await import('../src/chain.js');
+const walletD = privateKeyToAccount('0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a');
+await reimportItem(pool, { ref: '0xstr:1', from: walletD.address, tokenId: carToken, amount: 1 }); // unlinked → pending
+await pool.query('UPDATE account_gear SET minted_onchain=false WHERE account_id=$1 AND gear_id=$2', [acctC, 'dice']);
+await reimportItem(pool, { ref: '0xstr:2', from: walletC.address, tokenId: 4, amount: 1 }); // C holds dice in-game → pending
+const strand = await strandedItems(pool);
+const s1 = strand.pending.find((p) => p.ref === '0xstr:1');
+const s2 = strand.pending.find((p) => p.ref === '0xstr:2');
+assert.match(s1.reason, /wallet not linked/, 'an unlinked burner reads WHY it waits');
+assert.match(s2.reason, /in-game copy held/, 'a held gear copy reads WHY it waits (and that it self-resolves)');
+assert.equal(s2.rarity, null, 'gear surfaces null rarity, never the storage sentinel');
 
 console.log('reimport.js OK');
 await app.close?.();

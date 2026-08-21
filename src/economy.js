@@ -622,6 +622,9 @@ export async function mintGear(ch, gearId, client, h) {
   const g = gearOf(gearId);
   if (!g) throw new GameError('bad_gear', 'No such gear.');
   if (h.owned.gear.includes(gearId)) throw new GameError('owned', 'You already hold that piece.');
+  // an EXTRACTED piece no longer boosts anything, but the account_gear row still holds the PK slot —
+  // an INSERT here would 23505. And the honest message is not "you already hold it": it left play.
+  if ((h.owned.gearOnchain || []).includes(gearId)) throw new GameError('extracted', 'You took that piece on-chain — it left play, and the slot went with it.');
   if (Number(h.acct.omr) < g.price) throw new GameError('omr', `That mints for ${g.price} $OMR.`);
   h.acct.omr = Number(h.acct.omr) - g.price;
   await client.query('INSERT INTO account_gear (account_id, gear_id) VALUES ($1,$2)', [h.accountId, gearId]);

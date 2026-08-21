@@ -16016,3 +16016,222 @@ does not accrue, so the toast is pinned EXACTLY against the ledger figure it was
 mutation-verified: floor→round in the response fails by name at 1234561-vs-1234560), and the
 cross-surface half takes the wave-36 shape (exact lower edge, an upper bound computed from the LIVE
 `BANK_RATE`/`BANK_PERIOD_MS` levers over a 30s gap, never a hardcoded tolerance).
+
+**THE ROUND TRIP TOLD TRUE + EXTRACTED GEAR LEAVES PLAY + two founder designs (founder-directed
+2026-08-21: NFT marketplace round-trip + wallet-rolled stats).** The founder asked for two changes,
+and the survey found the first MOSTLY BUILT and mis-described: cars, boats and Street Deeds already
+do the full loop (buy the NFT anywhere → the HOLDER burns `redeem()` → the watcher lands it on the
+**burner's** linked account — secondary buyer included; `test/reimport.js` proves it), while four
+surfaces still said **"there is no way back"** — the Collection card AND its confirm dialog, both
+codices, and `requestItemWithdraw`'s own comment ("no un-extract route, exactly as there is none for
+gear"). All four corrected in lockstep (the stale-promise class — a player deciding whether to
+extract was reading a term that stopped being true when Option A shipped). **The survey also found a
+LIVE BUG, and it is the prerequisite for everything else: extracted gear never left play.**
+`loadOwned`'s gear leg had no `minted_onchain` filter, so an extracted piece was loot-immune AND
+still boosting `effStat` at every till — extraction was strictly free upside, contradicting the
+RARITY tradeoff the codices state, and any future gear re-import would have double-counted a buyer's
+gear. Fixed at the ONE filter (the owned.cars/nftCars pattern): `owned.gear` is in-play only,
+`owned.gearOnchain` carries the extracted set — which two consumers genuinely need, because the
+`account_gear` row still holds the PK: `mintGear` refuses a re-mint HONESTLY (`extracted` — "it left
+play", never "you already hold it", which would be a lie) instead of 23505ing, and the kill-loot
+dedupe includes it (without that, a killer who had extracted a class could "loot" it again → PK
+collision → contention → **the whole KILL rolls back**). Three mutations, each caught at its own
+named assertion (the filter reverted → "EXTRACTED gear boosts NOTHING"; the gate dropped → the
+honest-refusal assertion; killerHas narrowed → "the kill lands — never a PK collision").
+**The designs:** `omerta-nft-reimport-design.md` §7 specs GEAR joining the round trip — the one
+class that literally "applies to the character" — with the three-case rule resolving §0's
+set-membership ambiguity (no row → INSERT; own row extracted → un-flag, their token came home;
+in-game copy held → wait pending, the deed's already-hold-a-street rule), the FREEZE-the-gear-id-map
+prerequisite (positional `gearNumId` becomes load-bearing in both directions), and the founder call
+stated plainly: §0's pay-for-power pivot was signed for PROPERTY, gear is the STAT layer — same
+decision, materially larger, sign before build. And `omerta-wallet-forged-stats-design.md` expands
+the founder's wallet-rolled-stats idea on the one insight that makes it shippable: **the wallet
+decides the SHAPE, never the TOTAL** — all shapes sum to `CREATE_STAT_TOTAL`, so it breaks neither
+total-conservation nor "outside wealth must not buy power," is Sybil-neutral by construction (a
+farmed wallet gains zero power; the once-per-wallet latch + the reroll-credit price kill
+wallet-shopping), reads features by cost-to-fake (age unfakeable, gas costly, balances only at an
+unannounced block), maps them to fictional noir ARCHETYPES ("born The Patient Man" — the guessability
+rule), stores no raw holding (the anti-precise-kill-EV rule), and puts the three depths up as §6
+founder picks (A shape-only recommended / B banded bonus points, a wall-retirement / C cosmetic).
+Suite green + three mutation kills + real-Postgres gates; SPEC's doc row moved with the new doc.
+**And the drop's own comment broke a guard, which is the better half of the record:** the two-line
+comment correction in `chain.js` shifted every line below it, and THE CONNECTION-SHARING LEDGER's
+viem waivers were keyed `src/chain.js:1533` — so the build failed on an edit that changed nothing,
+naming two RPC readers as pg offenders. **A line-keyed waiver rots on any edit above it** (the
+preflight-restatement class, inside a guard). Re-keyed on FILE + a content MARK inside the call's own
+argument (`functionName: 'PERIOD'`), with the stale-waiver assert its sibling ledgers already carry —
+a mark that stops matching now fails loudly instead of leaving a future pg site quietly waived. Both
+directions mutation-verified by name (a dropped waiver names the real site; a bogus one trips the
+stale assert).
+
+**GEAR JOINS THE ROUND TRIP (founder-signed 2026-08-21: "Gear joins the roundtrip") — BUILT**
+(`src/rules.tail.js` `GEAR_TOKEN_IDS`/`gearIdOfToken`, `src/chain.js` gearNumId/applyReimport/
+strandedItems, `omerta-contracts/src/GearVault.sol` redeem, `GET /v1/mod/items/stranded`,
+`test/reimport.js`; design `omerta-nft-reimport-design.md` §7 — forge **306/306**). The one class
+with no road back now makes the full marketplace round trip, and the §0 pay-for-power pivot is
+extended to the STAT layer with the founder's own signature on it. **The prerequisite landed first,
+exactly as the design ordered it: the gear token-id map is FROZEN.** `gearNumId` was a positional
+`MARKET.findIndex + 1` — three audits flagged that a MARKET reorder would silently re-point every
+Safe-set supply cap and every held token — and re-import makes those ids load-bearing in BOTH
+directions, so `GEAR_TOKEN_IDS` (rules.tail.js, the hand-written half no extractor can touch) is
+today's order captured as an append-only map, LOAD-GUARDED against the live catalog on membership
+(never position — position independence is the point): a re-extract that adds a class without a
+frozen id refuses to boot everywhere, and a reorder is now harmless. `nftDecode` gains the gear
+inverse (rarity null, fail-closed through `gearIdOfToken`). **The contract change is one clause with
+one rule in it**: `GearVault.redeem` accepts gear, ONE AT A TIME (`amount == 1`) — gear's in-game
+form is account-level SET MEMBERSHIP, so each `Redeemed` event must map to exactly one membership
+change or a batch burn collapses N tokens into one membership and silently destroys the rest;
+cars/boats still batch, tokenId 0 stays reserved. Into the pre-mainnet audit batch. **The three-case
+rule resolves §0's set-membership ambiguity in `applyReimport`**, and gear deliberately branches
+BEFORE the living-character requirement (a linked wallet suffices — gear survives death, so a burner
+with a dead street or no street at all still lands it, proven in the suite with a character-less
+account): (1) no row → INSERT live; (2) the burner's OWN row extracted → un-flag, their token came
+home, never a second row (the PK is the membership); (3) the in-game copy held → the burn WAITS
+pending (the deed's already-hold-a-street rule — not lost, applied by the sweep the moment the copy
+extracts or is lost). The `nft_reimports.rarity` column stores `''` for gear (NOT NULL on live DBs —
+never an ALTER for a sentinel; readers surface null). **`GET /v1/mod/items/stranded`** is the
+strandedDeeds twin with the community-keeper lesson applied: every pending burn NAMES its reason
+(wallet not linked / in-game copy held / no living street) — all self-resolving, so it is a read,
+not a recovery lever. Copy moved in lockstep (both codices' "gear is one-way and stays a trophy" —
+written EARLIER THE SAME DAY — replaced with the round-trip truth; the schema comment; chain.js's
+own §7-era comments), and the signature is recorded in SIGN-OFF + the design doc same-commit (the
+D13/D15 rule). Three mutations each killed at a named assertion (the case-3 wait removed; case 2
+treated as a wait; the decode's gear branch dropped); the two new Foundry tests pin the
+one-at-a-time rule and the freed live-supply slot a burn vacates. **The levers register caught my
+own SIGN-OFF prose twice** — "the STAT layer" and "WALLET-FORGED STATS" both read as lever-leaf
+tokens (the SOLDIERS.LAST class, third occurrence) — lowercased rather than waived.
+
+**THE WALLET FORGE — depth B, the ledger-born build (founder-signed 2026-08-21: "B Wallets also
+grant bonus points based on history/usage") — BUILT** (`src/walletforge.js` — the 156th src module,
+`test/walletforge.js` — the 113th suite; the `WALLET_FORGE` rules-tail block + `walletBands`/
+`forgeShape`/`forgeBonus`; `wallet_rolls` — the 240th table + `characters.forged` (ALTER-added — the
+boot-crash lesson); `GET /v1/forge` + `POST /v1/character/forge`; THE FORGE card on Going Legit + the
+sheet's forged-archetype line + a `forged` wire template + a describe() branch; BALANCE.md § THE
+LEDGER-BORN; SIGN-OFF § THE 2026-08-21 PAIR flipped to BUILT in the same commit — the D13/D15 rule).
+A SIWE-proven wallet's on-chain HISTORY forges the living build: the wallet decides the stat SHAPE
+(four fictional-noir ARCHETYPES — the guessability rule — each load-guarded to sum exactly
+`CREATE_STAT_TOTAL`, so the wallet never buys the budget) and grants a banded BONUS of at most
+`WALLET_FORGE.BONUS_MAX` (3) on the archetype's strong suit — **the founder-signed, bounded
+retirement of "outside wealth must not buy power" ON THE STAT LAYER ONLY**, the §4.3-retirement
+shape: a small reachable ceiling (+20% of the 15-point base, once, ever; the gym out-trains it in a
+day), never a curve. **The walls, each mutation-verified by name:** ONCE PER WALLET, EVER
+(`wallet_rolls`, lowercased-wallet PK — SIWE uniqueness means a wallet MOVES between accounts, and
+the latch is exactly what makes wallet-shopping buy nothing; the in-txn SELECT is the check and the
+PK the backstop, and the mutation that matters is `ON CONFLICT DO NOTHING`, which pg-mem reports as
+success — the recordReckoning lesson, hit at the FIRSTS and headed off here); only the BANDS are
+stored, never a raw age/count/balance (the anti-precise-kill-EV rule on a permanent table — the
+suite asserts no raw-feature column exists on the latch); features chosen by COST-TO-FAKE (age is
+unfakeable after the fact, the nonce costs gas per unit; balances are deliberately never read — a
+balance is borrowable the block before the call), so a farmed fresh wallet maps to `unknown` and
+earns an honest RANDOM roll with zero bonus (a real rng_audit roll; a deterministic archetype audits
+roll 0 `(deterministic)`); FAIL-CLOSED (no reader refuses `chain_unconfigured`, a throwing reader
+refuses `read_failed` — never a guessed history), with the RPC read OUTSIDE the transaction (the
+bankPosition/quoteBond pool-exhaustion lesson) and the production viem reader carrying the
+wrong-chain guard + a binary-search first-tx age (~log2(head) nonce reads); free at/below
+`FREE_LVL` (5), above it one paid re-roll credit (the fees.js rail — an established street
+re-forging is a re-roll with a pedigree, priced the same); and **a later paid RE-ROLL replaces the
+forge whole** — `rerollCharacter` now clears `forged` alongside the stats, because a sheet claiming
+"forged: The Patient Man" over a fresh random build is the stale-promise class, and the codex line
+that states the term is only honest because the code enforces it (mutation: drop `forged=NULL` →
+fails by name). §10.4: ZERO surface — the whole flow (three forges + every refusal + the re-roll)
+writes NOT ONE `transactions` row, test-pinned, and the budget law is pinned against the LIVE
+constants (`total == CREATE_STAT_TOTAL + bonus`, `bonus ≤ BONUS_MAX`) — never literals, so a retune
+moves the test with it. Lock order is `rerollCharacter`'s verbatim (character FOR UPDATE → account
+FOR UPDATE, the canonical order). The view gained `forged` + `forgedName` (the display name rides
+the server — the F12 raw-key rule; the notify payload carries it too so the wire never prints
+`patient` at a player), and `statTotal`'s "fixed budget" comment was corrected — the total is no
+longer a constant across streets, which is the one visible cost of depth B and exactly what the
+sign-off bought. All `WALLET_FORGE.*` numbers are founder sign-off levers (pinned whole — the
+ARCHETYPES map as a parent-object pin, the bracket-accessed-leaves rule; BALANCE.md § THE
+LEDGER-BORN is the record, `BONUS_MAX: 0` reverts depth B to shape-only depth A). Five mutations,
+five distinct named kills (the latch neutered; the bonus landing double → the budget law; the bonus
+formula drifting; the fail-open reader; the re-roll keeping the stale mark). Codices synced in the
+same commit (docs/WIKI.md + public/wiki.html — The Forge's terms incl. the re-roll-replaces rule).
+
+**THE BUDGET PERK — the wallet decides the budget too (founder-directed 2026-08-21: "I want the
+wallet to decide the budget as well for an extra perk") — BUILT** (`src/rules.tail.js`
+`WALLET_FORGE.BUDGET_MAX` (3) + `forgeBudgetExtra`, `src/walletforge.js`, `schema.sql`
+`wallet_rolls.budget`, `test/walletforge.js`; BALANCE.md § THE LEDGER-BORN + SIGN-OFF § THE
+2026-08-21 PAIR row 3, recorded same-commit — the D13/D15 rule). The forge's third grant, on the
+same banded machinery: `forgeBudgetExtra = max(0, min(BUDGET_MAX, ageTier + velTier − 1))` — every
+band past the FIRST adds a point to the WHOLE stat budget, so a fresh-but-real wallet still forges
+the base 15 and only genuine depth (age AND mileage together) forges a bigger build. **The perk
+WIDENS, the bonus RE-AIMS** — the extra points spread deterministically round-robin over
+muscle/cunning/speed BEFORE the boost bonus lands, so the wallet can never stack the whole grant
+onto one stat (mutation-verified: collapsing the spread onto the boost stat fails by name at the
+exact-stats assertion; dropping the cap fails at the pure boundary, 4 vs 3). Total ceiling
+15+3+3 = **21 (+40%)**, once per wallet EVER (the same latch — the perk is stored on `wallet_rolls`
+as `budget`, a band, never a raw feature; the column is INLINE because the table was born on this
+same unmerged branch — the drop_allocations.stamped precedent, commented at the site). An unknown
+wallet still rolls exactly `CREATE_STAT_TOTAL`; a paid re-roll still replaces the whole build,
+perk included (the existing precondition assert now proves the forged street genuinely carried a
+bigger build before the reset, or the reset proves nothing). The budget LAW is now
+`total == CREATE_STAT_TOTAL + budgetExtra + bonus`, pinned against the live constants; the reply,
+notify, board (`budgetMax`), THE FORGE card, describe() and the wire template all carry it — and
+every "same fixed budget every roll gets" claim (rules block, card copy, both codices, the
+shape-law comment) moved in the same commit, since depth B+budget makes that sentence false (the
+stale-promise class). §10.4 still ZERO (the flow writes not one `transactions` row — the existing
+pin covers the new path). `WALLET_FORGE.BUDGET_MAX` is a founder sign-off lever (pinned;
+`BUDGET_MAX: 0` reverts to the boost-only depth B).
+
+**THE TWELVE + THE TRIO — 12 archetypes and three new stats (founder-directed 2026-08-21: "Can we
+create a total of 12 archetypes for variety and add more stats to the characters") — BUILT**
+(`src/rules.tail.js` `WALLET_FORGE.ARCHETYPES` 4→12 + `FORGE_FAMILIES` + `forgeArchetype` +
+`REGIMEN` 5→8 disciplines + `HANDLING_ADD`/`POISE_BPS`/`POISE_FLOOR`/`VIGILANCE_DEF` +
+`AFFINITY_XP_PER_BAND`; `src/walletforge.js`, `src/races.js`, `src/kitchen.js`, `src/convoy.js`;
+`test/walletforge.js`/`test/regimen.js`/`test/convoy.js`; BALANCE.md § THE LEDGER-BORN + SIGN-OFF §
+THE 2026-08-21 PAIR row 4, recorded same-commit — the D13/D15 rule). **THE TWELVE:** the bands
+cannot honestly yield twelve distinct answers (eleven cells), so the catalog is four history
+FAMILIES — `forgeShape` byte-unchanged — × three VARIANTS each, the variant picked by
+`forgeArchetype(tiers, wallet)`: a stable FNV-1a hash of the LOWERCASED wallet, so the same wallet
+forges the same face forever (deterministic, auditable, NEVER a roll — the sell-deterministic rule;
+the rng_audit outcome stays roll-0 `(deterministic)`), and the original four ids LEAD their
+families so every stored `wallet_rolls.archetype`/`characters.forged` value stays a live key — no
+migration. Every shape still sums `CREATE_STAT_TOTAL` (the load guard now also demands exactly 12,
+valid affinities, and family coverage exactly-once — placed AFTER the REGIMEN const, which is
+defined far below WALLET_FORGE's own guard). **THE TRIO ("more stats"):** built as the REGIMEN — the
+codebase's sanctioned mechanism for new trainable stats (one single-touchpoint modifier each, off
+the audit-locked surfaces, shared gym clock, XP is not a currency): **White Knuckle** (handling — +
+(lvl−1)×0.5 on YOUR race score at all three sites, symmetric in PvP via each side's own owned
+handle; variance-buried → the levers pin is its guard, the marksmanship precedent), **Cool Head**
+(poise — the laylow sink ×(1−1%·(lvl−1)) floored 0.75, the Iron Chin shape; the DISCOUNTED figure is
+the one ledgered, till-tested to the dollar with the ledger row asserted), and **Night Eyes**
+(vigilance — + (lvl−1)×0.5 baked into the STORED convoy guards at depart beside the rig armor;
+defense-side only — an ambush is an ownership transfer, so no faucet widens). The board, the
+trainer-drill picker and the client drawer all iterate the catalog GENERICALLY, so the three joined
+every surface with zero new rendering code. **THE AFFINITY** ties the halves together: each
+archetype names a regimen discipline, and the forge schools it with `AFFINITY_XP_PER_BAND` (40) ×
+(ageTier+velTier) head-start XP through the regimen's own `addXp` rail (walletforge → regimen is
+acyclic) — max 5 bands = 200 XP ≈ level 4 of 25, schooling never mastery; the reply/notify carry
+`affinity {discipline, name, xp, level}` with the display NAME server-side (the F12 raw-key rule),
+and an unknown wallet schools nothing. §10.4: ZERO new surface (the forge still writes not one
+`transactions` row — the existing pin covers the affinity path; poise DISCOUNTS an existing sink;
+vigilance is defense-side). Six lever pins added + the ARCHETYPES whole-map pin replaced with the
+12-map + a FORGE_FAMILIES pin (register 716). **Four mutations, each caught at its own named
+assertion** (the affinity grant dropped → the character_disciplines DB read, NaN vs 120; the
+variant collapsed to `candidates[0]` → the two-wallets-differ variety assertion; poise off the till
+→ 5000 vs 4500 to the dollar; vigilance off the stored guards → 35 vs 40 exact from the DB). The
+integration pins use the STABLE literal variants (`graybeard`/`ironhand` — the FNV answer for those
+fixture wallets is math, not state) plus family-membership assertions, so a variant drift fails
+loudly without the test restating the function under test. Codices synced in the same commit (both
+Forge passages: twelve faces, the stable-function rule, the affinity schooling).
+
+**THE GUARD'S OWN LESSON, IN A THIRD COSTUME — a figure restated from a mid-merge artifact
+(2026-08-21).** Merging `origin/main` into the forge branch conflicted in five files, and the docs
+guard was run while the merge was still UNRESOLVED. `git ls-files --cached` lists a CONFLICTED path
+once per stage (base/ours/theirs), so the four conflicted markdown files counted THREE TIMES EACH:
+the guard reported **218** where the repository holds **210**, and the number looked authoritative
+enough that SPEC.md was restated to it — overwriting an earlier INDEPENDENT `find` measurement that
+had said 210 all along and was right. CI then failed on exactly that figure, which is the guard
+working: the pg-mem job read 210 from a clean checkout while every local run agreed with itself at
+218. **This is the third time this one file has been bitten by the same class** — a claim that is
+true in one environment and false in another — after the vendored-OpenZeppelin README (which broke
+CI for ten commits) and the untracked-new-doc case, both recorded in its own header. The fix is a
+`new Set`: a file is one file in every state of the index, merge in progress or not. Reproduced
+before fixing and verified after, in a throwaway clone driven into the real conflicted state
+(`raw 218 / deduped 210`, over-counting by exactly the four conflicted files × 2 extra stages) —
+and the reproduction needed the real main SHA, because a clone of a local repo carries that repo's
+STALE `origin/main` ref and the merge is a silent no-op that reads exactly like "the bug does not
+reproduce". **The rule earned twice over: a guard that asserts a number about "the project" must ask
+git what the project is AND must not believe the index mid-operation — and a figure measured once
+independently should not be overwritten by a tool's reading without asking why they disagree.**
