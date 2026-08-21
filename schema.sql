@@ -1087,6 +1087,15 @@ CREATE TABLE IF NOT EXISTS den_volume (
   distributed NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
+-- THE VIG POT (NetNet rec C, 2026-08-21): a progressive jackpot RESERVED out of realized den
+-- profit — a bps of each PvE stake accrues here (profit-capped, the rakeback discipline) and an
+-- exact Numbers hit takes JACKPOT_WIN_BPS of it, the rest reseeding. The pot is a RESERVATION on
+-- the house book, not a cash bucket: money stays inside `profit` until a win pays it out as a
+-- ledgered casino:win:jackpot faucet (which rides the den-book casino:win:% LIKE pattern, so the
+-- §10.4 den identities hold with zero invariant changes). denAvailable subtracts it, so street
+-- cuts and rakeback can never tip out money the pot has already claimed.
+-- ALTER not inline: den_volume EXISTS on live databases (the 2026-08-06 boot-crash lesson).
+ALTER TABLE den_volume ADD COLUMN IF NOT EXISTS jackpot NUMERIC NOT NULL DEFAULT 0;
 
 -- Den step three: BLACKJACK — a stateful PvE hand (one live hand per street at a time). The bet is
 -- taken (and profit-booked) at deal; the hand persists across hit/stand/double calls (each its own
@@ -1228,6 +1237,11 @@ CREATE TABLE IF NOT EXISTS loans (
   collateral_car TEXT,                              -- step 2: the pledged car id once taken (NULL = none); seized to the lender on default
   for_sale NUMERIC                                  -- step 3: the paper market — the current lender's ASK price on this active loan (NULL = not for sale)
 );
+-- Drop 5 (B — $OMR-collateralized loans): the lender's $OMR demand on an OPEN row; the ESCROWED
+-- pledge itself once ACTIVE (invariants sums it over status='active' as a §10.4 $OMR bucket +
+-- the `loan omr pledge escrow` check). An ALTER, never inline — `loans` is a live table and a
+-- CREATE TABLE IF NOT EXISTS is a no-op on one (the 2026-08-06 boot-outage class).
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS collateral_omr NUMERIC NOT NULL DEFAULT 0;
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a
 -- shared cash reservoir the whole player base grinds down together (positive-sum co-op); it
@@ -3572,6 +3586,27 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN N
 -- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
+
+-- ═══ THE COMMITMENT (NetNet research rec A, 2026-08-21): time-lock tiers on the STAKED balance.
+-- A locked stake counts ×mult toward the MADE_LADDER rungs (STAKE_LOCKS in rules.tail.js) and
+-- refuses to unstake until the window passes. DELIBERATELY NOT a loot shield: whack:loot's
+-- committed-rate leg debits `staked` directly and never consults these columns, so a locked stake
+-- is looted exactly like an unlocked one — the retired "staked is safe" harbour must not come back
+-- through a lock (test/made.js pins it). Account-level → survives death (the bloodline keeps its
+-- word). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson) — and
+-- both are OFF persistAccount's positional list (written by direct SQL under the held account lock).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_until TIMESTAMPTZ;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS stake_lock_mult NUMERIC NOT NULL DEFAULT 1;
+
+-- ═══ THE FAIR DRAW (NetNet research rec F, 2026-08-21): the worker-stamped commitment record for
+-- the daily seed draw (src/fairness.js). Day-keyed and account-agnostic — no character_id, so it is
+-- outside the death-disposition guard by construction and holds no value (§10.4-zero). A NEW table,
+-- so CREATE TABLE IF NOT EXISTS is live-DB-safe (only new COLUMNS on existing tables need ALTERs).
+CREATE TABLE IF NOT EXISTS fair_commitments (
+  day INT PRIMARY KEY,
+  commitment TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- THE SCHEMA STAMP (bulletproof audit, Schema Versioning): one row recording which BUILD last applied
 -- this schema — makes "which schema is prod on?" answerable during an incident, and lets an OLD build

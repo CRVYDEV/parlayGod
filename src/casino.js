@@ -1,5 +1,8 @@
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile (design: omerta-gambling-den-design.md).
-// HARD RULES: cash only, never $OMR (the hard line); every roll server-side + rng_audit'd
+// Every game shipped to date is cash-denominated — no route here touches $OMR. (The old "cash
+// only, never $OMR" hard line was RETIRED by the founder 2026-08-21; a $OMR game is designable
+// now, but until one ships the "$OMR untouched" test pins describe the live product.)
+// HARD RULES that stand: every roll server-side + rng_audit'd
 // (ground rule #3); every stake a §10.4 sink (casino:bet:<game>), every payout a faucet
 // (casino:win:<game>), both with character_id so the per-character cash check reconciles. The
 // street's 1% cut (→ the buyback/yield loop) and the fronts' rakeback are paid ONLY from the
@@ -8,6 +11,7 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
+import { fairSummary } from './fairness.js';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
 import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized, usd } from './rules.js';
 
@@ -52,19 +56,31 @@ async function openLiability(client) {
 }
 // distributable house profit right now (locks den_volume — serializes concurrent tip-outs)
 export async function denAvailable(client) {
-  const dv = (await client.query('SELECT profit, distributed FROM den_volume WHERE id=1 FOR UPDATE')).rows[0];
-  return Math.floor(Number(dv.profit) - Number(dv.distributed) - (await openLiability(client)));
+  const dv = (await client.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1 FOR UPDATE')).rows[0];
+  // THE VIG POT is a standing RESERVATION on the book (money the pot has claimed but not yet paid),
+  // so it is held back exactly like an open ticket's exposure — a street cut or rakeback can never
+  // tip out the jackpot's money.
+  return Math.floor(Number(dv.profit) - Number(dv.distributed) - Number(dv.jackpot) - (await openLiability(client)));
 }
 // rakeback bookkeeping hook for business.js — the payer marks what it tipped out
 export async function denDistribute(client, amt) {
   if (amt > 0) await client.query('UPDATE den_volume SET distributed = distributed + $1 WHERE id=1', [amt]);
 }
-async function takeHouse(client, h, tax) { // PvE street cut — profit-capped, ledgered
+async function takeHouse(client, h, tax, stake = 0) { // PvE street cut — profit-capped, ledgered
   const pay = Math.min(tax, Math.max(0, await denAvailable(client)));
   if (pay > 0) {
     await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [pay]);
     await denDistribute(client, pay);
     await h.ledger(client, { currency: 'cash', amount: -pay, reason: 'casino:take' });
+  }
+  // THE VIG POT (NetNet rec C): after the street is tipped, JACKPOT_BPS of the stake is RESERVED
+  // into the progressive pot — capped at what the book can still cover (the rakeback discipline:
+  // the den never promises money the players have not lost). NOT a ledger row and NOT a
+  // `distributed` bump — the money stays inside `profit`; the pot is a claim on it, enforced by
+  // denAvailable subtracting it, and only becomes a cash movement when a Numbers hit pays it out.
+  if (stake > 0 && CASINO.JACKPOT_BPS > 0) {
+    const feed = Math.min(Math.floor(stake * CASINO.JACKPOT_BPS / 10000), Math.max(0, await denAvailable(client)));
+    if (feed > 0) await client.query('UPDATE den_volume SET jackpot = jackpot + $1 WHERE id=1', [feed]);
   }
 }
 // lifetime den stake volume — a counter (not a money bucket), the rakeback basis
@@ -147,7 +163,7 @@ export async function playDice(ch, amount, client, h) {
   // (red-team R4 casino F1) …and ONLY THEN is the street tipped — dice resolves in one call with no
   // openLiability row, so tipping before the win payout was booked let a winning round over-report
   // this round's profit by the payout and mint a bounded tip into street_tax the house hadn't won.
-  await takeHouse(client, h, tax);      // the street is tipped only from realized (post-payout) profit
+  await takeHouse(client, h, tax, amt);  // the street is tipped only from realized (post-payout) profit
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // action on her floor is business
   if (amt >= MASTERY.GAMBLER_MIN_STAKE) await bumpMastery(client, h, ch, 'gambling', 'dice'); // the den floor — no min-bet XP farm
@@ -252,7 +268,7 @@ export async function betFight(ch, side, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:fight' });
   await bumpProfit(client, amt); // the open bet's dog-odds exposure is held back by openLiability
-  await takeHouse(client, h, Math.ceil(amt * 0.01));
+  await takeHouse(client, h, Math.ceil(amt * 0.01), amt);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 2, { action: 'fight' }); // she holds the book
   await h.track(client, ch.account_id, 'casino', { game: 'fight', amt, side });
@@ -400,7 +416,7 @@ export async function betTrack(ch, race, runner, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:track' });
   await bumpProfit(client, amt);              // the open bet's odds exposure is held back by openLiability
-  await takeHouse(client, h, Math.ceil(amt * 0.01));
+  await takeHouse(client, h, Math.ceil(amt * 0.01), amt);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 2, { action: 'track' }); // her floor, her book
   if (amt >= MASTERY.GAMBLER_MIN_STAKE) await bumpMastery(client, h, ch, 'gambling', 'trackbet');
@@ -767,12 +783,15 @@ export async function playNumbers(ch, pick, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:numbers' });
   await bumpProfit(client, amt); // the ticket's 600:1 exposure is held back by openLiability
-  await takeHouse(client, h, tax);
+  await takeHouse(client, h, tax, amt);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'numbers' }); // the runner reports who plays
   if (amt >= MASTERY.GAMBLER_MIN_STAKE) await bumpMastery(client, h, ch, 'gambling', 'numbers');
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
-  return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT };
+  // `near` states the consolation's terms WITH the ticket (the terms-ride-with-the-price rule):
+  // within ±band of the draw pays mult× the stake back — the near-miss is a real payout, not a myth.
+  return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT,
+    near: { band: CASINO.NUMBERS_NEAR_BAND, mult: CASINO.NUMBERS_NEAR_MULT } };
 }
 
 // Settle every MATURED ticket (day < today — the draw for a day is final once the day ends).
@@ -782,24 +801,54 @@ export async function claimNumbers(ch, client, h) {
   const today = dayOf();
   const tickets = (await client.query('SELECT * FROM numbers_tickets WHERE character_id=$1 AND day < $2 FOR UPDATE', [ch.id, today])).rows;
   if (!tickets.length) return { ok: true, settled: 0, won: 0 };
-  let won = 0;
+  let won = 0, nearWins = 0, jackpot = 0;
   const results = [];
   for (const t of tickets) {
     const drawn = numbersDrawOf(Number(t.day));
     const hit = Number(t.pick) === drawn;
-    if (hit) {
-      const payout = Number(t.stake) * CASINO.NUMBERS_PAYOUT;
+    // THE CONSOLATION (NetNet rec D): a near miss — within ±NEAR_BAND of the draw, CIRCULAR on the
+    // 0–999 wheel (so a pick at the edge has exactly the same near-win chance as one in the middle;
+    // a linear band would make 3 and 997 quietly worse picks, an asymmetry a sharp player routes
+    // around) — pays NEAR_MULT× the stake. Same draw, same seed, same casino:win:numbers rail under
+    // the den book, so §10.4 and the den-profit identity absorb it with zero new reasons. A ticket
+    // is EITHER a hit or a near, never both, which is why openLiability's 600× reservation stands.
+    const rawDist = Math.abs(Number(t.pick) - drawn);
+    const near = !hit && Math.min(rawDist, 1000 - rawDist) <= CASINO.NUMBERS_NEAR_BAND;
+    if (hit || near) {
+      const payout = Number(t.stake) * (hit ? CASINO.NUMBERS_PAYOUT : CASINO.NUMBERS_NEAR_MULT);
       won += payout;
+      if (near) nearWins++;
       ch.cash = Number(ch.cash) + payout;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:numbers' });
       await bumpProfit(client, -payout);
-      await h.notify(client, ch.id, 'numbers_hit', { day: Number(t.day), pick: Number(t.pick), payout });
+      await h.notify(client, ch.id, hit ? 'numbers_hit' : 'numbers_near',
+        { day: Number(t.day), pick: Number(t.pick), drawn, payout });
+      // THE VIG POT (NetNet rec C): an EXACT hit also cracks the progressive jackpot —
+      // JACKPOT_WIN_BPS of the pot on top of the 600:1, the rest reseeding so the pot never
+      // restarts from zero. Lock order: character (held by withCharacter) → the den_volume
+      // singleton (singletons LAST — the canonical order, and denAvailable takes the same lock).
+      // The payout rides casino:win:jackpot under the den-book casino:win:% LIKE pattern with
+      // bumpProfit(-jp), so `den profit` stays exact and §10.4 sees an ordinary ledgered faucet;
+      // the pot decrement releases exactly the reservation denAvailable was holding back.
+      if (hit) {
+        const dv = (await client.query('SELECT jackpot FROM den_volume WHERE id=1 FOR UPDATE')).rows[0];
+        const jp = Math.floor(Number(dv.jackpot) * CASINO.JACKPOT_WIN_BPS / 10000);
+        if (jp > 0) {
+          jackpot += jp;
+          await client.query('UPDATE den_volume SET jackpot = jackpot - $1 WHERE id=1', [jp]);
+          ch.cash = Number(ch.cash) + jp;
+          await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: jp, reason: 'casino:win:jackpot' });
+          await bumpProfit(client, -jp);
+          await h.notify(client, ch.id, 'jackpot_hit', { day: Number(t.day), pick: Number(t.pick), payout: jp });
+          bus.emit('streets', { type: 'jackpot_hit', name: ch.name, payout: jp });
+        }
+      }
     }
-    results.push({ day: Number(t.day), pick: Number(t.pick), drawn, hit });
+    results.push({ day: Number(t.day), pick: Number(t.pick), drawn, hit, near });
     await client.query('DELETE FROM numbers_tickets WHERE character_id=$1 AND day=$2', [ch.id, t.day]);
   }
-  await h.track(client, ch.account_id, 'casino', { game: 'numbers_claim', settled: tickets.length, won });
-  return { ok: true, settled: tickets.length, won, results };
+  await h.track(client, ch.account_id, 'casino', { game: 'numbers_claim', settled: tickets.length, won, nearWins, jackpot });
+  return { ok: true, settled: tickets.length, won, nearWins, jackpot, results };
 }
 
 // ── BLACKJACK (stateful PvE): deal → hit / stand / double ──
@@ -872,14 +921,14 @@ export async function blackjackDeal(ch, amount, client, h) {
     else if (pBJ) { payout = amt + Math.floor(amt * CASINO.BJ_PAYS_BPS / 10000); outcome = 'blackjack'; }
     else outcome = 'dealer_blackjack';
     await payBlackjack(ch, client, h, payout);
-    await takeHouse(client, h, tax);
+    await takeHouse(client, h, tax, amt);
     await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', outcome });
     return { ok: true, game: 'blackjack', done: true, outcome, bet: amt, player, dealer,
       playerTotal: pv.total, dealerTotal: dv.total, payout, net: payout - amt };
   }
   await client.query('INSERT INTO blackjack_hands (character_id, bet, player, dealer) VALUES ($1,$2,$3,$4)',
     [ch.id, amt, player.join(','), dealer.join(',')]);
-  await takeHouse(client, h, tax);
+  await takeHouse(client, h, tax, amt);
   await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', amt });
   return { ok: true, game: 'blackjack', done: false, bet: amt, player, dealerUp: dealer[0],
     playerTotal: pv.total, canDouble: true };
@@ -1392,7 +1441,15 @@ export async function denInfo(pool, characterId) {
       highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX,
         stakeOmr: ACCESS_STAKE.HIGH_OMR, staked: myStake, stakeMet: myStake >= ACCESS_STAKE.HIGH_OMR } },
     numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: `${CASINO.NUMBERS_PAYOUT}:1`,
+      nearBand: CASINO.NUMBERS_NEAR_BAND, nearMult: CASINO.NUMBERS_NEAR_MULT,
       yesterday: numbersDrawOf(today - 1) },
+    // THE FAIR DRAW (NetNet rec F) — folded into the den board rather than a second client fetch on
+    // a POLLED screen (the poll-cost rule); the full reveal + verification lives on keyless /v1/fairness.
+    fair: await fairSummary(pool),
+    // THE VIG POT — the live progressive pot (a PUBLIC number: the marquee is the whole point) +
+    // the terms that ride with it. A plain unlocked read: the board quotes, the claim charges.
+    jackpot: { pot: Math.floor(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0]?.jackpot || 0)),
+      feedBps: CASINO.JACKPOT_BPS, winBps: CASINO.JACKPOT_WIN_BPS },
     tickets,
     fight: { ...boutOf(week), max: CASINO.FIGHT_MAX, myBets: bet },
     track: { ...(await trackCard(pool, today)), minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000),

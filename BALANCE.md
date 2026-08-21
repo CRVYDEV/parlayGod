@@ -6296,3 +6296,126 @@ scarcity and would also break the arbitrage board, convoy manifest values, the T
 and a signed §7.11 surface. And nothing here is ever marketed as scarce-and-appreciating — the deeds
 doc's §6 rule stands: the map grows, the objects are described as what they are, never as what they
 might be worth.
+
+## THE COMMITMENT — time-lock tiers on the staked balance (NetNet research rec A, 2026-08-21)
+
+The WinNET lock-boost shape (a longer lock earns a bigger weight) pointed at the game's own float:
+a player who LOCKS their stake for a published window counts it ×mult toward the MADE_LADDER rungs
+and cannot unstake until the window passes. The multiplier moves the LADDER READ only — a
+status/capacity axis — never the balance itself: `staked` stays the §10.4 bucket, no currency moves
+at lock time (zero ledger rows, test-pinned), and **loot exposure is UNCHANGED** — `whack:loot`'s
+committed-rate leg debits `staked` directly and never consults the lock, so a locked stake is looted
+exactly like an unlocked one (test/social.js kills a locked holder and asserts the committed rate
+still lands). That wall is the whole design: the lock must never become the retired "staked is safe"
+harbour through a side door. While a lock is live it may only be UPGRADED (longer AND at least as
+strong) — a commitment is not a dial you turn down when a killer shows up. What the game buys:
+deeper HOLD demand on the float (the ladder already keys on holding; this pays patience on top),
+which is what makes OMR_LOOT_COMMITTED and killing a made man mean anything.
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `STAKE_LOCKS.TIERS` | **7d ×1.25 / 30d ×1.5 / 90d ×2.0** | The patience curve. The top mult halves the stake a rung wants (900 → 450 held for 90 days), so the dial is how much of the ladder a promise may substitute for a balance. Raising a mult deepens the float; a mult high enough that the top rung is reachable on a trivial locked balance would cheapen the ceiling claim — keep `top.min / maxMult` well above the first rung. |
+
+**What is deliberately absent:** any loot discount, any unstake-early-for-a-fee escape (the window
+is the price), and any yield — the lock pays in RUNGS, which are capacity/status, so the sim-signed
+economy is untouched (zero new reasons, zero new faucets, §10.4 has no surface here).
+
+## THE NEAR MISS — a consolation tier on the Numbers (NetNet research rec D, 2026-08-21)
+
+The NetNet lottery's near-miss consolation, on the Numbers' own machinery: a matured ticket whose
+pick lands within `NUMBERS_NEAR_BAND` of the drawn number (and is not the hit) pays
+`stake × NUMBERS_NEAR_MULT` — riding the SAME `casino:win:numbers` faucet (zero new §10.4 reasons;
+the den-book LIKE patterns and `openLiability`'s 600× reservation already cover it, since a ticket
+is a hit XOR a near). The wheel is CIRCULAR — 999 and 000 are neighbours (`min(|d|, 1000−|d|)`) —
+so an edge pick is never quietly worse than a middle one, which is test-pinned against a real
+edge-draw day.
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `CASINO.NUMBERS_NEAR_BAND` | **±5** | 10 of 1000 outcomes console. Widening it raises returned EV linearly. |
+| `CASINO.NUMBERS_NEAR_MULT` | **5×** | The consolation's size. At 600 + 2×5×5 = 650/1000 returned the book keeps a **35% edge** (was 40%) — still the historically-accurate deep house game, now with a "so close" beat ~1% of tickets. The EV relation `(PAYOUT + 2·BAND·MULT)/1000 < 1` is test-pinned so a retune cannot silently make the Numbers +EV. |
+
+**What is deliberately absent:** a separate ledger reason (the rail is shared), any change to the
+draw itself (the §7.11 seed is untouched — the consolation is a payout table on the same verifiable
+number), and any liability change (the 600× reservation strictly dominates the 5× consolation).
+
+## THE VIG POT — the progressive den jackpot (NetNet research rec C, 2026-08-21)
+
+The NetNet progressive-pool shape on the den's own book: `JACKPOT_BPS` of every PvE stake is
+RESERVED out of realized house profit (fed inside `takeHouse`, capped at `denAvailable` exactly
+like the street cut — the den never promises money the players have not lost), and an EXACT
+Numbers hit takes `JACKPOT_WIN_BPS` of the pot on top of the 600:1, the remainder reseeding so the
+pot never restarts from zero. The pot is a RESERVATION, not a cash bucket — money stays inside
+`den_volume.profit` until a win pays it as a ledgered `casino:win:jackpot` faucet, which rides the
+den-book `casino:win:%` LIKE pattern, so the `den profit` §10.4 identity absorbs it with ZERO
+invariant changes. `denAvailable` subtracts the pot, so street cuts and rakeback can never tip out
+money the pot has claimed (test-pinned at a constructed book state, deterministic).
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `CASINO.JACKPOT_BPS` | **50** (0.5% of PvE stake volume) | The feed. Profit-capped, so it is a redistribution of the house's realized edge, never emission-on-volume (the mint-on-top fix's own wall). `0` disables the feed; the pot then drains to nothing on its next hit. |
+| `CASINO.JACKPOT_WIN_BPS` | **5000** (a hit takes half) | The crack-vs-reseed split. Higher pays a bigger headline and restarts lower; lower keeps the marquee number climbing. |
+
+**What is deliberately absent:** any new §10.4 reason for the FEED (a reservation moves no value),
+any liability change (the pot is subtracted in `denAvailable` beside the ticket exposures), and any
+$OMR surface (the pot is den cash end to end).
+
+## THE $OMR PLEDGE — collateralized loans on the P2P rail (NetNet research rec B, 2026-08-21)
+
+The Shylock's secured-credit market gains a second kind of security: a lender may demand a $OMR
+pledge (`collateralOmr` on the offer), which ESCROWS out of the borrower's LIQUID balance into the
+loan row itself at take (`loans.collateral_omr` doubles as the demand on open rows and the escrow
+bucket on active rows — Σ over `status='active'` joined `omrBuckets`, with its own §10.4 identity
+`loan omr pledge escrow`). LIQUID only, never staked — the MADE_LADDER keys on `staked`, and a
+pledge that kept climbing it would be power for free. Four exact transfer reasons under the
+`loan:` omr vocabulary prefix, in NEITHER the mint nor burn term: `loan:pledge` (borrower → the
+row), `loan:pledge:return` (repay/void → borrower), `loan:seize:omr` (default collect /
+grace-forfeit / a dead borrower's remainder → the lender), `loan:pledge:loot` (a player fire-kill
+on the borrower loots the pledge FIRST, at the flat `M3.OMR_LOOT_IDLE` rate).
+
+**The loot leg is the vault closure, and it is the load-bearing decision.** Without it, an
+alt-ring "loan" (pledge your hoard against your own alt's offer) is a loot-immune $OMR shelter —
+the exact class the market-order and loan-offer audits closed on the cash side. Looted at the
+IDLE rate, the shelter is exactly neutral against holding loose: a killer takes the same 50%
+either way, so the pledge buys credit access and nothing else. The season loot multiplier
+deliberately stops at the body (the escrow leg loots at the flat rate — the same call the cash
+`loan:loot` leg made).
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `LOAN.COLLATERAL_OMR_MAX` | **2000** | The ceiling on a demand — bounds how much of the token supply one loan row can freeze, and with it the biggest single `loan:pledge:loot` prize a kill can take. `0` retires the mechanic (no offer can demand a pledge). |
+
+**What is deliberately absent:** a mint or burn anywhere (every leg is a single-leg transfer, the
+auction:bid shape — `$OMR conservation` is proven UNMOVED across the full lifecycle in
+test/loans.js); a staked-pledge option (power-for-free through the ladder); and any exemption of
+the pledge from the death split (the vault closure IS the mechanic).
+
+## THE UPPER LEG — the formulaic sell-into-euphoria leg on the desk lot (NetNet research rec H, 2026-08-21)
+
+Founder-directed ("Build the desk's upper leg" — the answer to the rec-H decision prompt; rec G, the
+backing gauge, was answered "leave as-is" in the same sitting and needed no change). The desk already
+BUYS below the band's LOWER edge and SELLS at or above UPPER; the LOT was blind to HOW FAR above —
+a genuine squeeze and an ordinary day both sold the same clip. The leg is NetNet's PremiumSeller
+insight as a formula over the desk's OWN price history: when the latest REAL print sits `START_BPS`
+above the 30-day window's average of real prints, the lot's two POLICY bounds (returned-inventory ×
+surge, float cap up to `FLOAT_CAP_MAX_BPS`) scale by the premium — clip-sized at `MAX_X`, and NEVER
+the shelf bound (wall 2 is not a policy). Nothing mints — the leg only decides how much of the shelf
+goes up today, so wall 1 is untouched by construction, and at surge 1 the arithmetic is
+byte-identical to the pre-leg desk (min(100×1, 300) = the base cap).
+
+| Lever | Ships at | What it is |
+|---|---|---|
+| `DESK_SURGE.START_BPS` | 11000 | euphoria begins at 1.10× the 30d reference — below is ordinary noise (the dead-zone rule) |
+| `DESK_SURGE.MAX_X` | 3 | CLIP-SIZED: the policy bounds never scale past 3× — "sell into strength", never "dump into a manufactured spike" |
+| `DESK_SURGE.FLOAT_CAP_MAX_BPS` | 300 | the surged daily ceiling: at most 3% of float/day (base 1%) — the anti-dump wall stretches, it never disappears |
+| `DESK_SURGE.MIN_PRINTS` | 5 | fewer real prints in the window and there is no average worth trusting — a single print is its own reference, so the leg sleeps (`thin_window`) |
+
+Prices in `vig_buyback` are $OMR per ETH, so a DEARER $OMR is a SMALLER number — the premium is
+ref/spot, and getting that backwards would make the desk sell MORE into a crash (the direction is
+test-pinned). The three quiet states are NAMED on the board (`thin_window` / `no_price` /
+`inside_band`) so an asleep leg never reads as a broken one — the desk-dark lesson. NetNet's
+ordering rule (the treasury's sell threshold must sit ABOVE any emission throttle, so the protocol
+never competes with itself) is satisfied trivially — there is no price-responsive emission anywhere
+(wall 1; bonds are GM-throttled by THE DAILY OFFERING) — and is recorded at the lever block for the
+day one is ever proposed. All four numbers are founder sign-off levers (pinned in test/levers.js);
+`MAX_X: 1` puts the desk back to the flat clip exactly.

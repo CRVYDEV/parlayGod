@@ -4,10 +4,12 @@
 // session), the 1% street cut feeding the tax pool, one ticket/day, lazy claim at 600:1,
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { CASINO, STABLE, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
+import { stampFairness, fairCommitment } from '../src/fairness.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -63,8 +65,10 @@ const omrBefore = (await meOf(token)).omr;
 const taxPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 let wins = 0, losses = 0, staked = 0, paidOut = 0;
 // econ pass: mirror of the HOUSE BOOK — the street is tipped 1% per stake but only out of realized
-// profit (no open tickets during the session, so liability is 0 and the mirror is exact)
-let denProfit = 0, denDist = 0;
+// profit (no open tickets during the session, so liability is 0 and the mirror is exact). THE VIG
+// POT joins the mirror: after the tip, JACKPOT_BPS of the stake is reserved into the pot, capped at
+// what the book can still cover — and the pot itself is a reservation the NEXT tip must respect.
+let denProfit = 0, denDist = 0, denPot = 0;
 for (let i = 0; i < 60; i++) {
   await seed('nerve=50'); // nerve is the natural throttle; refill to keep the session going
   const r = await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } });
@@ -76,8 +80,10 @@ for (let i = 0; i < 60; i++) {
   staked += 1000;
   denProfit += 1000;                                                // the stake enters the book…
   if (r.body.win) { wins++; paidOut += 2000; denProfit -= 2000; } else losses++; // …THIS round's payout is booked…
-  const take = Math.min(10, Math.max(0, denProfit - denDist));      // …and ONLY THEN the tip is profit-capped
+  const take = Math.min(10, Math.max(0, denProfit - denDist - denPot)); // …and ONLY THEN the tip is profit-capped
   denDist += take;                                                  // (red-team R4 casino F1: dice tips post-payout)
+  const feed = Math.min(Math.floor(1000 * CASINO.JACKPOT_BPS / 10000), Math.max(0, denProfit - denDist - denPot));
+  denPot += feed;                                                   // THE VIG POT accrues after the tip, same cap
 }
 assert(wins > 0 && losses > 0, `both outcomes over 60 rounds (${wins}W/${losses}L)`);
 // every roll is in the audit log
@@ -92,9 +98,27 @@ const taxPost = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1
 assert.equal(taxPost - taxPre, denDist, 'the street cut is tipped only out of realized profit');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:take'")).rows[0].s),
   -denDist, 'every tip-out is a ledgered NULL casino:take row');
-const dvCraps = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+const dvCraps = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
 assert.equal(Number(dvCraps.profit), staked - paidOut, 'the house book mirrors the ledger (profit == bets − wins)');
 assert.equal(Number(dvCraps.distributed), denDist, 'and knows exactly what it tipped out');
+assert.equal(Number(dvCraps.jackpot), denPot, 'THE VIG POT accrued exactly JACKPOT_BPS of the stakes, profit-capped');
+// A session where the shooter beats the house throughout legitimately ends with the book — and
+// therefore the pot — at zero, so "the pot really gets fed" is GUARANTEED rather than asserted on
+// luck (the recorded flake class: a deterministic assertion resting on a probabilistic
+// precondition): cushion the book with a balanced NULL casino:bet:% row (the den-profit §10.4
+// identity reads the ledger, so profit never moves without one) and play ONE round — the feed is
+// then exactly JACKPOT_BPS of the stake, win or lose, because the cushion dwarfs the round swing.
+{
+  const cushion = Math.max(0, -Number(dvCraps.profit)) + 10000 + denDist + denPot;
+  await pool.query('UPDATE den_volume SET profit = profit + $1 WHERE id=1', [cushion]);
+  await pool.query("INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1, NULL, 'cash', $2, 'casino:bet:vigpotprobe')", [crypto.randomUUID(), -cushion]);
+  const potPre0 = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+  await seed('nerve=50');
+  assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round against a solvent book');
+  assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot) - potPre0,
+    Math.floor(1000 * CASINO.JACKPOT_BPS / 10000),
+    'a solvent round feeds THE VIG POT exactly JACKPOT_BPS of the stake, win or lose');
+}
 // THE hard line: a gambling session never touches $OMR
 assert.equal((await meOf(token)).omr, omrBefore, 'the den never touches $OMR — cash only');
 
@@ -116,18 +140,75 @@ const yesterday = dayOf() - 1;
 const winningPick = numbersDrawOf(yesterday);
 await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${winningPick} WHERE character_id='${cid}'`);
 const cashPreClaim = (await meOf(token)).cash;
+// THE VIG POT (NetNet rec C): the exact hit also cracks the progressive pot — JACKPOT_WIN_BPS of it
+// on top of the 600:1, the rest RESEEDING. The expectation is read from the LIVE pot (fed by the
+// craps session above), never restated.
+const potPreHit = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+assert(potPreHit > 0, 'the pot is non-zero going into the hit (else the jackpot assertions are vacuous)');
+const jpWin = Math.floor(potPreHit * CASINO.JACKPOT_WIN_BPS / 10000);
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.code, 200, 'claimed'); assert.equal(rr.body.settled, 1, 'one ticket settled');
 assert.equal(rr.body.won, 100 * CASINO.NUMBERS_PAYOUT, 'the hit paid 600:1');
-assert.equal((await meOf(token)).cash, cashPreClaim + 60000, 'the payout landed in pocket');
+assert.equal(rr.body.jackpot, jpWin, 'the hit cracked THE VIG POT for JACKPOT_WIN_BPS of it');
+assert.equal((await meOf(token)).cash, cashPreClaim + 60000 + jpWin, 'the payout AND the pot landed in pocket');
 assert.equal(await sum('casino:win:numbers'), 60000, 'the win is a ledgered faucet');
+assert.equal(await sum('casino:win:jackpot'), jpWin,
+  'the jackpot is its own ledgered casino:win:% faucet (den-book LIKE pattern — zero new §10.4 vocabulary)');
+assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot),
+  potPreHit - jpWin, 'the remainder RESEEDS — the pot never restarts from zero');
 assert.equal((await call('POST', '/v1/casino/numbers/claim', { token })).body.settled, 0, 'a settled ticket is gone (idempotent)');
 // a losing ticket settles to nothing
-rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: (winningPick + 1) % 1000, amount: 100 } });
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: (winningPick + 500) % 1000, amount: 100 } });
 assert.equal(rr.code, 200, 'a second ticket (new day slot freed)');
 await pool.query(`UPDATE numbers_tickets SET day=${yesterday} WHERE character_id='${cid}'`);
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.body.settled, 1, 'the loser settled'); assert.equal(rr.body.won, 0, 'and paid nothing');
+
+// ── THE NEAR MISS (NetNet D): within ±NUMBERS_NEAR_BAND of the draw pays NUMBERS_NEAR_MULT× back ──
+// The consolation rides the SAME casino:win:numbers rail (zero new §10.4 reasons — the den-book
+// LIKE patterns and openLiability's 600× reservation already cover it, since a ticket is a hit XOR
+// a near), and the wheel is CIRCULAR — 999 and 000 are neighbours — so an edge pick is never
+// quietly worse than a middle one.
+assert.equal(den.body.numbers.nearBand, CASINO.NUMBERS_NEAR_BAND, 'the board states the near band (terms ride with the price)');
+assert.equal(den.body.numbers.nearMult, CASINO.NUMBERS_NEAR_MULT, 'and the consolation multiple');
+assert((CASINO.NUMBERS_PAYOUT + 2 * CASINO.NUMBERS_NEAR_BAND * CASINO.NUMBERS_NEAR_MULT) / 1000 < 1,
+  'the Numbers stays a NET SINK with the consolation in the book — a retune cannot silently flip the EV');
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 5, amount: 100 } });
+assert.equal(rr.code, 200, 'near-test ticket bought');
+assert.equal(rr.body.near && rr.body.near.band, CASINO.NUMBERS_NEAR_BAND, 'the buy reply states the near terms');
+await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 3) % 1000} WHERE character_id='${cid}'`);
+const cashPreNear = (await meOf(token)).cash;
+const winSumPre = await sum('casino:win:numbers');
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.settled, 1, 'the near ticket settled');
+assert.equal(rr.body.nearWins, 1, 'and reports the near miss');
+assert.equal(rr.body.won, 100 * CASINO.NUMBERS_NEAR_MULT, 'a near miss pays stake × NEAR_MULT');
+assert.equal(rr.body.results[0].near, true, 'the result row is marked near');
+assert.equal((await meOf(token)).cash, cashPreNear + 100 * CASINO.NUMBERS_NEAR_MULT, 'the consolation landed in pocket');
+assert.equal(await sum('casino:win:numbers') - winSumPre, 100 * CASINO.NUMBERS_NEAR_MULT,
+  'the consolation rides the SAME ledgered casino:win:numbers faucet — no new §10.4 reason');
+// one past the band is a plain loser — the band is exact
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 6, amount: 100 } });
+assert.equal(rr.code, 200, 'band-edge ticket bought');
+await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + CASINO.NUMBERS_NEAR_BAND + 1) % 1000} WHERE character_id='${cid}'`);
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.settled, 1, 'the band+1 ticket settled');
+assert.equal(rr.body.won, 0, 'one past the band pays nothing');
+// THE WHEEL IS CIRCULAR: find a day whose draw sits within the band of 0 and back a pick on the FAR
+// side of the wheel — linear distance reads ~995+, circular reads exactly the band. A mutation that
+// makes the distance linear fails HERE by name. The edge-draw day is scanned for and its existence
+// ASSERTED (the precondition is guaranteed, never assumed — the recorded flake class).
+let edgeDay = 0;
+for (let d = yesterday; d > yesterday - 20000; d--) if (numbersDrawOf(d) < CASINO.NUMBERS_NEAR_BAND) { edgeDay = d; break; }
+assert(edgeDay, 'an edge-draw day exists in the 20k-day scan window (P(miss) ≈ 0.995^20000 ≈ 0)');
+const edgeDraw = numbersDrawOf(edgeDay);
+const farPick = (edgeDraw - CASINO.NUMBERS_NEAR_BAND + 1000) % 1000; // wraps past 999
+assert(Math.abs(farPick - edgeDraw) > 500, 'the pick really is on the far side of the wheel linearly');
+rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: farPick, amount: 100 } });
+assert.equal(rr.code, 200, 'edge ticket bought');
+await pool.query(`UPDATE numbers_tickets SET day=${edgeDay}, pick=${farPick} WHERE character_id='${cid}'`);
+rr = await call('POST', '/v1/casino/numbers/claim', { token });
+assert.equal(rr.body.nearWins, 1, `999 and 000 are neighbours — the wheel is CIRCULAR (draw ${edgeDraw}, pick ${farPick})`);
 
 // econ-pass regression: the 600:1 hit put the house DEEP under water — no street cut is minted on
 // top of a stake until the book recovers (the old model tipped 1% regardless of results)
@@ -138,6 +219,33 @@ await seed('nerve=50');
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round while the house is under water');
 assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolUW,
   'no street cut while the book is negative — the den only tips out of realized profit');
+
+// ── THE VIG POT IS A RESERVATION, deterministically ──
+// The property: a street tip may never spend money the pot has claimed (denAvailable subtracts the
+// pot). The craps mirror above catches a drift only when the book happens to hover inside the
+// divergence window, which a mutation could survive on a lucky run — so this pins it at a
+// CONSTRUCTED state where the answer is outcome-independent: position the book so that after one
+// $1,000 dice round, available WITH the reservation is at most $5 (loss) or negative (win), while
+// available WITHOUT it would be ~$100k — the 1% tip must come back capped under $10, and the pot
+// must not grow. State-warping, not value: the profit bump is balanced by a NULL casino:bet:% row
+// (the den-profit §10.4 identity reads the ledger, so profit may never be moved without one), and a
+// NULL row sits outside the per-character cash check by construction.
+{
+  const dv0 = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
+  const potBump = 100000;
+  // want: (profit + X) − distributed − (jackpot + potBump) = −995  →  X = ...
+  const X = Number(dv0.distributed) + Number(dv0.jackpot) + potBump - 995 - Number(dv0.profit);
+  await pool.query('UPDATE den_volume SET profit = profit + $1, jackpot = jackpot + $2 WHERE id=1', [X, potBump]);
+  await pool.query("INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1, NULL, 'cash', $2, 'casino:bet:vigpotprobe')", [crypto.randomUUID(), -X]);
+  const potPre = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+  const poolPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+  await seed('nerve=50');
+  assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round against the pinned book');
+  assert(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool) - poolPre <= 9,
+    'the street tip is capped by the pot RESERVATION — it never spends money the pot has claimed');
+  assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot), potPre,
+    'and the feed respects the same wall — the pot cannot feed itself past what the book covers');
+}
 
 // ══════════ STEP TWO: back-room PvP dice, the weekly fight + the neon fix, rakeback ══════════
 let seededCash = 1000000; // every later seed is a tracked RELATIVE bump so the identity check stays exact
@@ -255,13 +363,15 @@ assert.equal(Number((await pool.query("SELECT rake_cursor FROM businesses WHERE 
 // bank REAL profit for the house (honest play, no value seeded): matured losing tickets, until the
 // book can cover the rakeback owed on the volume since the cursor
 for (let i = 0; i < 300; i++) {
-  const dv = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+  const dv = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
   const volNow0 = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
   const owed = Math.floor((volNow0 - volAtBuy) * CASINO.RAKEBACK_BPS / 10000);
-  if (Number(dv.profit) - Number(dv.distributed) >= owed + 1000) break;
+  // THE VIG POT is a standing reservation denAvailable subtracts, so "the book can cover the
+  // rakeback" must clear the pot too — else the loop breaks early and the collect under-pays.
+  if (Number(dv.profit) - Number(dv.distributed) - Number(dv.jackpot) >= owed + 1000) break;
   rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 0, amount: 1000 } });
   assert.equal(rr.code, 200, `top-up ticket (${JSON.stringify(rr.body)})`);
-  await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 1) % 1000} WHERE character_id='${cid}'`);
+  await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 500) % 1000} WHERE character_id='${cid}'`);
   await call('POST', '/v1/casino/numbers/claim', { token }); // a settled loser: +$1k realized profit
 }
 rr = await call('POST', '/v1/business/collect', { token });
@@ -743,6 +853,51 @@ const invFut = (await runLedgerInvariants(pool, { alert: false })).checks.find((
 assert(invFut && invFut.ok, `futurity escrow reconciles post-settle (lhs ${invFut?.lhs}, rhs ${invFut?.rhs})`);
 
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
+// ══ THE FAIR DRAW (NetNet rec F): commit today, reveal yesterday, verify like an OUTSIDER ══
+// The test plays the third party the board is FOR: it recomputes the commitment from the documented
+// formula in `how` with node's own crypto — never by calling the server's helper on both sides,
+// which would be self-consistent under any mutation (the vacuity class).
+{
+  const day = dayOf();
+  const txnCount = async () => Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  const txn0 = await txnCount();
+  let fb = (await call('GET', '/v1/fairness')); // KEYLESS — an outsider needs no token
+  assert.equal(fb.code, 200, 'the fairness board is keyless');
+  fb = fb.body;
+  // TODAY IS SEALED: exactly {commitment, day, recorded} — a leaked results/nonce here would let
+  // everyone buy the winning number on a 600:1 book.
+  assert.deepEqual(Object.keys(fb.today).sort(), ['commitment', 'day', 'recorded'],
+    "today is SEALED — the board must never carry today's draw or nonce");
+  assert(/^[0-9a-f]{64}$/.test(fb.today.commitment), 'the commitment is a sha256 hex');
+  // YESTERDAY VERIFIES from the reveal alone, by the published formula:
+  const rv = fb.yesterday.reveal;
+  const recomputed = crypto.createHash('sha256').update(`${rv.nonce}:${JSON.stringify(rv.results)}`).digest('hex');
+  assert.equal(recomputed, fb.yesterday.commitment,
+    'an outside verifier can reproduce the commitment from the documented formula (nonce + results)');
+  assert.equal(rv.results.numbers, numbersDrawOf(day - 1), "the reveal IS yesterday's real draw");
+  assert.equal(rv.results.day, day - 1, 'the reveal is keyed to yesterday');
+  assert(fb.how.includes('sha256'), 'the verification instructions ride with the board');
+  // THE STAMP: the worker records today once, idempotently; the board then reads the RECORD.
+  assert.equal((await stampFairness(pool)).stamped, true, 'the worker stamps today');
+  assert.equal((await stampFairness(pool)).stamped, false, 'a re-run stamps nothing (idempotent)');
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM fair_commitments WHERE day=$1', [day])).rows[0].n), 1, 'one record per day');
+  fb = (await call('GET', '/v1/fairness')).body;
+  assert.equal(fb.today.recorded, true, 'the board reads the stored record');
+  assert.equal(fb.today.commitment, fairCommitment(day), 'the stored record matches the computation');
+  // A TAMPERED RECORD SURFACES — the one way it happens is a MARKET_SEED rotation rewriting every
+  // historical draw, and a fairness board that hid that would be worse than none.
+  await pool.query('INSERT INTO fair_commitments (day, commitment) VALUES ($1, $2)', [day - 1, 'deadbeef-not-the-real-commitment']);
+  fb = (await call('GET', '/v1/fairness')).body;
+  assert.equal(fb.yesterday.mismatch, true, 'a tampered record must surface as mismatch, never be hidden');
+  assert.equal(fb.yesterday.recordedCommitment, 'deadbeef-not-the-real-commitment', 'the stored value is shown so an outsider can see the disagreement');
+  await pool.query('DELETE FROM fair_commitments WHERE day=$1', [day - 1]); // undo the tamper
+  // the den board folds the one-line summary (no second fetch on a polled screen)
+  const denF = (await call('GET', '/v1/casino', { token })).body.fair;
+  assert(/^[0-9a-f]{64}$/.test(denF.today), "the den board carries today's seal");
+  assert.equal(denF.yesterday.numbers, numbersDrawOf(day - 1), "and yesterday's revealed number");
+  assert.equal(await txnCount(), txn0, 'THE FAIR DRAW moves no value — zero ledger rows across the whole flow');
+}
+
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
 const me = await meOf(token);
@@ -761,5 +916,5 @@ assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 const trFinal = inv.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trFinal?.ok, `poker tourney escrow holds at the end (drift ${trFinal?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent) + step four THE FUTURITY (the crowd-bet marquee — owners nominate player racers for a burned casino:futurity:nom fee, the town bets parimutuel, the worker races the field and pays the winner's backers the losing pool net of vig / the owner a promoter purse / half-vig→buyback; the district/own_event/bad_runner/already_bet gates, the distinct-posts regression + slot cap, and the new futurity-escrow §10.4 check mid-window + closing to 0), §10.4 identity + vocabulary + treasury + den + tourney-escrow + futurity-escrow checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent) + step four THE FUTURITY (the crowd-bet marquee — owners nominate player racers for a burned casino:futurity:nom fee, the town bets parimutuel, the worker races the field and pays the winner's backers the losing pool net of vig / the owner a promoter purse / half-vig→buyback; the district/own_event/bad_runner/already_bet gates, the distinct-posts regression + slot cap, and the new futurity-escrow §10.4 check mid-window + closing to 0), THE FAIR DRAW (keyless commit/reveal board — today SEALED to exactly {day, commitment, recorded}, yesterday's reveal recomputed by an OUTSIDE verifier with node's own crypto, the worker stamp idempotent, a tampered record surfaced as mismatch, the den fold, zero ledger rows), §10.4 identity + vocabulary + treasury + den + tourney-escrow + futurity-escrow checks hold`);
 await app.close();

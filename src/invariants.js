@@ -95,6 +95,11 @@ const KNOWN_REASONS = {
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:', 'kitchen:', 'bond:', 'business:spec', 'death:duty',
+    // Drop 5 (B — $OMR-collateralized loans): loan:pledge (borrower → escrow), loan:pledge:return
+    // (escrow → borrower on repay/void), loan:seize:omr (escrow → lender on default/forfeit) and
+    // loan:pledge:loot (escrow → the killer's fire-kill cut at the borrower's death) — ALL transfers
+    // (the loans.collateral_omr active rows are a §10.4 bucket), in NEITHER the mint nor burn term.
+    'loan:',
     // TOKENOMICS v2 — `window:burn` is the redemption window's $OMR burn; `yield:family` is the
     // family-yield distribution, a pool -> gangs.omr_reserve TRANSFER (both sides in omrBuckets,
     // so it is in NEITHER the mint nor the burn term).
@@ -276,6 +281,10 @@ async function collectLedgerChecks(pool) {
     // TRANSFER without changing the identity below: the sink's own row and the paired `desk:recycle`
     // row are BOTH inside the burn term, so they cancel, and the value shows up here instead.
     + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM desk_inventory')
+    // Drop 5 (B) — the $OMR PLEDGE ESCROW: a $OMR-secured loan holds the borrower's pledge in the
+    // loan row itself (collateral_omr on ACTIVE rows only — on an open row it is just the lender's
+    // demand, nothing has moved). pledge/return/seize/loot are transfers into and out of this bucket.
+    + await one(pool, "SELECT COALESCE(SUM(collateral_omr),0) s FROM loans WHERE status='active'")
     + auctionEscrow;
   // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
   // withdrawal reserve (src/vig.js payPrizes) — admissible because real revenue backs every token.
@@ -486,6 +495,18 @@ async function collectLedgerChecks(pool) {
   // the escrow-side outflow (the rest of the escrow burns as loan:death). The market:loot precedent.
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
+
+  // (f4b) Drop 5 (B) — THE $OMR PLEDGE ESCROW: active pledged $OMR == pledged in − returned − seized
+  // − death-looted. Every pledge row is a single-leg transfer (the auction:bid shape): loan:pledge is
+  // the borrower's negative debit into the row, the three exits are positive credits out of it
+  // (return → borrower, seize → lender, loot → the killer's fire-kill cut). Exact-reason matches on
+  // purpose — the cash-side loan:* reasons above must never leak in (currency scopes them anyway).
+  const omrPledged = await one(pool, "SELECT COALESCE(SUM(collateral_omr),0) s FROM loans WHERE status='active'");
+  const plIn = -(await sum(pool, "currency='omr' AND reason='loan:pledge'"));
+  const plBack = await sum(pool, "currency='omr' AND reason='loan:pledge:return'");
+  const plSeized = await sum(pool, "currency='omr' AND reason='loan:seize:omr'");
+  const plLooted = await sum(pool, "currency='omr' AND reason='loan:pledge:loot'");
+  push('loan omr pledge escrow', omrPledged, plIn - plBack - plSeized - plLooted, 0.001);
 
   // THE COMMUNITY DROP (G-3) — every `drop:claim` mint must be matched by a CLAIMED allocation row:
   // the dataset is the authority on what a wallet was owed, so a credit with no claimed row behind

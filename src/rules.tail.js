@@ -242,8 +242,11 @@ export const CONSTANTS = {
   // (An explicit founder override of the prototype's flat 2%/12h.)
   BANK_TAPER_ABOVE: 10000000, BANK_TAPER_KEEP: 0.10,
 };
-// THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
-// hard line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
+// THE GAMBLING DEN — player-vs-house games at the Neon Mile. Every game shipped to date is
+// CASH-DENOMINATED (the old "cash only, never $OMR" hard line was RETIRED by the founder
+// 2026-08-21 — a $OMR-denominated den product is now designable; until one ships, no den route
+// touches $OMR and the suites' "$OMR untouched" pins describe the live product, not a rule),
+// server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
 // reconciles per character; 1% of every stake goes to the street-tax pool (the buyback loop),
 // the rest of the house edge burns. Dice = the real pass-line (edge ~1.41%, entertainment-thin);
 // the Numbers pays the historically accurate 600:1 on 999:1 odds (~40% edge — a daily flutter).
@@ -252,6 +255,25 @@ export const CASINO = {
   DISTRICT: 'neon',            // the vice district — travel there to play
   MIN_BET: 100, MAX_BET: 250000, DICE_NERVE: 1,
   NUMBERS_MIN: 10, NUMBERS_MAX: 1000, NUMBERS_PAYOUT: 600,
+  // THE CONSOLATION (NetNet research rec D, 2026-08-21) — the "Bonus Draw weight for everyone who
+  // played" idea in the den's own idiom: a NEAR MISS on the Numbers (within ±NEAR_BAND of the
+  // draw, CIRCULAR on the 0–999 wheel so an edge pick is not quietly worse) pays NEAR_MULT× the
+  // stake back. Same seed, same draw, settled by the same lazy claim — no new draw and no new
+  // reason (it rides casino:win:numbers under the den-book LIKE pattern). The EV stays a deep net
+  // sink: hit 600/1000 + near 2×5×5/1000 = 0.65 returned per 1.00 staked (a 35% edge, down from
+  // 40%) — and test/casino.js pins that relation against the live levers so a retune cannot
+  // quietly flip the book. openLiability needs NO change: a ticket resolves as EITHER a hit or a
+  // near (never both) and the 600× reservation already covers the smaller payout.
+  NUMBERS_NEAR_BAND: 5, NUMBERS_NEAR_MULT: 5,
+  // THE VIG POT (NetNet research rec C, 2026-08-21) — the progressive jackpot: JACKPOT_BPS of
+  // every PvE stake is RESERVED out of realized house profit (fed inside takeHouse, capped at
+  // denAvailable exactly like the street cut — the den never promises money the players have not
+  // lost), and an EXACT Numbers hit takes JACKPOT_WIN_BPS of the pot on top of the 600:1, the
+  // remainder reseeding so the pot never restarts from zero. The payout is a ledgered
+  // casino:win:jackpot faucet riding the den-book casino:win:% LIKE pattern (bumpProfit(-win)
+  // keeps `den profit` exact — zero new §10.4 reasons). Both are founder sign-off levers;
+  // JACKPOT_BPS: 0 disables the feed and the pot drains to nothing on its next hit.
+  JACKPOT_BPS: 50, JACKPOT_WIN_BPS: 5000,
   // ── step two (all founder sign-off levers) ──
   // The HIGH-STAKES ROOM: past HIGH_LVL the PvE dice table takes up to HIGH_MAX per roll, and
   // pots ≥ HIGH_FEED hit the public streets feed (whale theater).
@@ -1604,6 +1626,18 @@ export const LOAN = {
   // damage-adjusted book value). On default the shark SEIZES the car (ownership move, §10.4-neutral —
   // cars conserve by row count) on top of the cash. COLLATERAL_MAX bounds the lender's asking figure.
   COLLATERAL_MAX: 5000000,
+  // Drop 5 (B — $OMR-COLLATERALIZED LOANS, NetNet package): a lender may also demand a $OMR pledge.
+  // The borrower's LIQUID $OMR (never staked — the MADE_LADDER keys on `staked`, and a pledge that
+  // climbed the ladder would be power for free) escrows INTO THE LOAN ROW at take (`loan:pledge`, a
+  // §10.4 transfer — the loans.collateral_omr column doubles as the escrow bucket on active rows),
+  // returns on repay (`loan:pledge:return`), and is SEIZED to the lender on default/grace-forfeit
+  // (`loan:seize:omr`). At the borrower's death the pledge is the lender's security — EXCEPT a
+  // player fire-kill loots OMR_LOOT_IDLE of it first (`loan:pledge:loot`): without that, an alt-ring
+  // "loan" (pledge your hoard to your own alt's offer) would be a loot-proof $OMR vault, the exact
+  // class the market-order/loan-offer audits closed on the cash side. At the flat IDLE rate the
+  // shelter is exactly neutral vs holding loose (the season loot mult deliberately stops at the
+  // body — the vault-closure property needs only the base rate). COLLATERAL_OMR_MAX bounds the ask.
+  COLLATERAL_OMR_MAX: 2000,
   // step 2 audit F1: a SECURED loan left un-collected past `due_at + GRACE_MS` auto-forfeits its
   // collateral car to the lender (the worker sweep) — so a spiteful/absent lender can't freeze the
   // borrower's car forever. The borrower always had the grace window to repay; the lender had it to
@@ -3343,6 +3377,32 @@ export const DESK_BUYBACK = {
   // against the band's own anchor. An execution below 0.20x anchor is not a dip, it is a broken feed.
   PRICE_FLOOR_BPS: 2000,
 };
+// ── THE UPPER LEG (NetNet rec H, founder-directed 2026-08-21: "Build the desk's upper leg") ────
+// The band's third edge, and the one the desk was missing: it already BUYS below LOWER and SELLS at
+// or above UPPER, but the LOT was blind to HOW FAR above — a genuine squeeze and an ordinary day
+// both sold the same clip. NetNet's PremiumSeller insight (sell MORE into genuine euphoria,
+// clip-sized, TWAP-bounded) completes the symmetry as a FORMULA over the desk's own price history:
+// when the LATEST real print sits `START_BPS` above the window's AVERAGE, the lot's policy bounds
+// scale by that premium — the returned-inventory bound AND the float-cap ceiling — clipped at
+// `MAX_X` / `FLOAT_CAP_MAX_BPS`, and NEVER the shelf bound (wall 2 is not a policy). Nothing mints:
+// this only decides how much of the shelf goes up today, so wall 1 ("no faucet") is untouched by
+// construction. NetNet's ordering rule — the treasury's sell threshold must sit ABOVE any emission
+// throttle, so the protocol never competes with itself — is satisfied trivially here: there is no
+// price-responsive emission anywhere (the Street Wage is retired; bonds are GM-throttled by THE
+// DAILY OFFERING), and this comment is where that rule lives if one is ever proposed.
+export const DESK_SURGE = {
+  START_BPS: 11000,        // euphoria begins at 1.10x the window average — below that it is ordinary
+                           // noise, and the dead-zone rule applies (a desk that scales on noise
+                           // churns its own market). Founder sign-off lever.
+  MAX_X: 3,                // CLIP-SIZED: however hot the print, the lot's policy bounds never scale
+                           // past 3x — the NetNet discipline that separates "sell into strength"
+                           // from "dump into a spike somebody manufactured".
+  FLOAT_CAP_MAX_BPS: 300,  // the surged daily ceiling: at most 3% of float/day (vs the base 1%).
+                           // The anti-dump wall stretches, it never disappears.
+  MIN_PRINTS: 5,           // fewer REAL prints than this in the window and there is no average worth
+                           // trusting — a single print is both spot and reference, so "euphoria"
+                           // computed from it is a division by itself. Thin windows read surge 1.
+};
 // The Dutch clock: linear from OPEN down to RESERVE across DURATION_MS, then flat at RESERVE.
 // Returns ETH per $OMR. Clamped at both ends so a late/early call can never quote outside the band.
 const round8 = (n) => Math.round(n * 1e8) / 1e8
@@ -3460,10 +3520,38 @@ export const MADE_LADDER = {
   ],
   MADE_RUNGS: 1,   // dues climb the ladder by this many rungs — the shortcut, never a gate
 };
-// The rung INDEX (-1 = none). Pure, account-in / number-out, so every touchpoint reads one function
-// and they cannot disagree — the energyCapOf/view/accrual discipline.
-export const madeRungIdx = (acct, now = Date.now()) => {
+// ═══ THE COMMITMENT (NetNet research rec A, founder-directed 2026-08-21) — time-lock tiers on
+// the staked balance, the WinNET lock-boost shape pointed at the game's own float. A player who
+// LOCKS their stake for a published window counts it ×mult toward the ladder above — commitment
+// buys rungs, not just balance — and cannot unstake until the window passes. Three walls keep it
+// honest: (1) LOOT EXPOSURE IS UNCHANGED — whack:loot's committed-rate leg debits `staked` directly
+// and never reads the lock, so a locked stake is looted exactly like an unlocked one; the lock must
+// never become the retired "staked is safe" harbour (test/made.js pins it by killing a locked
+// holder). (2) The multiplier moves the LADDER READ only — a status/capacity axis — never the
+// balance itself: `staked` stays the §10.4 bucket and no currency moves at lock time (zero ledger
+// rows, test-pinned). (3) While a lock is active it may only be UPGRADED (new expiry ≥ current AND
+// mult ≥ current) — a commitment is a commitment, not a dial you turn down when a killer shows up.
+// All numbers are founder sign-off levers (BALANCE.md § THE COMMITMENT; pinned in test/levers.js).
+export const STAKE_LOCKS = {
+  TIERS: [
+    { id: 'week',    days: 7,  mult: 1.25, name: 'The Handshake' },
+    { id: 'month',   days: 30, mult: 1.5,  name: 'The Word' },
+    { id: 'quarter', days: 90, mult: 2.0,  name: 'The Oath' },
+  ],
+};
+export const stakeLockActive = (acct, now = Date.now()) =>
+  !!(acct?.stake_lock_until && new Date(acct.stake_lock_until).getTime() > now);
+// The ONE effective-stake reader — the ladder, the board and the coach all read this, so the rung
+// the sheet shows and the rung the till grants cannot disagree (the energyCapOf discipline).
+export const effectiveStake = (acct, now = Date.now()) => {
   const staked = Number(acct?.staked || 0);
+  return stakeLockActive(acct, now) ? staked * Number(acct.stake_lock_mult || 1) : staked;
+};
+// The rung INDEX (-1 = none). Pure, account-in / number-out, so every touchpoint reads one function
+// and they cannot disagree — the energyCapOf/view/accrual discipline. Reads the EFFECTIVE stake
+// (THE COMMITMENT above): a locked balance counts ×mult toward the rungs.
+export const madeRungIdx = (acct, now = Date.now()) => {
+  const staked = effectiveStake(acct, now);
   let idx = -1;
   MADE_LADDER.RUNGS.forEach((r, i) => { if (staked >= r.min) idx = i; });
   if (isMade(acct, now)) idx += MADE_LADDER.MADE_RUNGS;
@@ -5245,13 +5333,15 @@ export const vouchRankOf = (n) => VOUCH_RANKS.reduce((a, r) => (Number(n) >= r.a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing
 // and both are enforced here rather than remembered:
 //
-//   1. SELL DETERMINISTIC, DROP RANDOM. Rarity is rolled server-side and rng_audit'd when an item is
-//      EARNED IN PLAY — a boosted car, a bought boat, a resident's ride you steal. **No ETH path
-//      anywhere in this game grants or re-rolls a rarity**, because selling random traits for real
-//      money is a loot box and is genuinely contested in the EU/UK. The `rarity:upgrade` sink below
-//      is the reason that line survives contact with the OMR bridge: it is a KNOWN outcome for a
-//      KNOWN price (pay, get exactly the next tier), never a roll. Do not make it random "for
-//      excitement" — that one change converts a cosmetic into a gambling product.
+//   1. SELL DETERMINISTIC, DROP RANDOM — as SHIPPED. Rarity is rolled server-side and rng_audit'd
+//      when an item is EARNED IN PLAY — a boosted car, a bought boat, a resident's ride you steal —
+//      and the `rarity:upgrade` sink is a KNOWN outcome for a KNOWN price (pay, get exactly the
+//      next tier), never a roll. NOTE (2026-08-21): the game-wide "never distribute by chance" RULE
+//      was retired by the founder, so a randomized paid product is now designable — but THIS
+//      upgrade stays deterministic as built (changing it is its own product decision, not a
+//      cleanup), and the FACT that selling random traits for real money is a loot box genuinely
+//      contested in the EU/UK survives the rule's retirement: any future random-for-money product
+//      publishes its odds and goes through the launch checklist's counsel rows.
 //   2. IN-GAME ITEMS ARE LOOTABLE; EXTRACTED NFTs ARE SAFE BUT INERT. Extraction takes the item OUT
 //      OF PLAY: it stops racing, melting, fencing, hauling and being stolen, and in exchange it stops
 //      dying with the street. That is the existing gear precedent applied to property, and it is what
@@ -5565,8 +5655,10 @@ export const BROKERS = {
 export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id)) || null;
 export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
 
-/// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
-/// that keeps a stock distribution out of loot-box territory entirely.
+/// The published weight. Deterministic in both terms — deliberately, as shipped. (The game-wide
+/// never-by-chance rule was retired 2026-08-21, but THIS distribution stays deterministic: a stock
+/// allocation drawn by lot is exactly the loot-box shape the launch checklist's counsel rows gate,
+/// and those rows are external to the retired internal rule.)
 export const brokerWeight = (tierId, gains = {}) => {
   const t = brokerTier(tierId);
   if (!t) return 0;

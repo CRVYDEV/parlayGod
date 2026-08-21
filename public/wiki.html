@@ -196,8 +196,9 @@ const SECTIONS = [
       <p><b>Rarity, and the way off the board.</b> Every car and boat carries a rarity — Common, Rare, Legendary,
       Epic — rolled by the server the moment you <b>earn</b> it, and logged so the draw can be checked. It is pure
       status: no extra speed, no extra value, nothing but scarcity. You can buy your way up the ladder with $OMR, and
-      the price buys <b>exactly the next tier</b> — a known item for a known price, never a roll. Nothing in this game
-      sells a random outcome for money.</p>
+      the price buys <b>exactly the next tier</b> — a known item for a known price, never a roll. That is how the
+      upgrade is built today; the old game-wide "nothing sells a random outcome for money" rule was retired
+      2026-08-21, and any future product that does sell one will carry its own published odds.</p>
       <p>You can also take one <b>on-chain</b>, on the same rail gear uses, and that is the real decision:
       <b>in-game items are lootable; extracted NFTs are safe, and inert</b>. An extracted car is an ERC-1155 in your own
       wallet — nobody can steal it, win it in a pink-slip race, chop it off your corpse or take it in a war, and it
@@ -359,8 +360,10 @@ const SECTIONS = [
       (convoys ×0.8 time), Blood Oath (kill loot ×1.25).</p>
       ${R(`GET /v1/commission [public] · POST /v1/commission/vote · /veto`)}` },
 
-  { id: 'den', group: 'Money', title: 'The Den (Casino)', tag: 'cash-only gambling',
-    html: `<p><b>CASH ONLY, never $OMR.</b> The server calculates and records every result. The house adds 1% to the
+  { id: 'den', group: 'Money', title: 'The Den (Casino)', tag: 'gambling at the Neon Mile',
+    html: `<p>Every game at the den today is <b>cash-denominated</b> — no den game touches $OMR. (The old blanket
+      "cash only, never $OMR" rule was retired 2026-08-21; if a $OMR-denominated game ever ships it will be documented
+      here with its own terms.) The server calculates and records every result. The house adds 1% to the
       street-tax pool from real profit only.</p>
       <ul><li><b>Craps</b> — the pass line in one action, 1:1, edge about 1.41%, 1 nerve, up to $250k ($2M in the high-stakes room —
       L30 or the Madame's rope, plus the 300 $OMR access stake).</li>
@@ -759,6 +762,31 @@ const SECTIONS = [
     the point — a runner can never cross town and find your pocket empty. Pull it back any time and the money
     returns; nobody runs it in a day and it returns by itself. But escrow is cash outside your pocket, so it is
     NOT a hiding place: no posting from a safehouse, and a killer takes a quarter of every open favor.</p>` },
+  { id: 'risks', group: 'Reference', title: 'Risk Factors', tag: 'the honest register',
+    html: `<p>Every promise in this game is a formula you can check; this is the other half — what can go wrong,
+      stated before you plan around it. Figures are the live levers; if a lever moves, this page moves with it.</p>
+      <ul>
+      <li><b>Thin launch liquidity.</b> The token's market opens small by design; ordinary trades move the price, and
+      a round trip pays the sell tax plus slippage. Do not treat the pool as an exit for size.</li>
+      <li><b>Selling is taxed.</b> On a DEX sell, 9% comes off the top. On top of that, $OMR younger than 48 hours
+      pays an early-exit surcharge — up to an extra 50% that fades to zero over the window.</li>
+      <li><b>Withdrawing pays a toll and can queue.</b> Every on-chain withdrawal pays a flat 2% toll, and the rail is
+      full-reserve: it signs only what the reserve already holds. A thin reserve means your withdrawal queues —
+      debited, safe, signed when revenue funds it. No timing is promised.</li>
+      <li><b>Nothing you hold is safe from the game.</b> Unstaked principal unbonds for 6 hours and is lootable the
+      whole time. A killer takes up to 50% of a loose balance and 20% of a staked one. Death burns 25% of the liquid
+      $OMR your heir inherits. Committing a balance makes it cheaper to hold, never safe.</li>
+      <li><b>You cannot grind the token.</b> Nothing mints $OMR to players on a schedule; the earnable surface is
+      small and finite. Earn in cash; reach $OMR by playing well against people who hold it.</li>
+      <li><b>Death is real</b> — and the account-level survivors are the enumerated exception, not the rule.</li>
+      <li><b>The house edge is real.</b> Every den game is negative expected value and says so on its card. The
+      expected outcome of a long gambling session is loss.</li>
+      <li><b>Extraction is not open yet.</b> The rail is built and devnet-proven; it opens when the third-party audit
+      and the launch review clear. Until then $OMR is an in-game balance.</li>
+      <li><b>The root of trust is a Safe.</b> Server-authoritative game, Safe-held chain levers — a disclosed trust
+      assumption, watched by nightly invariants whose alarms reach a human.</li>
+      <li><b>The complete list is unwriteable.</b> Anything not listed here is not therefore safe.</li></ul>` },
+
   { id: 'reference', group: 'Reference', title: 'Quick Reference', tag: 'the things to remember',
     html: `<h3>What is safest when you die</h3><p>Your <b>$OMR</b> (liquid and staked — a killer takes a
       cut, the rest carries to your heir) · <b>minted (on-chain)</b> gear · your account-level <b>estate,

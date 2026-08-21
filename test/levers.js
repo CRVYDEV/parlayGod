@@ -99,6 +99,10 @@ const SIGNED = [
   ['CASINO.HIGH_LVL', 30],
   ['CASINO.HIGH_MAX', 2000000],
   ['CASINO.MAX_BET', 250000],
+  ['CASINO.JACKPOT_BPS', 50],
+  ['CASINO.JACKPOT_WIN_BPS', 5000],
+  ['CASINO.NUMBERS_NEAR_BAND', 5],
+  ['CASINO.NUMBERS_NEAR_MULT', 5],
   ['CASINO.PVP_RAKE_BPS', 500],
   ['CASINO.RAKEBACK_BPS', 100],
   ['CASINO.RING.IDLE_MS', 1800000],
@@ -185,6 +189,11 @@ const SIGNED = [
   // step 4, the BUY side. MIN_ETH is pacing; PRICE_FLOOR_BPS is a SAFETY bound, not a balance one —
   // the shelf credit is eth/price, so it is what stops a mistyped decimal minting inventory.
   ['DESK_BUYBACK.MIN_ETH', 0.001],
+  // THE UPPER LEG (NetNet rec H, 2026-08-21) — the formulaic sell-into-euphoria leg on the desk lot
+  ['DESK_SURGE.START_BPS', 11000],          // euphoria begins at 1.10x the 30d reference — below is noise
+  ['DESK_SURGE.MAX_X', 3],                  // CLIP-SIZED: the policy bounds never scale past 3x
+  ['DESK_SURGE.FLOAT_CAP_MAX_BPS', 300],    // the surged daily ceiling: at most 3% of float/day
+  ['DESK_SURGE.MIN_PRINTS', 5],             // a thin window has no trustworthy average — surge 1
   ['DESK_BUYBACK.PRICE_FLOOR_BPS', 2000],
   ['DUELS.GRUDGE_CD_MULT', 0.34],
   ['DUELS.LEGEND_MIN_LVL', 10],
@@ -240,6 +249,7 @@ const SIGNED = [
   ['LAW.JURY_BUST_MULT', 0.5],
   ['LAW.RETAINER_BUST_MULT', 0.6],
   ['LAW.WATCH', 40],
+  ['LOAN.COLLATERAL_OMR_MAX', 2000],
   ['LOAN.COLLECT_HOSP_MS', 1800000],
   ['LOAN.GRACE_MS', 86400000],
   ['LOAN.HOUSE_MIN', 1000],
@@ -273,6 +283,9 @@ const SIGNED = [
   // invisible to the reader check, so the PARENT is the pin — the MASTERY.PERKS precedent).
   ['MADE_LADDER.RUNGS', [{"min":60,"name":"Earner","trunk":1,"energy":5,"nerve":1,"garage":1,"fenceBps":0},{"min":180,"name":"Operator","trunk":2,"energy":10,"nerve":2,"garage":2,"fenceBps":0},{"min":450,"name":"Capo","trunk":3,"energy":15,"nerve":3,"garage":3,"fenceBps":250},{"min":900,"name":"Kingmaker","trunk":4,"energy":20,"nerve":4,"garage":4,"fenceBps":500}]],
   ['MADE_LADDER.MADE_RUNGS', 1],
+  // THE COMMITMENT (2026-08-21, NetNet rec A): lock tiers on the staked balance — the mult moves the
+  // ladder READ only, never the balance or the loot rate; whole-array pin (the RUNGS shape).
+  ['STAKE_LOCKS.TIERS', [{"id":"week","days":7,"mult":1.25,"name":"The Handshake"},{"id":"month","days":30,"mult":1.5,"name":"The Word"},{"id":"quarter","days":90,"mult":2.0,"name":"The Oath"}]],
   // DYNASTY §9 — THE PROVENANCE WARDS. Fictional community names (the §9.5 guessability posture —
   // a renamed ward that starts identifying a real collection is a copy violation, so the whole map
   // is the pin; bracket-accessed leaves are invisible to the reader check, the MADE_LADDER.RUNGS
