@@ -107,7 +107,11 @@ the build fails rather than talking over the next act). Two backends: `--vo` —
 (fal.ai MiniMax `speech-02-hd`, `Deep_Voice_Man`, cached in the library so a rebuild never re-buys
 a segment) — and `--vo-local`, the timing-true piper placeholder for judging the edit at zero spend.
 **The committed v2 master carries the real MiniMax voice.** The founder signs the spoken wording
-exactly as they sign the on-screen copy, before anything goes public.
+exactly as they sign the on-screen copy, before anything goes public — **SIGNED 2026-08-21: the
+founder approved the v2 cut as delivered** (footage, on-screen copy, and the spoken narration). The
+one remaining pre-public item is the MUSIC: the generated bed still wants the licensed-track swap
+(`--music track.mp3` rebuilds the cut against it; every clip and voice segment is cached, so the
+swap costs nothing but the rebuild).
 
 Same copy rules as the rest of the file: mechanism-true, number-free (no bps, no prices, no
 value-per-$OMR figure — mechanism counts like "eight ways" and "four destinations" are fine), and
