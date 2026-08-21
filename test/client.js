@@ -2421,7 +2421,17 @@ const ACTIONS = [
   // silence pattern can see it. An earlier wave fixed the UNSTAKE line by inspection; driving is
   // what found its neighbour. $OMR from the tribute rows above.
   ['POST', '/v1/stake', { amount: 25 }],
-  ['POST', '/v1/unstake', null],
+  // THE COMMITMENT (2026-08-21): lock the stake, then expire the window by SQL before unstake —
+  // the lock is ONE-WAY by design, so without the expiry the unstake row below would be REFUSED
+  // (`locked`) and read on the summary line exactly like a covered action (the recorded
+  // declared-but-never-driven class). The lazy resolver is the established mechanism for a row
+  // whose precondition an earlier row created.
+  ['POST', '/v1/stake/lock', { tier: 'week' }],
+  ['POST', async () => {
+    await app.pool.query('UPDATE account_persistent SET stake_lock_until = now() - interval \'1 minute\' '
+      + 'WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+    return '/v1/unstake';
+  }, null],
   // THE SAME NEIGHBOURHOOD, DRIVEN THE SAME WAY, and it found two more. GETTING MADE is a
   // SUBSCRIPTION — dues in $OMR, thirty days, then it lapses — and it read like a one-time ceremony
   // because describe() falls through to the server's own `message` when nothing matches. The reply
@@ -3925,6 +3935,20 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
     'and it has to state the real relation off the live rates rather than a mood — a player deciding '
     + `whether to commit needs both numbers. Expected ${lootComm}/${lootIdle}, got: ${JSON.stringify(stLine)}`);
 }
+// THE COMMITMENT — the lock line must state all three terms: the boost, the one-way window, and
+// that it is NOT a loot shield (the retired "staked is safe" harbour must not come back through a
+// toast, which is exactly how the stake line above shipped its false claim).
+{
+  const lkLine = said.get('/v1/stake/lock'), lk = paidBody.get('/v1/stake/lock');
+  assert(lk && lk.lock === 'week' && lk.mult > 1, 'the lock row must actually have locked for this '
+    + 'to test anything — a refused row reads on the summary line exactly like a covered one');
+  assert(lkLine.includes(`×${lk.mult}`) && lkLine.includes(fmtLike(lk.effectiveStake)),
+    `the line states the boost — ×${lk.mult} and the effective figure the ladder now reads. Got: ${JSON.stringify(lkLine)}`);
+  assert(/cannot come out|stays put/i.test(lkLine),
+    `and the one-way window — the whole price of the deal. Got: ${JSON.stringify(lkLine)}`);
+  assert(/committed rate/i.test(lkLine) && !/\bsafe\b/i.test(lkLine),
+    `and that a killer still loots it — commitment buys rungs, never safety. Got: ${JSON.stringify(lkLine)}`);
+}
 // THE SAME NEIGHBOURHOOD's other two, found by driving the routes beside the one that was wrong.
 // GETTING MADE is a subscription and its line has to carry BOTH terms — the dues and the window —
 // because describe() falls through to the server's flavour `message` when nothing matches, and that
@@ -5051,6 +5075,21 @@ assert.equal(dep.code, 200, `the terms check could not bank $100 on a fresh char
 assert.match(String(describeFn(dep.body, 200)), /transit/i,
   'a deposit must say the money rides IN TRANSIT and can be looted until it clears — that is a TERM, not flavour, ' +
   'and it is the reason this ledger exists');
+
+// ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
+// every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
+// upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED
+// EXPONENTIAL schedule and reset it on a successful open. Source-level because a real WS close
+// cannot be manufactured through inject — the mobile harness owns the browser; this guards the
+// backoff against silent deletion.
+{
+  assert(!/setTimeout\(connectWs,\s*\d+\)/.test(html),
+    'the WS reconnect must not be a fixed-delay retry — that is the reconnect herd the backoff replaced');
+  assert(/wsRetryMs/.test(html) && /Math\.pow\(/.test(html.slice(html.indexOf('wsRetryMs'), html.indexOf('wsRetryMs') + 400)),
+    'the WS reconnect uses the jittered exponential wsRetryMs schedule');
+  assert(/onopen\s*=\s*\(\)\s*=>\s*\{\s*wsRetries\s*=\s*0/.test(html),
+    'a successful open RESETS the backoff — an ordinary blip must still reconnect fast');
+}
 
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +

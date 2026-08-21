@@ -13,7 +13,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          ACTIVITY, carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
-         MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
+         MADE_LADDER, madeRungIdx, madeRungOf, ladderFx, STAKE_LOCKS, stakeLockActive, effectiveStake,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
          STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf, usd, WALLET_FORGE } from './rules.js';
 import { dbCaps } from './db.js';
@@ -1699,10 +1699,19 @@ export function view(ch, acct = {}, owned = {}) {
     ladder: (() => {
       const idx = madeRungIdx(acct), cur = madeRungOf(acct);
       const next = MADE_LADDER.RUNGS[idx + 1] || null;
+      // THE COMMITMENT: the ladder reads the EFFECTIVE stake (locked ×mult) through the SAME
+      // effectiveStake the till uses, so the rung the sheet shows and the rung the perks grant
+      // cannot disagree. `staked` stays the raw balance (the number a killer's loot reads);
+      // `effective` is what the rungs measure; `lock` states the live commitment + what's on offer.
+      const eff = effectiveStake(acct);
+      const locked = stakeLockActive(acct);
       return { rung: idx + 1, of: MADE_LADDER.RUNGS.length, name: cur?.name || null,
-        staked: Number(acct?.staked || 0), madeRungs: MADE_LADDER.MADE_RUNGS,
+        staked: Number(acct?.staked || 0), effective: eff, madeRungs: MADE_LADDER.MADE_RUNGS,
+        lock: locked ? { mult: Number(acct.stake_lock_mult || 1),
+          seconds: Math.max(0, Math.ceil((new Date(acct.stake_lock_until) - Date.now()) / 1000)) } : null,
+        lockTiers: STAKE_LOCKS.TIERS,
         fx: cur ? { trunk: cur.trunk, energy: cur.energy, nerve: cur.nerve, garage: cur.garage, fenceBps: cur.fenceBps } : null,
-        next: next ? { name: next.name, min: next.min, need: Math.max(0, next.min - Number(acct?.staked || 0)) } : null };
+        next: next ? { name: next.name, min: next.min, need: Math.max(0, next.min - eff) } : null };
     })(),
     disciplines: Object.fromEntries(REGIMEN.DISCIPLINES.map((d) =>
       [d.id, disciplineLvlOf(Number(owned.disciplines?.[d.id] || 0))])),

@@ -810,6 +810,29 @@ as the shipped watcher enforces); retrofit for every existing minted account con
 **Directed builds created by these answers (all three ✅ BUILT 2026-08-16):** the Solana snapshot +
 ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C turf perks.
 
+## THE 2026-08-21 RETIREMENTS — the Den's cash-only line and never-by-chance (founder-directed)
+
+Prompted by the NetNet Capital research (`omerta-netnet-research.md`). Founder, verbatim: *"Remove
+the dens cash only rules and our never by chance rule. Then start building out all the
+recommendations you have."* Both retired the standard way — record kept, promissory copy rewritten
+factual in both codices, ZERO behavior change until a product ships:
+
+| Rule | Status | What changes / what does not |
+|---|---|---|
+| The Den: "cash only, never $OMR" | **RETIRED** | A $OMR-denominated den game is designable. Every shipped den game stays cash-denominated; the suites' "$OMR untouched" pins describe the live product. |
+| "Never distribute by chance" (RWA/wage/paid-random) | **RETIRED** | Randomized paid products are designable. The rarity upgrade and broker weights stay deterministic as built; the EU/UK loot-box FACTS and the launch checklist's counsel rows survive (external), so any random-for-money or stock-by-chance product publishes odds and clears counsel first. |
+
+The same directive is the build authorization for the NetNet-research recommendations A–F
+(recorded per drop in BALANCE.md as each ships); G/H were framed "decide, don't default" and were
+**DECIDED 2026-08-21** (founder, via the options prompt after F shipped):
+
+| Rec | Founder's answer | Resolution |
+|---|---|---|
+| G — the backing/queue gauge | **Leave as-is** | No change. The number already exists in the vig invariants and the tokenhealth board; nothing goes public (a NAV-like figure on a game token risks investment framing — the copy rules' posture stands). Recorded so it is a decision, not a default. |
+| H — countercyclical formulaic dials | **Build the desk's upper leg** | BUILT same day — THE UPPER LEG (BALANCE.md § THE UPPER LEG): the lot's policy bounds scale by the euphoria premium (latest real print vs the 30d average), clip-sized at `DESK_SURGE.MAX_X`, float ceiling at `FLOAT_CAP_MAX_BPS`, asleep below `START_BPS` or under `MIN_PRINTS`. Human-in-the-loop stays everywhere else (THE DAILY OFFERING is untouched — the GM's hand on the only mint). All four `DESK_SURGE.*` are sign-off levers. |
+
+The NetNet set is now fully resolved: A–F built, G recorded as-is, H built.
+
 ## THE 2026-08-21 PAIR (founder: "Gear joins the roundtrip & B Wallets also grant bonus points based on history/usage")
 
 1. **GEAR JOINS THE NFT ROUND TRIP — SIGNED + ✅ BUILT same day** (`omerta-nft-reimport-design.md`

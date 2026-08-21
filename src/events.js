@@ -82,8 +82,12 @@ export async function cityEventBoard(client) {
 
   // ALSO TODAY — the recurring den draws (always available: a daily numbers draw, today's race card, the
   // weekly fight). Not clocked events, so they ride a separate lighter list the console shows as "also today."
+  // THE VIG POT rides the Numbers' own line — a live progressive figure is exactly the kind of
+  // anticipation this strip exists to surface (a pure read; the pot is a den-book reservation).
+  const jp = Math.floor(Number((await client.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0]?.jackpot || 0));
   const daily = [
-    { kind: 'numbers', icon: '🔢', title: 'The Numbers', subtitle: 'pick 0–999, pays 600:1 — one ticket a day', tab: 'den' },
+    { kind: 'numbers', icon: '🔢', title: 'The Numbers', jackpot: jp,
+      subtitle: `pick 0–999, pays 600:1 — one ticket a day${jp > 0 ? ` · THE VIG POT rides at $${jp.toLocaleString('en-US')}` : ''}`, tab: 'den' },
     { kind: 'track', icon: '🏇', title: 'The Track', subtitle: "today's dogs & ponies — bet the card", tab: 'den' },
     { kind: 'fight', icon: '🥊', title: 'The Weekly Fight', subtitle: 'back a fighter before the bell', tab: 'den' },
   ];

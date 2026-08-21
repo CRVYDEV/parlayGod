@@ -373,6 +373,97 @@ console.log('\n5. TWO-PARTY TRANSFERS, INTERRUPTED');
     `start ${startA} + ledger ${ledgerA} != ${endA}`);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+console.log('\n6. SIGTERM MID-REQUEST — the deploy drain');
+// Render sends SIGTERM on every deploy, and before the drain shipped Node's default handler was
+// immediate exit: every in-flight request died with a connection reset instead of its answer, on the
+// one moment this fires for EVERY player at once. The claim under test is server.js's drain — the
+// listener closes (so a router shifts traffic), in-flight requests finish, the process exits 0.
+//
+// Spawned as a CHILD on purpose, alone among these scenarios: everywhere else the server runs
+// in-process precisely so a death is loud, but here death is the EXPECTED outcome and it needs its
+// own process to die in. And the in-flight request is made deterministic rather than left to timing
+// luck: the harness HOLDS the player's own row lock, so the request is provably parked mid-handler
+// when the signal lands — a race would depend on two events overlapping in a milliseconds-wide
+// window, and timing luck reads exactly like a proof (the pgcheck §9b argument).
+{
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const child = spawn('node', ['src/server.js'],
+    { env: { ...process.env, PORT: String(port), DRAIN_MS: '8000' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const childOut = [];
+  child.stdout.on('data', (d) => childOut.push(String(d)));
+  child.stderr.on('data', (d) => childOut.push(String(d)));
+  const cbase = `http://127.0.0.1:${port}`;
+  let up = false;
+  for (let i = 0; i < 100 && !up; i++) {
+    try { up = (await fetch(cbase + '/health')).status > 0; } catch { await sleep(150); }
+  }
+  check(up, 'the child server booted and answers /health', `never came up — child said: ${childOut.join('').slice(-400)}`);
+
+  if (up) {
+    const g = await (await fetch(cbase + '/v1/auth/guest', { method: 'POST' })).json();
+    const c = await (await fetch(cbase + '/v1/character', { method: 'POST',
+      headers: { authorization: `Bearer ${g.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `Chaos D${RUN}` }) })).json();
+
+    // park the player's next request on their own row lock. A MUTATING action, deliberately —
+    // withCharacter takes FOR UPDATE and blocks on the held lock. The first cut used GET /v1/me and
+    // its ✓ was VACUOUS: /v1/me rides the lock-free read path (D1), never waits on FOR UPDATE, and
+    // completed before the signal even landed — a check that cannot fail, caught by its own mutation
+    // run (the request survived with the drain stripped).
+    await pool.query('UPDATE characters SET cash = 100000 WHERE id=$1', [c.id]);
+    const holder = await pool.connect();
+    await holder.query('BEGIN');
+    await holder.query('SELECT id FROM characters WHERE id=$1 FOR UPDATE', [c.id]);
+
+    const inFlight = fetch(cbase + '/v1/bank/deposit', { method: 'POST',
+      headers: { authorization: `Bearer ${g.token}`, 'content-type': 'application/json',
+        'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({ amount: 100 }) })
+      .then((r) => ({ code: r.status }), (e) => ({ err: e.cause?.code || e.message }));
+    await sleep(400); // long enough for the request to reach the lock wait
+    // …and PROVE it is parked rather than assume it: a request that already resolved would make
+    // every assertion below meaningless whatever the drain does.
+    const parked = await Promise.race([inFlight.then(() => 'done'), sleep(0).then(() => 'pending')]);
+    check(parked === 'pending', 'the request is provably parked on the row lock when the signal lands',
+      'it had already resolved — the scenario would prove nothing');
+    child.kill('SIGTERM');
+
+    // a NEW connection after SIGTERM must be refused — that refusal is what tells the platform's
+    // router to shift traffic. Polled rather than slept-once: the listener closes at the START of
+    // app.close(), but "at the start" is not "instantly", and a single early probe would flake.
+    let late = null;
+    for (let i = 0; i < 30; i++) {
+      late = await fetch(cbase + '/health').then((r) => ({ code: r.status }), (e) => ({ err: e.cause?.code || e.message }));
+      if (late.err) break;
+      await sleep(100);
+    }
+    await holder.query('ROLLBACK'); holder.release();
+
+    const res = await inFlight;
+    // a child killed BY A SIGNAL has exitCode null and signalCode set — reading exitCode alone
+    // reports 'timeout' for exactly the failure this scenario exists to catch (the first cut did).
+    const ended = (child.exitCode !== null || child.signalCode !== null)
+      ? { code: child.exitCode, signal: child.signalCode }
+      : await new Promise((r) => { child.on('exit', (code, signal) => r({ code, signal }));
+          setTimeout(() => r({ code: 'timeout', signal: null }), 12000); });
+
+    check(res.code === 200,
+      `the request in flight when SIGTERM landed still got its answer (HTTP ${res.code})`,
+      `the blocked request died instead of finishing: ${JSON.stringify(res)}`);
+    check(!!late?.err, `a connection attempted after SIGTERM is refused (${late?.err})`,
+      `the listener was still accepting new connections after SIGTERM: HTTP ${late?.code}`);
+    check(ended.code === 0 && !ended.signal,
+      'the child exited 0 inside the drain window — a clean deploy, not a kill',
+      ended.signal ? `killed by ${ended.signal} — Node's default handler, no drain ran`
+        : `exit=${ended.code}; child said: ${childOut.join('').slice(-400)}`);
+    check(childOut.join('').includes('draining'), 'and announced the drain in its log',
+      childOut.join('').slice(-300));
+    // never leave an orphan listening — a failed check above must not strand a server on the port
+    if (child.exitCode === null && child.signalCode === null) { try { child.kill('SIGKILL'); } catch { /* gone */ } }
+  } else { try { child.kill('SIGKILL'); } catch { /* already gone */ } }
+}
+
 await app.close();
 for (const n of notes) console.log(`\nNOTE: ${n}`);
 if (fails.length) {
@@ -383,7 +474,8 @@ if (fails.length) {
 // saying "the API survives a database restart" on the back of a skipped test is the same overclaim
 // this harness exists to catch — it would read as green for the exact failure that started all this.
 console.log(`\n✅ chaos passed — interrupted sweeps resume without paying twice, killed backends leave `
-  + `no transfer half-applied, `
+  + `no transfer half-applied, a SIGTERM mid-request drains (the blocked request gets its answer, new `
+  + `connections are refused, exit 0) rather than resetting every player at once, `
   + (PG_CTL
     ? 'and the API survives a database restart with a legible 503 and recovers unaided.'
     : 'and §10.4 is unmoved throughout. THE FULL-OUTAGE SCENARIO DID NOT RUN (no PG_CTL) — that path is unmeasured here.'));

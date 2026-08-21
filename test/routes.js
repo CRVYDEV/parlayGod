@@ -46,6 +46,7 @@ const PUBLIC = {
   'GET /v1/digest/unsubscribe': 'THE DISPATCH — the one-click email-unsubscribe link; keyless by design (an HMAC token is the auth, so a lapsed player unsubscribes without logging in)',
   'GET /v1/events': 'TONIGHT IN THE CITY — the live scheduled events, shown as anticipation before sign-in (the /v1/city precedent)',
   'GET /v1/results': 'THE RESULTS SHOW — the public "what just happened" board of marquee results; no private data (a payout rides the notification stream), so keyless like the events board',
+  'GET /v1/fairness': 'THE FAIR DRAW — the commit/reveal board over the daily Numbers draw. Keyless BY DESIGN: the whole point is that an outsider verifies the house without trusting a token this server issued; today is SEALED (a hash reveals nothing) and yesterday\'s reveal is already public on the den board',
   'GET /v1/exchange': 'the M3 cb/ammo barter board — a public order book',
   'GET /v1/gangs': 'the families board the landing page shows before sign-in',
   'GET /v1/gangs/:id': 'a family page is public (the /u/:name profile precedent)',

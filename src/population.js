@@ -225,9 +225,21 @@ export async function retireResident(client, charId) {
   // pledge unlocks, the borrower keeps the principal (it moved at take-time — §10.4-neutral, zero
   // ledger rows), and they're told the book closed. Lock order characters → loans (the sweep's).
   const actives = (await client.query(
-    "SELECT id, borrower_character, collateral_car FROM loans WHERE lender_character=$1 AND status='active' FOR UPDATE", [charId])).rows;
+    "SELECT id, borrower_character, collateral_car, collateral_omr FROM loans WHERE lender_character=$1 AND status='active' FOR UPDATE", [charId])).rows;
   for (const l of actives) {
     if (l.collateral_car) await client.query('UPDATE cars SET pledged=false WHERE id=$1', [l.collateral_car]);
+    // Drop 5 (B, defensive): a $OMR pledge goes home to the living borrower when the book closes —
+    // deleting the row drops the escrow bucket, so a silent delete would strand the pledge as a
+    // conservation drift. UNREACHABLE today (residents never demand a $OMR pledge — residentAct
+    // builds car-secured offers only), guarded so a future behaviour change can't re-open it.
+    const pomr = Math.floor(Number(l.collateral_omr) || 0);
+    if (pomr > 0 && l.borrower_character) {
+      const bAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [l.borrower_character])).rows[0];
+      if (bAcct) {
+        await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [bAcct.account_id, pomr]);
+        await ledger(client, { accountId: bAcct.account_id, currency: 'omr', amount: pomr, reason: 'loan:pledge:return', counterparty: charId });
+      }
+    }
     await client.query('DELETE FROM loans WHERE id=$1', [l.id]);
     if (l.borrower_character) await notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_gone' }).catch(() => {});
   }

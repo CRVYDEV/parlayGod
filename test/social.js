@@ -1621,6 +1621,26 @@ assert.equal((await meOf(don.token)).omr, donOmrPreSeat + 20, 'and it lands LIQU
 sm = await meOf(seat.token);
 // heir: 80 staked survives (the duty spares committed capital by design), nothing loose to tax
 assert.equal(Math.floor(sm.staked), 80, 'the heir inherits the remaining stake — the death duty taxes the EXTRACTABLE hoard, not the seat');
+
+// ── THE COMMITMENT (NetNet rec A, 2026-08-21) — A LOCKED STAKE IS NOT A LOOT SHIELD ──
+// The lock buys ladder rungs (×mult on the EFFECTIVE stake) and refuses unstake — and that is ALL
+// it buys. whack:loot debits `staked` directly and never reads the lock columns, so a locked
+// holder is looted at exactly the committed rate. This pin is the wall: if a "courtesy" ever
+// exempts a locked stake from the loot, the retired "staked is safe" harbour is back through the
+// side door, and this assertion is what fails.
+const oath = await mk('Otto Oathbound');
+await seedCh(oath.id, 'respect=1000, cash=0, bank=0'); // clears LOOT_MIN_LVL
+await pool.query(`UPDATE account_persistent SET omr = 100 WHERE account_id=(SELECT account_id FROM characters WHERE id='${oath.id}')`);
+assert.equal((await call('POST', '/v1/stake', { token: oath.token, body: { amount: 100 } })).code, 200, 'staked');
+r = await call('POST', '/v1/stake/lock', { token: oath.token, body: { tier: 'quarter' } });
+assert.equal(r.code, 200, `the oath is sworn through the real route (${JSON.stringify(r.body)})`);
+assert.equal(r.body.effectiveStake, 200, 'the lock doubles what the LADDER reads');
+const donOmrPreOath = (await meOf(don.token)).omr;
+const kOath = await whack(oath.id);
+assert.equal(kOath.kill, true, 'the oathbound man went down');
+assert.equal(kOath.omrLoot, Math.floor(100 * 0.20),
+  'a LOCKED stake is looted at the SAME committed rate as an unlocked one — the commitment buys rungs, never safety');
+assert.equal((await meOf(don.token)).omr, donOmrPreOath + 20, 'and the killer banks it exactly as before');
 // wealth-scaled safehouse: 1% of liquid wealth, $25k floor — priced off what it protects
 const rich = await mk('Richie Reserves');
 await seedCh(rich.id, "cash=6000000, bank=14000000");

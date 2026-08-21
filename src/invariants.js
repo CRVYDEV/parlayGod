@@ -95,6 +95,11 @@ const KNOWN_REASONS = {
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:', 'kitchen:', 'bond:', 'business:spec', 'death:duty',
+    // Drop 5 (B — $OMR-collateralized loans): loan:pledge (borrower → escrow), loan:pledge:return
+    // (escrow → borrower on repay/void), loan:seize:omr (escrow → lender on default/forfeit) and
+    // loan:pledge:loot (escrow → the killer's fire-kill cut at the borrower's death) — ALL transfers
+    // (the loans.collateral_omr active rows are a §10.4 bucket), in NEITHER the mint nor burn term.
+    'loan:',
     // TOKENOMICS v2 — `window:burn` is the redemption window's $OMR burn; `yield:family` is the
     // family-yield distribution, a pool -> gangs.omr_reserve TRANSFER (both sides in omrBuckets,
     // so it is in NEITHER the mint nor the burn term).
@@ -276,6 +281,10 @@ async function collectLedgerChecks(pool) {
     // TRANSFER without changing the identity below: the sink's own row and the paired `desk:recycle`
     // row are BOTH inside the burn term, so they cancel, and the value shows up here instead.
     + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM desk_inventory')
+    // Drop 5 (B) — the $OMR PLEDGE ESCROW: a $OMR-secured loan holds the borrower's pledge in the
+    // loan row itself (collateral_omr on ACTIVE rows only — on an open row it is just the lender's
+    // demand, nothing has moved). pledge/return/seize/loot are transfers into and out of this bucket.
+    + await one(pool, "SELECT COALESCE(SUM(collateral_omr),0) s FROM loans WHERE status='active'")
     + auctionEscrow;
   // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
   // withdrawal reserve (src/vig.js payPrizes) — admissible because real revenue backs every token.
@@ -487,6 +496,18 @@ async function collectLedgerChecks(pool) {
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
 
+  // (f4b) Drop 5 (B) — THE $OMR PLEDGE ESCROW: active pledged $OMR == pledged in − returned − seized
+  // − death-looted. Every pledge row is a single-leg transfer (the auction:bid shape): loan:pledge is
+  // the borrower's negative debit into the row, the three exits are positive credits out of it
+  // (return → borrower, seize → lender, loot → the killer's fire-kill cut). Exact-reason matches on
+  // purpose — the cash-side loan:* reasons above must never leak in (currency scopes them anyway).
+  const omrPledged = await one(pool, "SELECT COALESCE(SUM(collateral_omr),0) s FROM loans WHERE status='active'");
+  const plIn = -(await sum(pool, "currency='omr' AND reason='loan:pledge'"));
+  const plBack = await sum(pool, "currency='omr' AND reason='loan:pledge:return'");
+  const plSeized = await sum(pool, "currency='omr' AND reason='loan:seize:omr'");
+  const plLooted = await sum(pool, "currency='omr' AND reason='loan:pledge:loot'");
+  push('loan omr pledge escrow', omrPledged, plIn - plBack - plSeized - plLooted, 0.001);
+
   // THE COMMUNITY DROP (G-3) — every `drop:claim` mint must be matched by a CLAIMED allocation row:
   // the dataset is the authority on what a wallet was owed, so a credit with no claimed row behind
   // it (or a claimed row whose credit never landed) trips the sweep. Zero-$OMR whitelist-only rows
@@ -647,24 +668,49 @@ async function collectLedgerChecks(pool) {
 // Alerting: a telemetry row always; a webhook when INVARIANT_WEBHOOK_URL is set. Exported + `kind`-tagged
 // (red-team R6 A) so the worker can route the real-VALUE invariants (Vig extraction≤reserve, Bond
 // anti-Ponzi) through the SAME founder alarm as the in-game §10.4 sweep — they had no automated alert.
-export async function alertDrift(pool, failed, kind = 'ledger') {
+export async function alertDrift(pool, failed, kind = 'ledger', retryDelaysMs = [1000, 4000]) {
   // preserve the original ledger telemetry event name (dashboards/ops key on it); tag vig/bond distinctly
   const event = kind === 'ledger' ? 'invariant_drift' : `${kind}_invariant_drift`;
   await pool.query('INSERT INTO telemetry (id, event, props) VALUES ($1,$2,$3)',
     [crypto.randomUUID(), event, JSON.stringify(failed)]);
   console.error(`🚨 ${kind === 'ledger' ? '§10.4 LEDGER' : kind.toUpperCase()} INVARIANT DRIFT:`, JSON.stringify(failed));
   if (process.env.INVARIANT_WEBHOOK_URL) {
-    try {
-      await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
-        headers: { 'content-type': 'application/json' },
+    // RETRIED, with backoff (bulletproof pass, 2026-08-21). This is the single most important
+    // outbound POST in the app — the alarm the whole invariant machinery exists to deliver — and it
+    // was one transient Discord 502 away from being lost: the telemetry row and the console line
+    // survive, but the thing a HUMAN sees does not, and the whole 2026-07-25 incident class is that
+    // a line in a log nobody reads is not an alarm. Three attempts, 1s then 4s apart, still
+    // swallowed at the end (an alarm must never take the worker's tick down with it — the safe()
+    // argument, one layer in). `retryDelaysMs` is a parameter ONLY so the test can drive the retry
+    // path without sleeping through real backoff (the getDaily `day` precedent); production callers
+    // never pass it.
+    const attempts = retryDelaysMs.length + 1;
+    for (let i = 0; i < attempts; i++) {
+      try {
         // `text` is what Slack incoming webhooks require; `content` is what Discord requires. Both REJECT
         // a body carrying neither (400) — and this function swallows that, so the original payload of
         // `{alert, failed}` alone meant the two services the deploy docs recommend would silently deliver
         // NOTHING: configured, no visible error, no alerts. The structured fields are kept alongside for
         // anything custom. test/hardening.js asserts both keys are present, since a missing one fails
         // exactly where nobody is looking.
-        body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed, text: webhookText(kind, failed), content: webhookText(kind, failed) }) });
-    } catch (e) { console.error('invariant webhook failed', e.message); }
+        // AbortSignal.timeout (the verify.js pattern): a HUNG webhook endpoint would otherwise hold this
+        // await for undici's ~300s default header timeout — and this runs inside worker sweeps, so one
+        // hung endpoint stalls the whole tick behind an alarm that was supposed to be best-effort.
+        const res = await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
+          headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(10_000),
+          body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed, text: webhookText(kind, failed), content: webhookText(kind, failed) }) });
+        // fetch does NOT throw on an HTTP error status — a Discord 502 or a Slack 429 comes back as a
+        // resolved response with ok=false, which is precisely the transient failure this loop exists
+        // for. A non-retryable 400 gets retried too (twice, ~5s total): telling the codes apart buys
+        // nothing worth the branch, and the payload-shape 400s have their own regression above.
+        if (res && res.ok === false && i < attempts - 1) { await new Promise((r) => setTimeout(r, retryDelaysMs[i])); continue; }
+        if (res && res.ok === false) console.error(`invariant webhook failed after ${attempts} attempts`, `HTTP ${res.status}`);
+        break;
+      } catch (e) {
+        if (i === attempts - 1) console.error(`invariant webhook failed after ${attempts} attempts`, e.message);
+        else await new Promise((r) => setTimeout(r, retryDelaysMs[i]));
+      }
+    }
   }
 }
 

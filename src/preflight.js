@@ -76,7 +76,13 @@ export const OPERATIONAL_ENV = [
   // exist to tune them per host, never to disable them.
   'PG_STATEMENT_TIMEOUT_MS', 'PG_LOCK_TIMEOUT_MS', 'PG_IDLE_TX_TIMEOUT_MS',
   'PG_CONNECT_TIMEOUT_MS', 'PG_IDLE_TIMEOUT_MS',
-  'WS_PING_MS', 'INVARIANT_WEBHOOK_URL', 'CITY_WIRE_WEBHOOK_URL',
+  // WS_MAX_BUFFER: bytes of unread live-feed a socket may hold before sends to it are DROPPED
+  // (never queued — every durable event is a notifications row the 30s poll re-derives). A tuning
+  // bound on the slow-consumer guard, not a switch: raising it trades memory for feed completeness.
+  'WS_PING_MS', 'WS_MAX_BUFFER', 'INVARIANT_WEBHOOK_URL', 'CITY_WIRE_WEBHOOK_URL',
+  // graceful shutdown: how long in-flight requests get to finish after SIGTERM before the hard exit
+  // (server.js drain). Operational — Render SIGKILLs ~30s after SIGTERM, so keep it well under that.
+  'DRAIN_MS',
   // access posture
   'INVITE_MODE', 'RATE_LIMIT', 'RATE_AUTH_BURST', 'RATE_AUTH_PER_SEC', 'RATE_HUMAN_BURST',
   'RATE_HUMAN_PER_SEC', 'RATE_PUBLIC_BURST', 'RATE_PUBLIC_PER_SEC', 'RATE_READ_BURST',

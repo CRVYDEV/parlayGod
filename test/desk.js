@@ -533,6 +533,92 @@ assert((await checkOf('$OMR conservation')).ok, 'with conservation still exact a
 assert((await Desk.runDeskInvariants(pool)).ok, 'and the desk still reconciles');
 console.log('✓ bought inventory goes back up for sale — the desk is a rental business, not a vault');
 
+// ── (25) THE UPPER LEG (NetNet rec H) — sell more into GENUINE euphoria, clip-sized ────────────
+// The band's third edge: when the latest real print sits START_BPS above the 30-day average, the
+// lot's POLICY bounds (returned-inventory, float cap) scale by the premium — never the shelf bound
+// (wall 2 is not a policy). Nothing mints; this only decides how much of the shelf goes up today.
+// The window is wiped and re-seeded so spot and reference are CONTROLLED rather than inherited from
+// whatever earlier blocks printed — a premium computed against uncontrolled history is a test that
+// passes by luck.
+{
+  const { DESK_SURGE } = await import('../src/rules.js');
+  await pool.query('DELETE FROM vig_buyback');
+
+  // a THIN window is not euphoria: two prints at a huge premium still read surge 1 — a single print
+  // (or nearly one) is its own reference, so "euphoria" computed from it is a division by itself.
+  await priced(1000, 2 * 86400000);
+  await priced(100, 0);                       // spot 10x dearer — and it must NOT matter yet
+  let sg = await Desk.deskSurge(pool);
+  assert.equal(sg.surge, 1, `a thin window is not euphoria (got surge ${sg.surge} from ${sg.prints} prints)`);
+  assert.equal(sg.reason, 'thin_window', 'and the board can say why the leg is asleep');
+
+  // ordinary noise is not euphoria: five prints with the latest a hair dearer stays inside the band.
+  await pool.query('DELETE FROM vig_buyback');
+  for (let i = 4; i >= 1; i--) await priced(1000, i * 86400000);
+  await priced(960, 0);                       // premium ≈ 992/960 ≈ 1.033x — under START 1.10x
+  sg = await Desk.deskSurge(pool);
+  assert.equal(sg.surge, 1, `ordinary noise is not euphoria (premium ${sg.premiumBps}bps read surge ${sg.surge})`);
+  assert.equal(sg.reason, 'inside_band', 'named as inside the band, not asleep for want of prints');
+
+  // GENUINE euphoria: four prints at 1000 and a fresh one at 500 — $OMR twice as dear as it was, so
+  // ref = (4x1000 + 500)/5 = 900 $OMR/ETH against spot 500 → premium 1.8x → surge 1.8.
+  await pool.query('DELETE FROM vig_buyback');
+  for (let i = 4; i >= 1; i--) await priced(1000, i * 86400000);
+  await priced(500, 0);
+  sg = await Desk.deskSurge(pool);
+  assert.equal(sg.premiumBps, 18000, `premium = ref/spot = 900/500 (got ${sg.premiumBps})`);
+  assert.equal(sg.surge, 1.8, 'euphoria scales the lot by the premium');
+
+  // ...and the LOT actually moves. A big float makes the float cap the binder (granted through the
+  // same ledgered mint as every other grant in this file, so conservation stays ABSOLUTE), and a
+  // fresh recycled sink guarantees returned x surge and the shelf both clear it — asserted as a
+  // PRECONDITION, because a surge test where the shelf binds is vacuous.
+  await grant(1000000);
+  await grant(40000);
+  const c9 = await pool.connect();
+  await c9.query('BEGIN');
+  await ledger(c9, { accountId: acct, currency: 'omr', amount: -40000, reason: 'estate:tier' });
+  await c9.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [acct, 40000]);
+  await c9.query('COMMIT');
+  c9.release();
+  const lotS = await Desk.lotSize(pool);
+  const baseCap = Math.max(DESK_AUCTION.FLOAT_CAP_MIN_OMR, lotS.float * DESK_AUCTION.FLOAT_CAP_BPS / 10000);
+  const surgedCap = Math.max(DESK_AUCTION.FLOAT_CAP_MIN_OMR,
+    lotS.float * Math.min(DESK_AUCTION.FLOAT_CAP_BPS * 1.8, DESK_SURGE.FLOAT_CAP_MAX_BPS) / 10000);
+  assert(surgedCap < lotS.shelf && surgedCap < lotS.returned * 1.8,
+    `precondition: the float cap must bind (cap ${surgedCap} vs shelf ${lotS.shelf}, returned x1.8 ${lotS.returned * 1.8}) — else this block is vacuous`);
+  assert.equal(lotS.surge, 1.8, 'the lot carries the surge it was sized with');
+  assert.equal(lotS.floatCap, round6(surgedCap),
+    `the anti-dump wall STRETCHES to min(base x surge, FLOAT_CAP_MAX_BPS) — it never disappears (got ${lotS.floatCap})`);
+  assert.equal(lotS.qty, round6(surgedCap),
+    `euphoria scales the lot: qty ${lotS.qty} must be the SURGED cap ${round6(surgedCap)}, not the base ${round6(baseCap)}`);
+  assert(lotS.qty > round6(Math.min(lotS.returned, baseCap, lotS.shelf)),
+    'and it is strictly MORE than the unsurged desk would have sold — the leg is observable, not decorative');
+
+  // CLIP-SIZED: a 10x premium does not sell a 10x lot. The scale stops at MAX_X and the float
+  // ceiling at FLOAT_CAP_MAX_BPS — the line between "sell into strength" and "dump into a spike
+  // somebody manufactured".
+  await pool.query('DELETE FROM vig_buyback');
+  for (let i = 4; i >= 1; i--) await priced(1000, i * 86400000);
+  await priced(80, 0);                        // ref 816 vs spot 80 → premium 10.2x
+  sg = await Desk.deskSurge(pool);
+  assert(sg.premiumBps > 100000, `the premium really is >10x (got ${sg.premiumBps})`);
+  assert.equal(sg.surge, DESK_SURGE.MAX_X, `the surge is CLIP-SIZED at MAX_X (got ${sg.surge})`);
+  const lotC = await Desk.lotSize(pool);
+  assert.equal(lotC.floatCap,
+    round6(Math.max(DESK_AUCTION.FLOAT_CAP_MIN_OMR, lotC.float * DESK_SURGE.FLOAT_CAP_MAX_BPS / 10000)),
+    'and the float ceiling clips at FLOAT_CAP_MAX_BPS however hot the print');
+
+  // the board publishes the leg like the band\'s other two edges, off the SAME read the lot uses
+  const bd = await Desk.deskBoard(pool);
+  assert.equal(bd.surge.x, DESK_SURGE.MAX_X, 'the board carries the live scale');
+  assert.equal(bd.surge.startBps, DESK_SURGE.START_BPS, 'and the threshold, so the terms ride with the price');
+
+  // and the whole leg moved NO value: sizing a lot is policy over an existing audited sale.
+  assert((await checkOf('$OMR conservation')).ok, 'conservation is exact with the upper leg exercised');
+  console.log(`✓ THE UPPER LEG: thin window asleep, noise inside the band, 1.8x euphoria sells a 1.8x lot, a 10x spike clips at ${DESK_SURGE.MAX_X}x, the wall stretches but never disappears`);
+}
+
 await app.close();
 console.log('\n✅ THE DESK passed — a $OMR sink lands on the desk instead of the fire (the pair of rows '
   + 'cancels inside the burn term while desk_inventory holds the value, so conservation is untouched, '

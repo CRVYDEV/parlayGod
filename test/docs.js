@@ -656,3 +656,47 @@ console.log(`✅ docs test passed — every number in SPEC.md's size table check
   assert.equal(stale.length, 0, `ownership waiver(s) for a contract that no longer exists: ${stale.join(', ')}`);
   console.log(`✓ all ${ownable} ownable contracts hand ownership over in two steps`);
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE RISK REGISTER TRACKS THE LEVERS (drop 1 of the NetNet recommendations, 2026-08-21).
+//
+// Both codices now carry a Risk Factors page whose whole value is that its figures are TRUE. A
+// risk page whose numbers have rotted is worse than none — it is the pad-copy class on the most
+// trust-sensitive surface in the project. So every lever-derived figure the page states is
+// crossed here against the LIVE lever: retune the sell tax, the surcharge window, the toll, the
+// unbond, the loot rates or the death duty and this fails naming the codex and the phrase, which
+// forces the copy to move in the same commit (the F6 discipline).
+{
+  const R = await import('../src/rules.js');
+  const wikiMd  = fs.readFileSync('docs/WIKI.md', 'utf8');
+  const wikiWeb = fs.readFileSync('public/wiki.html', 'utf8');
+
+  // slice each codex to its OWN risk section so a matching figure elsewhere can never satisfy us
+  const mdStart = wikiMd.indexOf('Risk Factors — the honest register');
+  assert(mdStart > 0, 'docs/WIKI.md has lost its Risk Factors section');
+  const mdEnd = wikiMd.indexOf('\n## ', mdStart);
+  const mdRisk = wikiMd.slice(mdStart, mdEnd > 0 ? mdEnd : undefined);
+
+  const webStart = wikiWeb.indexOf("id: 'risks'");
+  assert(webStart > 0, 'public/wiki.html has lost its Risk Factors section');
+  const webEnd = wikiWeb.indexOf('{ id:', webStart + 10);
+  const webRisk = wikiWeb.slice(webStart, webEnd > 0 ? webEnd : undefined)
+    .replace(/<[^>]+>/g, '');  // markup-free, so a <b> split can never hide a phrase
+
+  const phrases = [
+    ['the sell tax',        `${R.SELL_TAX.BPS / 100}% comes off the top`],
+    ['the surcharge window',`younger than ${R.freshWindowMs() / 3600000} hours`],
+    ['the surcharge rate',  `up to an extra ${R.earlySellTaxBps() / 100}% that fades to zero`],
+    ['the exit toll',       `a flat ${R.withdrawTaxBps() / 100}% toll`],
+    ['the unbond window',   `unbonds for ${R.CONSTANTS.UNSTAKE_CD_MS / 3600000} hours`],
+    ['the loot rates',      `up to ${R.M3.OMR_LOOT_IDLE * 100}% of a loose balance and ${R.M3.OMR_LOOT_COMMITTED * 100}% of a staked one`],
+    ['the death duty',      `burns ${R.M3.DEATH_DUTY_RATE * 100}% of the liquid`],
+  ];
+  for (const [what, phrase] of phrases) {
+    assert(mdRisk.includes(phrase),
+      `docs/WIKI.md risk register: ${what} no longer matches the live lever — expected the phrase "${phrase}"`);
+    assert(webRisk.includes(phrase),
+      `public/wiki.html risk register: ${what} no longer matches the live lever — expected the phrase "${phrase}"`);
+  }
+  console.log(`✓ the risk register's ${phrases.length} lever-derived figures match the live levers in both codices`);
+}

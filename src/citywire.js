@@ -53,7 +53,9 @@ let bucket = [];
 // without a network call. Default posts a Discord-shaped { content } payload.
 let deliver = async (url, content) => {
   try {
-    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }) });
+    // bounded (the verify.js AbortSignal pattern): a hung Discord endpoint must not hold this await for
+    // undici's ~300s default — best-effort means bounded, not merely try/caught.
+    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ content }) });
   } catch { /* best-effort: a down webhook must never affect gameplay */ }
 };
 export function __setDeliver(fn) { deliver = fn; }

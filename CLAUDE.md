@@ -5631,7 +5631,12 @@ because breaking one is very hard to walk back.*
   eligibility gate is HARD:** the issuer restricts who may hold these, so R3 delivery must check
   eligibility — a barred account plays, earns and holds the status fully but can never extract; R1
   (status only) ships to everyone. And **never distribute the token by chance** (RNG/loot/casino stay
-  in cash/$OMR) — unchanged, and it matters more with a real asset at stake.
+  in cash/$OMR) — *RETIRED as a binding rule by the founder 2026-08-21 (see THE TWO RULES RETIRED,
+  end of this log): chance-based products in $OMR or real assets are now designable. What survives
+  the retirement is FACT, not preference — a random-for-real-money product is a regulated shape, so
+  any such build publishes its odds and goes through the launch checklist's counsel rows; every
+  shipped surface (the deterministic rarity upgrade, the deterministic broker weights) keeps its
+  current behavior until a specific product decision changes it.*
 
 **FULL-SURFACE RED-TEAM (`AUDIT-full-surface.md`, 2026-07-20)** — a max-effort whole-project audit,
 FIVE independent lenses in parallel (§10.4/economy, concurrency/locks, smart-contracts+chain,
@@ -15794,6 +15799,223 @@ because a sweep that publishes only its hits cannot be audited: check H was the 
 comparison in any harness, and `tools/pollcost.js` already guards the same hazard in its own words
 (*"derived is not measured, so sit on the worst screen for a real window … and count what actually goes
 out"*), which is why its figures survived the very change that broke this one.
+
+**THE TWO RULES RETIRED — the Den's cash-only line and never-by-chance (founder-directed
+2026-08-21: "Remove the dens cash only rules and our never by chance rule").** Prompted by the
+NetNet Capital research (`omerta-netnet-research.md`), whose two largest rejected mechanics were
+blocked by exactly these rules. Retired the standard way (the §4.3/PLEX pattern — the record
+stays, the copy moves, the behavior does NOT move until a product does): **(1) the Den's "cash
+only, never $OMR" hard line** — every den game shipped to date is cash-denominated and STAYS so
+(the suites' "$OMR untouched" pins now describe the live product, not a rule); what changes is
+that a $OMR-denominated den product is designable. **(2) the "never distribute by chance" rule**
+— the deterministic rarity upgrade and the deterministic broker weights keep their shipped
+behavior (each site's comment now says the rule is retired AND why that surface stays as built);
+what changes is that a randomized paid product is designable. **What the retirement does NOT
+retire, stated at every amended site:** the EU/UK loot-box exposure and the securities posture
+around chance-distributed real assets are facts about the world, so any future random-for-money
+or stock-by-chance product publishes its odds up front and goes through the launch checklist's
+counsel rows (external to the retired internal rule). Both codices' promissory copy ("CASH ONLY,
+never $OMR", "Nothing in this game sells a random outcome for money") was rewritten to factual
+copy in the same commit — a retired rule left standing as a player-facing promise is the
+pad-copy class. Recorded in SIGN-OFF.md; the research doc's rejections #2/#3 carry the reversal.
+
+**THE COMMITMENT — time-lock tiers on the staked balance (NetNet research rec A, founder-directed
+2026-08-21: "start building out all the recommendations") — BUILT** (`STAKE_LOCKS`/`stakeLockActive`/
+`effectiveStake` in the rules tail, `economy.js:lockStake` + the unstake refusal,
+`POST /v1/stake/lock`, two ALTER-added `account_persistent` columns (`stake_lock_until`/
+`stake_lock_mult` — the boot-crash lesson, both OFF persistAccount's positional list so the direct-SQL
+write under the held account lock is clobber-safe), the ladder board's `effective`/`lock`/`lockTiers`,
+a COMMITMENT card + confirm on Going Legit, a describe() branch; `test/made.js` §5c +
+`test/social.js`; BALANCE.md § THE COMMITMENT). The WinNET lock-boost shape (a longer lock earns a
+bigger weight) pointed at the game's own float: LOCK the stake for a published window (7d ×1.25 /
+30d ×1.5 / 90d ×2.0 — founder sign-off levers, whole-array pinned) and the MADE_LADDER reads it
+×mult through ONE `effectiveStake` reader shared by `madeRungIdx`, the board and the coach — so the
+rung the sheet shows and the rung the perks grant structurally cannot disagree. **Three walls, each
+mutation-verified by name:** (1) **NOT a loot shield** — `whack:loot`'s committed-rate leg debits
+`staked` directly and never consults the lock, so a locked holder is looted at exactly
+`OMR_LOOT_COMMITTED` (test/social.js swears the oath through the real route, kills the holder, and
+asserts the 20% still lands — the retired "staked is safe" harbour must never come back through a
+side door); (2) **ZERO §10.4 surface** — the lock moves no currency and writes no ledger row
+(row-count-pinned); the mult changes what the ladder READS, never the balance; (3) **ONE-WAY** —
+unstake refuses `locked` with the machine-readable `lockSeconds` payload (the district-refusal rule),
+and a live lock only ever UPGRADES (longer AND at least as strong → else `committed`), lapsing on its
+own back to the raw read. The boost is proven at a REAL till (the sheet's energy CAP grows by the
+rung delta when 120 locked ×1.5 crosses rung 2's 180), not merely on a board. The client-ledger rows
+drive lock-then-expire-then-unstake through a lazy SQL resolver, because without the expiry the
+unstake row would be REFUSED and read on the summary line as covered (the declared-but-never-driven
+class, headed off at design time); the lock line's assertions pin the boost, the window and the
+no-shield claim. Suite green + pgquery + pgcheck 47/47 on a FRESH real Postgres (the ALTERs apply).
+
+**THE NEAR MISS — a consolation tier on the Numbers (NetNet rec D, 2026-08-21) — BUILT**
+(`src/rules.tail.js` `CASINO.NUMBERS_NEAR_BAND`/`NUMBERS_NEAR_MULT`, `src/casino.js`
+`playNumbers`/`claimNumbers`/`denInfo`, `src/server.js` `/v1/rules`, `public/index.html`,
+`test/casino.js`; BALANCE.md § THE NEAR MISS). A matured Numbers ticket within ±`NUMBERS_NEAR_BAND`
+(5) of the draw — and not the hit — pays `stake × NUMBERS_NEAR_MULT` (5×) as a consolation, riding
+the **SAME `casino:win:numbers` rail** (zero new §10.4 reasons — the den-book `casino:win:%` LIKE
+patterns and `openLiability`'s 600× reservation already cover it, since a ticket is a hit XOR a
+near; the book keeps a 35% edge, down from 40%, and the EV relation `(PAYOUT + 2·BAND·MULT)/1000
+< 1` is test-pinned so a retune cannot silently flip the sink). **The wheel is CIRCULAR** —
+distance is `min(|d|, 1000−|d|)`, so 999 and 000 are neighbours and an edge pick is never quietly
+worse; the test scans back for a real edge-draw day (existence ASSERTED, the guaranteed-
+precondition discipline) and proves a far-side pick within the circular band pays. The terms ride
+with the price everywhere the ticket is sold: the buy reply carries `near {band, mult}`, denInfo +
+`/v1/rules` publish both, the Den heading quotes them off the live board, the claim line reports
+`nearWins`, and `numbers_near` is a real notification with its own `feedText` template (THE WIRE
+LEDGER's rule). The suite's own two "losing ticket" fixtures moved from `drawn+1` — which the band
+makes a WINNER — to `drawn+500`, the one distance that is maximally far under either metric (the
+second of the two feeds the den-book profit arithmetic, so leaving it would have corrupted the
+rakeback recovery loop's expectations). Levers pinned; three mutations each caught at their own
+named assertion (the near branch dropped; the distance made linear — fails at the circular-edge
+test by name; the near payout unledgered).
+
+**THE VIG POT — the progressive den jackpot (NetNet rec C, 2026-08-21) — BUILT** (`schema.sql`
+`den_volume.jackpot` (ALTER-added — the boot-crash lesson), `src/rules.tail.js` `CASINO.JACKPOT_BPS`
+(50) / `JACKPOT_WIN_BPS` (5000), `src/casino.js` takeHouse/denAvailable/claimNumbers/denInfo,
+`src/server.js` `/v1/rules`, `src/events.js` (the pot rides the Numbers' "also today" line),
+`public/index.html`, `test/casino.js`; BALANCE.md § THE VIG POT). A progressive jackpot on the den's
+own audited book: **the pot is a RESERVATION, never a cash bucket** — `JACKPOT_BPS` of every PvE
+stake accrues inside `takeHouse` capped at `denAvailable` (the rakeback discipline: the den never
+promises money the players have not lost), the money stays inside `profit`, and `denAvailable`
+subtracts the pot so street cuts and rakeback can never tip out what the pot has claimed. An EXACT
+Numbers hit takes `JACKPOT_WIN_BPS` of it on top of the 600:1 — a ledgered `casino:win:jackpot`
+faucet riding the den-book `casino:win:%` LIKE pattern with `bumpProfit(-jp)`, so the `den profit`
+§10.4 identity holds with **ZERO invariants.js changes** — and the remainder RESEEDS (the marquee
+never restarts from zero). Surfaced everywhere the anticipation pays: denInfo + `/v1/rules`
+(`jackpot {pot, feedBps, winBps}`), the Den tab's live pot line, the events strip's Numbers line, a
+`jackpot_hit` me-notify + streets shout (BRANCHED — the two shapes carry different keys, THE WIRE
+LEDGER's rule 2), and the claim toast. **Two test disciplines earned their keep in one drop**: the
+craps mirror gained the pot and my own vacuity assert (`denPot > 0`) FLAKED on its first run — a
+session where the shooter beats the house throughout legitimately ends with the book and pot at
+zero (the recorded deterministic-assertion-on-a-probabilistic-precondition class) — so the feed is
+GUARANTEED instead (a balanced NULL `casino:bet:%` cushion row makes the book solvent, then ONE
+round must feed exactly `floor(stake × BPS/10000)`, win or lose); and the reservation wall gets a
+CONSTRUCTED deterministic probe (the book pinned so post-round available-with-reservation is ≤ $5
+while available-without would be ~$100k — the tip must come back capped and the pot must not feed
+itself past the wall). Four mutations, each caught at its own named assertion (the feed dropped;
+the reservation dropped from denAvailable; the reseed dropped — a hit taking the whole pot; the
+payout unledgered). Levers pinned + tabled.
+
+**THE $OMR PLEDGE — collateralized loans on the P2P rail (NetNet rec B, 2026-08-21) — BUILT**
+(`schema.sql` `loans.collateral_omr` (ALTER-added — the boot-crash lesson), `src/rules.tail.js`
+`LOAN.COLLATERAL_OMR_MAX` (2000), `src/loans.js` offer/take/repay/collect/voidLoansAtDeath/
+sweepLoans/loanBoard, `src/population.js` retireResident (a defensive pledge-return before the
+resident-lender DELETE — unreachable today, guards the stranded-escrow class), `src/invariants.js`
+(`loan:` joined the omr vocabulary; the active-row sum joined `omrBuckets`; a new **`loan omr
+pledge escrow`** identity), `public/index.html` (the Shylock offer form/cards/book/paper chips,
+four describe() branches, five feedText templates, the collect confirm), `test/loans.js`;
+BALANCE.md § THE $OMR PLEDGE). A lender may demand a $OMR pledge on an offer; taking it ESCROWS
+the demand out of the borrower's **LIQUID** balance INTO THE LOAN ROW — `collateral_omr` doubles
+as the demand on open rows and the escrow bucket on active ones (Σ over `status='active'` in
+`omrBuckets`, the auction current_bid shape), so the §10.4 surface is four EXACT single-leg
+TRANSFER reasons in neither the mint nor burn term: `loan:pledge` (borrower → row),
+`loan:pledge:return` (repay/void → borrower), `loan:seize:omr` (default collect / grace-forfeit /
+a dead borrower's remainder → the lender), `loan:pledge:loot`. **LIQUID only, never staked** —
+the MADE_LADDER keys on `staked`, and a pledge that kept climbing it would be power for free.
+**The loot leg is the vault closure and the load-bearing decision**: without it an alt-ring
+"loan" (pledge your hoard against your own alt's offer) is a loot-immune $OMR shelter — the exact
+class the market-order and loan-offer audits closed on the cash side; a player fire-kill loots
+the pledge at the flat `M3.OMR_LOOT_IDLE` rate FIRST (to the killer's account — `h.acct` is the
+killer on every looting path, the whack:loot omr precedent, credited IN MEMORY never SQL) and the
+REMAINDER goes to the lender, so the shelter is exactly neutral vs holding loose. Third-party
+lender credits are direct arithmetic SQL on `account_persistent` — clobber-safe because
+withCharacter FOR-UPDATEs account rows from load (the auction third-party-refund argument);
+accounts survive death, so a dead lender line still takes its security. The `loan_defaulted`
+notify carries `omr` ALWAYS (0 when unsecured) — ONE key set, so THE WIRE LEDGER's two-shape rule
+never bites; `loan_collected`/`loan_forfeited` branch. `test/loans.js` proves the demand cap, the
+board surfacing + published `collateralOmrMax`, the liquid-only take gate, the escrow identity
+mid-loan, the repay round-trip, the default seize, the grace-forfeit, the death split at the IDLE
+rate (both legs asserted non-vacuous — the fixture guarantees loot AND remainder are each > 0)
+and the headless all-to-lender path — with **`$OMR conservation` drift proven MOVED-BY-ZERO
+across the entire lifecycle** (SQL omr grants create baseline drift, so every claim is a DELTA —
+the scale/loadtest posture). Four mutations, each caught at its own named assertion (the take
+debit dropped; the collect seize dropped; the death loot leg dropped; the escrow term dropped
+from omrBuckets). Lever pinned + tabled.
+
+**THE FAIR DRAW — a commit/reveal board over the daily Numbers draw (NetNet rec F, 2026-08-21) —
+BUILT** (`src/fairness.js` — the 156th src module, `fair_commitments` — the 240th table (a NEW table,
+so `CREATE TABLE IF NOT EXISTS` is live-DB-safe — the boot-crash rule bites only on columns added to
+EXISTING tables), keyless `GET /v1/fairness` + a worker stamp + a `fair` fold on `GET /v1/casino`;
+`test/casino.js` THE FAIR DRAW block; ZERO levers, so no BALANCE.md entry — the drop publishes proof,
+it tunes nothing). A player — or an agent, who reads these boards — can now PROVE the house did not
+move a draw after seeing the bets: `commitment(day) = sha256(nonce(day) + ':' +
+JSON.stringify(results(day)))` where `nonce(day) = HMAC-SHA256(MARKET_SEED, 'fair:'+day)` — one-way,
+so a revealed nonce exposes nothing about MARKET_SEED or any other day, and without it the 0–999
+results space would be brute-forceable from the hash alone. **TODAY IS SEALED** (the board serves
+exactly `{day, commitment, recorded}` — the drawn number decides a 600:1 book, the near-miss band and
+the VIG POT, so leaking it would let everyone buy the winner; the key set is test-PINNED);
+**YESTERDAY carries the full reveal** (results + nonce + a published `how` string naming the exact
+formula and canonical key order). **The worker stamps** a day-PK record (`stampFairness`,
+SELECT-then-INSERT — the recordReckoning pg-mem lesson) so "it said X yesterday" is witnessed
+server-side too; the board is a PURE READ (an unstamped day serves the computed commitment with
+`recorded:false` rather than materializing a row — a read that materializes state is a write wearing
+a read's clothes, the shipmentBoard lesson), and a stored record that no longer matches recomputation
+is SURFACED as `mismatch:true`, never hidden — the one way it happens is a MARKET_SEED rotation,
+which rewrites every historical draw, and a fairness board that papered over that would be worse than
+none. **SCOPE is deliberately the Numbers alone**, and the reasons are properties of the other draws:
+the TRACK winner is drawn from the day's FINAL entry list (players enter runners all day — it is not
+fixed when bets open, so pre-committing it would be a lie), and the weekly FIGHT can be bought by the
+boss holding neon (THE FIX overrides the seed — a committed "result" would be false exactly when the
+mechanic fires). The Numbers is the flagship anyway: the 600:1 book, the near-miss and the jackpot
+all settle off this one number. **§10.4: ZERO** (a hash + a day-keyed ACCOUNT-AGNOSTIC record row —
+no character_id, so it is outside the death-disposition guard by construction; the test pins a zero
+`transactions` delta across the whole flow). The keyless GET rides the H4 default throttle; the Den
+tab's numbers card quotes the sealed commitment + yesterday's verification inline (folded into
+denInfo rather than a second fetch on a POLLED screen — the poll-cost rule). **The test plays the
+OUTSIDE verifier**: it recomputes yesterday's commitment with node's own crypto per the published
+`how` string — never the server's helper on both sides, which would be the helper-vs-helper vacuity
+class — and drives the tamper case by planting a wrong record and asserting `mismatch` surfaces.
+Three mutations, each caught at its own named assertion (the nonce dropped from the commitment
+payload → the outside verifier fails; today's reveal leaked onto the board → the sealed key-set pin
+fails; the mismatch check forced false → the tamper assertion fails). **This closes the NetNet
+recommendation set** (E risk factors / A the commitment / D the near miss / C the vig pot / B the
+$OMR pledge / F the fair draw — all six built; G/H stand as open decision rows in SIGN-OFF.md).
+
+**G AND H DECIDED — the NetNet set fully resolved, and THE UPPER LEG built (founder-directed
+2026-08-21, via the options prompt: G "leave as-is", H "build the desk's upper leg")** (`src/rules.tail.js`
+`DESK_SURGE`, `src/desk.js` `deskSurge` + the lotSize fold + the board's `surge` edge; `test/desk.js`
+block 25; BALANCE.md § THE UPPER LEG; SIGN-OFF.md's G/H rows flipped to DECIDED). **G — the
+backing/queue gauge — is a RECORDED no-change**: the number already lives in the vig invariants and
+the tokenhealth board, and nothing goes public (a NAV-like figure on a game token risks investment
+framing — the copy-rules posture stands); recorded so it is a decision, not a default. **H — THE
+UPPER LEG** — completes the band's symmetry with NetNet's PremiumSeller insight as a FORMULA over the
+desk's own price history: when the latest REAL print sits `START_BPS` (1.10×) above the 30-day
+window's average of real prints, the lot's two POLICY bounds scale by the premium — the
+returned-inventory bound × surge, and the float ceiling up to `FLOAT_CAP_MAX_BPS` (3%/day vs the base
+1%) — **clip-sized at `MAX_X` (3), and NEVER the shelf bound** (wall 2 is not a policy). **Nothing
+mints** — the leg only decides how much of the shelf goes up today, so wall 1 is untouched by
+construction, and at surge 1 the arithmetic is byte-identical to the pre-leg desk (`min(100×1, 300)`
+= the base cap — the existing lot assertions passed unchanged). **The direction is the load-bearing
+line and it is test-pinned**: prices in `vig_buyback` are $OMR per ETH, so a DEARER $OMR is a SMALLER
+number — the premium is ref/spot, and getting it backwards would make the desk sell MORE into a
+CRASH. Three quiet states are NAMED (`thin_window` under `MIN_PRINTS` 5 — a single print is its own
+reference, so "euphoria" from it is a division by itself; `no_price`; `inside_band` — ordinary noise,
+the dead-zone rule) so an asleep leg never reads as broken (the desk-dark lesson); the board
+publishes the leg beside the band's other two edges. NetNet's ordering rule — the treasury's sell
+threshold must sit ABOVE any emission throttle so the protocol never competes with itself — is
+satisfied trivially (no price-responsive emission exists anywhere; wall 1) and recorded at the lever
+block for the day one is proposed. The test wipes and re-seeds the print window so spot and reference
+are CONTROLLED (a premium computed against inherited history passes by luck), asserts the float-cap
+binder as a PRECONDITION (a surge test where the shelf binds is vacuous), and drives all four states
+— thin window asleep, noise inside the band, a 1.8× euphoria selling a 1.8× lot with the wall
+stretched to exactly `min(base×surge, MAX_BPS)`, and a 10× spike clipping at 3×. Three mutations,
+each caught at its own named assertion (the surge dropped from the lot path; the clip dropped; the
+min-prints guard dropped). §10.4: ZERO (lot sizing is policy over the existing audited sale — the
+block ends on absolute conservation). All four `DESK_SURGE.*` numbers are founder sign-off levers
+(pinned; `MAX_X: 1` restores the flat clip exactly).
+**A pre-existing flake fixed en route, and it is the boundary class for the third time:** the full-suite
+run failed `test/economy.js` on *"the toast and the sheet must not disagree about one balance"* —
+1234560 vs 1234561 — while the file passed standalone. The wave-13 precision assertion seeded
+`bank = 1234567.891234`, **$0.109 below the next integer**, then compared the withdraw reply's floored
+balance to a SECOND authed request's sheet — and at that principal bank interest crosses an integer
+every ~2 seconds, so any loaded-run gap between the two requests flipped the floor (the wave-36
+dollar-boundary shape exactly; the pipe-masking trap nearly hid it too — `npm test | tail` reported
+tail's exit 0 over the red run, the recorded ground-rule-8 lesson, re-run with pipefail). Fixed by the
+wave-46 rule — **ground truth is the DATABASE, never the reply under test**: a direct `pool.query`
+does not accrue, so the toast is pinned EXACTLY against the ledger figure it was computed from
+(flooring the DB also keeps the rounded-regression discrimination the meOf comparison was there for —
+mutation-verified: floor→round in the response fails by name at 1234561-vs-1234560), and the
+cross-surface half takes the wave-36 shape (exact lower edge, an upper bound computed from the LIVE
+`BANK_RATE`/`BANK_PERIOD_MS` levers over a 30s gap, never a hardcoded tolerance).
 
 **THE ROUND TRIP TOLD TRUE + EXTRACTED GEAR LEAVES PLAY + two founder designs (founder-directed
 2026-08-21: NFT marketplace round-trip + wallet-rolled stats).** The founder asked for two changes,

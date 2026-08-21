@@ -170,6 +170,28 @@ Push.__setDeliver(async (_pool, s, payload) => { sent.push({ endpoint: s.endpoin
   assert.ok(!/A rival/.test(body), 'and never falls back to a name the payload cannot carry');
 }
 
+// ════════════ SEND-TIME SSRF RECHECK (bulletproof audit) ════════════
+// Subscribe-time validation alone leaves DNS REBINDING open: a hostname that resolved public when
+// stored can resolve private by the time the worker POSTs. The same endpointAllowed is asked AGAIN at
+// send time — proven by planting a sub via SQL (bypassing saveSubscription entirely, the way a
+// rebound host effectively does) and asserting the delivery seam is never handed the internal target.
+{
+  const r = await mk('Rebind Mark');
+  const rAcct = await acctOf(r.id);
+  await pool.query('INSERT INTO push_subscriptions (id, account_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)',
+    [uid(), rAcct, 'https://169.254.169.254/rebound', 'p', 'a']);
+  await pool.query('INSERT INTO push_subscriptions (id, account_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)',
+    [uid(), rAcct, 'https://push.example/good', 'p', 'a']);
+  await addNote(r.id, 'whacked', { by: 'A Ghost' });
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 1, 'exactly one delivery — the internal endpoint is skipped at send time');
+  assert.equal(sent[0].endpoint, 'https://push.example/good',
+    'the delivery seam is NEVER handed the internal endpoint — the recheck runs where the POST happens');
+  // and the skipped endpoint is NOT pruned (a private resolution may be transient — the next sweep re-asks)
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM push_subscriptions WHERE account_id=$1', [rAcct])).rows[0].n), 2,
+    'a send-time skip does not delete the subscription');
+}
+
 // ════════════ §10.4 — push moves no value ════════════
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), 0, 'web push writes no ledger rows — it is pure notification');
 

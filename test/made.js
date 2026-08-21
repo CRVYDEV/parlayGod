@@ -320,6 +320,73 @@ assert.equal((await call('POST', '/v1/garage/boost', { token: twin.token })).bod
 assert.notEqual((await call('POST', '/v1/garage/boost', { token: holder.token })).body.error, 'full',
   'and the ladder really parks more iron — the same fleet is not full for him');
 
+// ═══════════════ 5c. THE COMMITMENT (NetNet rec A, 2026-08-21) — locked stake counts ×mult ═══════
+// The WinNET lock-boost shape pointed at the float: lock the stake for a published window and the
+// LADDER reads it ×mult. Three walls, each asserted: the boost lands at a REAL read (the sheet's
+// energy cap, not merely a board field), the window is ONE-WAY (unstake refuses; a live lock only
+// upgrades), and the whole thing moves ZERO currency (no ledger rows — the lock changes what the
+// ladder READS, never the balance). The no-loot-shield wall lives in test/social.js, where a locked
+// holder is really killed and the committed rate still lands.
+const { STAKE_LOCKS, effectiveStake, stakeLockActive } = await import('../src/rules.js');
+const vera = await mk('Vera Vow');
+// the gates: no stake → none; an unknown window → bad_tier (naming the real ones)
+assert.equal((await call('POST', '/v1/stake/lock', { token: vera.token, body: { tier: 'month' } })).body.error, 'none',
+  'nothing staked → nothing to give your word on');
+await grantOmr(vera.id, 120); grantDrift += 120;
+await call('POST', '/v1/stake', { token: vera.token, body: { amount: 120 } });
+assert.equal((await call('POST', '/v1/stake/lock', { token: vera.token, body: { tier: 'forever' } })).body.error, 'bad_tier',
+  'an unknown window is refused by name');
+// 120 staked sits between rung 1 (60) and rung 2 (180): plain read = rung 1
+let sheet = await meOf(vera.token);
+assert.equal(sheet.ladder.rung, 1, 'the plain stake reads rung 1');
+const rungEnergy = MADE_LADDER.RUNGS.map((r) => r.energy);
+const plainEnergy = sheet.maxEnergy;
+// zero-ledger pin: capture the account's row count BEFORE the lock
+const txCount = async () => Number((await pool.query(
+  `SELECT COUNT(*) n FROM transactions WHERE account_id=(SELECT account_id FROM characters WHERE id='${vera.id}')`)).rows[0].n);
+const txPre = await txCount();
+r = await call('POST', '/v1/stake/lock', { token: vera.token, body: { tier: 'month' } });
+assert.equal(r.code, 200, `the word is given (${JSON.stringify(r.body)})`);
+assert.equal(r.body.mult, 1.5, 'at the month tier\'s published mult');
+assert.equal(r.body.effectiveStake, 180, '120 locked ×1.5 reads as 180');
+assert.equal(await txCount(), txPre, 'and the lock wrote ZERO ledger rows — no currency moved (§10.4 has no surface here)');
+// THE BOOST LANDS AT A REAL TILL: 180 effective crosses rung 2's min (180), and the sheet's
+// energy CAP — enforcement, not display — grows by the rung delta. Mutation target: revert
+// madeRungIdx to raw `staked` and this fails by name.
+sheet = await meOf(vera.token);
+assert.equal(sheet.ladder.rung, 2, 'the LOCKED stake reads rung 2 — commitment bought a rung the balance alone does not reach');
+assert.equal(sheet.ladder.effective, 180, 'the board states the effective stake');
+assert.equal(sheet.maxEnergy - plainEnergy, rungEnergy[1] - rungEnergy[0],
+  'and the energy CAP really grew by the rung delta — the boost lands at the enforcement, not merely on a board');
+assert(sheet.ladder.lock && sheet.ladder.lock.mult === 1.5 && sheet.ladder.lock.seconds > 0,
+  'the live commitment rides the board (mult + countdown)');
+assert(Array.isArray(sheet.ladder.lockTiers) && sheet.ladder.lockTiers.length === STAKE_LOCKS.TIERS.length,
+  'and the tiers on offer are the live levers, so the client quotes what the till enforces');
+// THE ONE-WAY WINDOW: unstake refuses BY NAME with the time left as DATA (the district-payload rule)
+r = await call('POST', '/v1/unstake', { token: vera.token });
+assert.equal(r.body.error, 'locked', 'a locked stake does not come out');
+assert(Number(r.body.lockSeconds) > 0, 'and the refusal carries the machine-readable time left');
+// upgrades only: longer+stronger allowed, weaker refused
+assert.equal((await call('POST', '/v1/stake/lock', { token: vera.token, body: { tier: 'week' } })).body.error, 'committed',
+  'a live commitment cannot be traded DOWN — shorter or weaker is refused');
+r = await call('POST', '/v1/stake/lock', { token: vera.token, body: { tier: 'quarter' } });
+assert.equal(r.code, 200, 'but it can be made LONGER and STRONGER');
+assert.equal(r.body.mult, 2.0, 'the oath doubles it');
+// EXPIRY: backdate the window and the whole thing lapses on its own — the effective read falls
+// back to the raw balance and the principal walks free through the ordinary unstake.
+await pool.query(`UPDATE account_persistent SET stake_lock_until = now() - interval '1 hour'
+  WHERE account_id=(SELECT account_id FROM characters WHERE id='${vera.id}')`);
+sheet = await meOf(vera.token);
+assert.equal(sheet.ladder.rung, 1, 'a lapsed lock reads the raw balance again — rung 1');
+assert.equal(sheet.ladder.effective, 120, 'effective == staked once the window passes');
+r = await call('POST', '/v1/unstake', { token: vera.token });
+assert.equal(r.code, 200, 'and the principal unstakes normally — the window was the whole price');
+// the pure helpers agree with everything above (the one-reader discipline)
+const veraAcct = (await pool.query(`SELECT * FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${vera.id}')`)).rows[0];
+assert.equal(stakeLockActive(veraAcct), false, 'stakeLockActive reads the lapse');
+assert.equal(effectiveStake({ staked: 100, stake_lock_until: new Date(Date.now() + 3600000), stake_lock_mult: 1.5 }), 150,
+  'effectiveStake is the one reader the ladder, the board and the coach share');
+
 // ═══════════════ 6. §10.4 — the vocabulary is closed and the dues reconcile ═══════════════
 const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -331,4 +398,4 @@ const deskBacked = inv.checks.find((c) => c.name === 'desk inventory backed');
 assert(deskBacked.ok, `the shelf still reconciles with the dues on it: ${JSON.stringify(deskBacked)}`);
 
 await app.close();
-console.log('✅ THE FLOAT + THE LADDER (economy v3 step 5, D8=D) test passed — the dues are a classified sink that RECYCLES to the desk, the board publishes the price/term/gates and makes the CEILING claim instead of the retired no-power one, the burn is exact and the window extends from later-of(now, end), both ACCESS gates are back and asserted from BOTH sides (an unmade man is refused a club then admitted the moment he pays; level alone will not seat a whale at the big table until he HOLDS the stake), THE PAD PAYS ITSELF still deducts the same cash for the same income (TIME, never a discount), and THE LADDER is real — the top rung grows the trunk/energy/nerve caps and the garage and pays its fence edge at a real till against an identical twin car, dues climb it by exactly MADE_RUNGS and CLAMP at the top so paying is a shortcut and never a higher ceiling, and the ceiling itself is pinned against the LIVE mission table so the copy\'s claim stays true through any retune — and §10.4 holds, vocabulary closed, drift == the SQL grants only');
+console.log('✅ THE FLOAT + THE LADDER (economy v3 step 5, D8=D) test passed — the dues are a classified sink that RECYCLES to the desk, the board publishes the price/term/gates and makes the CEILING claim instead of the retired no-power one, the burn is exact and the window extends from later-of(now, end), both ACCESS gates are back and asserted from BOTH sides (an unmade man is refused a club then admitted the moment he pays; level alone will not seat a whale at the big table until he HOLDS the stake), THE PAD PAYS ITSELF still deducts the same cash for the same income (TIME, never a discount), and THE LADDER is real — the top rung grows the trunk/energy/nerve caps and the garage and pays its fence edge at a real till against an identical twin car, dues climb it by exactly MADE_RUNGS and CLAMP at the top so paying is a shortcut and never a higher ceiling, and the ceiling itself is pinned against the LIVE mission table so the copy\'s claim stays true through any retune — THE COMMITMENT is real (a locked stake counts ×mult at the sheet\'s own energy-cap till, wrote zero ledger rows, refuses to unstake with the time left as data, only ever upgrades, and lapses back to the raw read on its own) — and §10.4 holds, vocabulary closed, drift == the SQL grants only');
