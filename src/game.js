@@ -2101,15 +2101,37 @@ export async function heal(ch, client, h) {
 export async function checkin(ch, client, h) {
   const today = dayOf();
   if (ch.checkin_day === today) throw new GameError('done', 'Already checked in today.');
+  const was = Number(ch.streak) || 0;
   ch.streak = ch.checkin_day === today - 1 ? ch.streak + 1 : Math.max(1, Math.floor(ch.streak / 2)); // miss halves, never zero
   ch.checkin_day = today;
   const lvl = levelOf(Number(ch.respect));
-  const pay = 250 * lvl + 100 * lvl * Math.min(ch.streak, 7);
+  const payAt = (s) => 250 * lvl + 100 * lvl * Math.min(s, 7);
+  const pay = payAt(ch.streak);
   ch.cash = Number(ch.cash) + pay;
+  const energyBefore = Number(ch.energy);
   ch.energy = Math.min(50 + 2 * lvl, Number(ch.energy) + 20);
   h.acct.checkins_lifetime = Number(h.acct.checkins_lifetime || 0) + 1; // referral gate §7.13
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pay, reason: 'checkin' });
-  return { ok: true, pay, streak: ch.streak };
+  // FOUND BY PLAYING: this reply carried `pay` and `streak` and nothing else, so the line read
+  // "+$105,350 (day 1)" — the streak rendered as a bare COUNTER when it is the money MULTIPLIER:
+  // pay climbs 100×lvl for every consecutive day to seven, so day 2 was worth +$30,100 more and the
+  // player had no way to know. That is the whole reason to come back tomorrow, and the client cannot
+  // compute it — the formula is here and published nowhere (the `crewNextCost` case). Its own
+  // sibling one system over (/v1/streak/claim) has stated day/best/rank all along.
+  //   `next` is null once the ladder tops out, so the line stops promising a rise that cannot come.
+  //   `energyGained` is a DELTA, not the constant: at the cap the top-up grants nothing and a line
+  // claiming +20 would be a wrong number, which is worse than a silent one.
+  //   `wasStreak` rides only when a gap actually COST days — a run of 6 coming back as 3 reads like
+  // the game ate it, and the real rule is kinder than the player will assume (a miss HALVES the
+  // streak, it never zeroes it), so the one moment worth saying it is the moment it bites.
+  return { ok: true, pay, streak: ch.streak,
+    next: ch.streak < 7 ? payAt(ch.streak + 1) : null,
+    // clamped at 0, and not defensively: the cap is LEVEL-scaled and the season rollover resets
+    // respect, so a returning player's stored energy can sit ABOVE the new cap — `Math.min` then
+    // clamps DOWN and the raw delta is NEGATIVE. "+-99,347 energy" is a wrong number where a silent
+    // one would do, which is the thing this whole sweep is about.
+    energyGained: Math.max(0, Number(ch.energy) - energyBefore),
+    ...(ch.streak < was ? { wasStreak: was } : {}) };
 }
 
 // ── BANK & TRAVEL ──

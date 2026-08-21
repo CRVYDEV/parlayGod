@@ -231,7 +231,26 @@ export async function claimDaily(ch, jobId, client, h) {
   if (row) await client.query('UPDATE daily_progress SET claimed=$3 WHERE character_id=$1 AND day=$2', [ch.id, day, JSON.stringify(claimed)]);
   else await client.query('INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ($1,$2,$3,$4)', [ch.id, day, '{}', JSON.stringify(claimed)]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: `daily:${jobId}` });
-  return { ok: true, payout, rep, all, omrBonus };
+  // FOUND BY PLAYING: this reply carried payout/rep/all/omrBonus and the line read "done." — on the
+  // most-repeated reward button in the game, over $60,200 and 1,505 respect. The half that matters
+  // is the ENVELOPE: clearing all three pays 3.5× the cash of a single one, 4× the respect, refills
+  // energy outright, and draws 0.5 $OMR from the event fund — and `daily:all` is one of only TWO
+  // ways to earn the token at all. A player two-for-three had no idea the third was worth that.
+  //   `remaining`/`allBonus` are the hook, and neither is derivable client-side (both are
+  // level-scaled off a formula that lives here — the crewNextCost case).
+  //   `envelopeOutOfReach` is the honest half: `all` requires EVERY job on the board, so on a day
+  // that draws the family-gated tribute a solo player CANNOT reach it however many they clear. The
+  // card already discloses that per-job (`blocked`); dangling the envelope at them anyway would be
+  // the coach's own dailyLiveFor lesson, unlearned.
+  //   `omrBonus` rides as what LANDED, never the constant: a dry fund pays nothing and a line
+  // claiming 0.5 would be a wrong number where a silent one would do.
+  const board = dailyJobsOf(day);
+  const unclaimed = board.filter((j) => !claimed.includes(j.id));
+  const outOfReach = unclaimed.some((j) => !!dailyBlockedFor(j, { gangId: h.owned.gangId }));
+  return { ok: true, payout, rep, all, omrBonus,
+    ...(all ? { energyRefilled: true } : {}),
+    ...(all || outOfReach ? {} : { remaining: unclaimed.length, allBonus: { cash: 500 * lvl, rep: 15 * lvl, omr: M4.DAILY_ALL_OMR } }),
+    ...(outOfReach && !all ? { envelopeOutOfReach: true } : {}) };
 }
 
 // ── FIRST WEEK — GRASSROOTS (§5.1, §4). Server-checked; social tasks verify
