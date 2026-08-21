@@ -1,6 +1,6 @@
 # OMERTÀ — launch hype videos
 
-One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **eleven cuts** —
+One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **twelve cuts** —
 five short hype cuts, each with its **own footage set and its own music track**, the long-form
 **money explainer** (`hype-money.mp4`), **the LIFE tour** (`hype-life.mp4` — every activity,
 path and loop in the game), the **launch TRAILER** (`hype-trailer.mp4` — the ~31s story-arc
@@ -46,6 +46,7 @@ the phone frame edge-to-edge — cleaner than a blur-fill of near-black footage)
 | `hype-short-blood.mp4` | 1080×1920 | ~12s | PvP audience | the kill economy — every player is a mark, one life, they drop what they hold |
 | `hype-short-vice.mp4` | 1080×1920 | ~12s | degen audience | the vice pillar — dice, high stakes, the fights, race for pinks |
 | `hype-short-rise.mp4` | 1080×1920 | ~13s | RPG audience | the rise — arrive with nothing, get made, earn the name, take the city |
+| `hype-rwa.mp4` | 1920×1080 | ~48s | RWA explainer | the one claim — vote the ticker → real stock → split by play → your street's vault |
 
 The five hype cuts have **distinct footage** (no reused shots between cuts except the shared OMERTÀ
 end-plate) so they don't feel repetitive when posted together; the explainer, being ~5× longer, draws
@@ -110,6 +111,20 @@ cover-crop (the noir plates are centre-weighted, and bespoke t2v clips have no s
 and `falBespoke` skips any plate whose 16:9 render exists so portrait cuts never re-buy footage in
 hand. One frame-read fix: "THEY DROP WHAT THEY HOLD" landed on `cine-payday`'s empty desk-lamp
 open — the cash lands at ~3.0s, so the shot's `off` moved 0.4→2.8.
+
+### The RWA explainer (`hype-rwa.mp4`, 2026-08-21)
+
+The ~48s narrated cut for the ONE claim no other game can make, third of the four approved assets —
+a standalone telling of the money cut's Act IV: the treasury's declared slice of every real fee →
+the families vote the ticker → real tokenized stock behind hard price walls → split by PLAY (idle
+money takes nothing) → delivered into your street deed's vault → or burn $OMR for treasury ETH.
+Five MiniMax VO segments on the act boundaries (`NARRATION.rwa`), `bed-legit` under. One new hero
+shot: **`mm-vaultdrop`** — Seedance read the plaque-vault prompt as a SAFE-DEPOSIT ROOM (cash into
+a numbered box, a key turning, a wall of numbered vaults), a better image for "delivered into the
+deed's vault" than the prompt asked for; everything else is a free edit of the library. One layout
+lesson: the closer cta fits ~62 chars — the first 66-char cta clipped BOTH frame edges (frame-read),
+so it shortened to "a real book · extraction opens at launch · omerta.fun". Copy rules as ever:
+mechanism-true, number-free, founder signs wording + voice + a licensed track before public.
 
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 
