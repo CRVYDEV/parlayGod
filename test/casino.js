@@ -4,6 +4,7 @@
 // session), the 1% street cut feeding the tax pool, one ticket/day, lazy claim at 600:1,
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { CASINO, STABLE, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
@@ -63,8 +64,10 @@ const omrBefore = (await meOf(token)).omr;
 const taxPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 let wins = 0, losses = 0, staked = 0, paidOut = 0;
 // econ pass: mirror of the HOUSE BOOK — the street is tipped 1% per stake but only out of realized
-// profit (no open tickets during the session, so liability is 0 and the mirror is exact)
-let denProfit = 0, denDist = 0;
+// profit (no open tickets during the session, so liability is 0 and the mirror is exact). THE VIG
+// POT joins the mirror: after the tip, JACKPOT_BPS of the stake is reserved into the pot, capped at
+// what the book can still cover — and the pot itself is a reservation the NEXT tip must respect.
+let denProfit = 0, denDist = 0, denPot = 0;
 for (let i = 0; i < 60; i++) {
   await seed('nerve=50'); // nerve is the natural throttle; refill to keep the session going
   const r = await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } });
@@ -76,8 +79,10 @@ for (let i = 0; i < 60; i++) {
   staked += 1000;
   denProfit += 1000;                                                // the stake enters the book…
   if (r.body.win) { wins++; paidOut += 2000; denProfit -= 2000; } else losses++; // …THIS round's payout is booked…
-  const take = Math.min(10, Math.max(0, denProfit - denDist));      // …and ONLY THEN the tip is profit-capped
+  const take = Math.min(10, Math.max(0, denProfit - denDist - denPot)); // …and ONLY THEN the tip is profit-capped
   denDist += take;                                                  // (red-team R4 casino F1: dice tips post-payout)
+  const feed = Math.min(Math.floor(1000 * CASINO.JACKPOT_BPS / 10000), Math.max(0, denProfit - denDist - denPot));
+  denPot += feed;                                                   // THE VIG POT accrues after the tip, same cap
 }
 assert(wins > 0 && losses > 0, `both outcomes over 60 rounds (${wins}W/${losses}L)`);
 // every roll is in the audit log
@@ -92,9 +97,27 @@ const taxPost = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1
 assert.equal(taxPost - taxPre, denDist, 'the street cut is tipped only out of realized profit');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:take'")).rows[0].s),
   -denDist, 'every tip-out is a ledgered NULL casino:take row');
-const dvCraps = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+const dvCraps = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
 assert.equal(Number(dvCraps.profit), staked - paidOut, 'the house book mirrors the ledger (profit == bets − wins)');
 assert.equal(Number(dvCraps.distributed), denDist, 'and knows exactly what it tipped out');
+assert.equal(Number(dvCraps.jackpot), denPot, 'THE VIG POT accrued exactly JACKPOT_BPS of the stakes, profit-capped');
+// A session where the shooter beats the house throughout legitimately ends with the book — and
+// therefore the pot — at zero, so "the pot really gets fed" is GUARANTEED rather than asserted on
+// luck (the recorded flake class: a deterministic assertion resting on a probabilistic
+// precondition): cushion the book with a balanced NULL casino:bet:% row (the den-profit §10.4
+// identity reads the ledger, so profit never moves without one) and play ONE round — the feed is
+// then exactly JACKPOT_BPS of the stake, win or lose, because the cushion dwarfs the round swing.
+{
+  const cushion = Math.max(0, -Number(dvCraps.profit)) + 10000 + denDist + denPot;
+  await pool.query('UPDATE den_volume SET profit = profit + $1 WHERE id=1', [cushion]);
+  await pool.query("INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1, NULL, 'cash', $2, 'casino:bet:vigpotprobe')", [crypto.randomUUID(), -cushion]);
+  const potPre0 = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+  await seed('nerve=50');
+  assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round against a solvent book');
+  assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot) - potPre0,
+    Math.floor(1000 * CASINO.JACKPOT_BPS / 10000),
+    'a solvent round feeds THE VIG POT exactly JACKPOT_BPS of the stake, win or lose');
+}
 // THE hard line: a gambling session never touches $OMR
 assert.equal((await meOf(token)).omr, omrBefore, 'the den never touches $OMR — cash only');
 
@@ -116,11 +139,22 @@ const yesterday = dayOf() - 1;
 const winningPick = numbersDrawOf(yesterday);
 await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${winningPick} WHERE character_id='${cid}'`);
 const cashPreClaim = (await meOf(token)).cash;
+// THE VIG POT (NetNet rec C): the exact hit also cracks the progressive pot — JACKPOT_WIN_BPS of it
+// on top of the 600:1, the rest RESEEDING. The expectation is read from the LIVE pot (fed by the
+// craps session above), never restated.
+const potPreHit = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+assert(potPreHit > 0, 'the pot is non-zero going into the hit (else the jackpot assertions are vacuous)');
+const jpWin = Math.floor(potPreHit * CASINO.JACKPOT_WIN_BPS / 10000);
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.code, 200, 'claimed'); assert.equal(rr.body.settled, 1, 'one ticket settled');
 assert.equal(rr.body.won, 100 * CASINO.NUMBERS_PAYOUT, 'the hit paid 600:1');
-assert.equal((await meOf(token)).cash, cashPreClaim + 60000, 'the payout landed in pocket');
+assert.equal(rr.body.jackpot, jpWin, 'the hit cracked THE VIG POT for JACKPOT_WIN_BPS of it');
+assert.equal((await meOf(token)).cash, cashPreClaim + 60000 + jpWin, 'the payout AND the pot landed in pocket');
 assert.equal(await sum('casino:win:numbers'), 60000, 'the win is a ledgered faucet');
+assert.equal(await sum('casino:win:jackpot'), jpWin,
+  'the jackpot is its own ledgered casino:win:% faucet (den-book LIKE pattern — zero new §10.4 vocabulary)');
+assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot),
+  potPreHit - jpWin, 'the remainder RESEEDS — the pot never restarts from zero');
 assert.equal((await call('POST', '/v1/casino/numbers/claim', { token })).body.settled, 0, 'a settled ticket is gone (idempotent)');
 // a losing ticket settles to nothing
 rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: (winningPick + 500) % 1000, amount: 100 } });
@@ -184,6 +218,33 @@ await seed('nerve=50');
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round while the house is under water');
 assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolUW,
   'no street cut while the book is negative — the den only tips out of realized profit');
+
+// ── THE VIG POT IS A RESERVATION, deterministically ──
+// The property: a street tip may never spend money the pot has claimed (denAvailable subtracts the
+// pot). The craps mirror above catches a drift only when the book happens to hover inside the
+// divergence window, which a mutation could survive on a lucky run — so this pins it at a
+// CONSTRUCTED state where the answer is outcome-independent: position the book so that after one
+// $1,000 dice round, available WITH the reservation is at most $5 (loss) or negative (win), while
+// available WITHOUT it would be ~$100k — the 1% tip must come back capped under $10, and the pot
+// must not grow. State-warping, not value: the profit bump is balanced by a NULL casino:bet:% row
+// (the den-profit §10.4 identity reads the ledger, so profit may never be moved without one), and a
+// NULL row sits outside the per-character cash check by construction.
+{
+  const dv0 = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
+  const potBump = 100000;
+  // want: (profit + X) − distributed − (jackpot + potBump) = −995  →  X = ...
+  const X = Number(dv0.distributed) + Number(dv0.jackpot) + potBump - 995 - Number(dv0.profit);
+  await pool.query('UPDATE den_volume SET profit = profit + $1, jackpot = jackpot + $2 WHERE id=1', [X, potBump]);
+  await pool.query("INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1, NULL, 'cash', $2, 'casino:bet:vigpotprobe')", [crypto.randomUUID(), -X]);
+  const potPre = Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot);
+  const poolPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+  await seed('nerve=50');
+  assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round against the pinned book');
+  assert(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool) - poolPre <= 9,
+    'the street tip is capped by the pot RESERVATION — it never spends money the pot has claimed');
+  assert.equal(Number((await pool.query('SELECT jackpot FROM den_volume WHERE id=1')).rows[0].jackpot), potPre,
+    'and the feed respects the same wall — the pot cannot feed itself past what the book covers');
+}
 
 // ══════════ STEP TWO: back-room PvP dice, the weekly fight + the neon fix, rakeback ══════════
 let seededCash = 1000000; // every later seed is a tracked RELATIVE bump so the identity check stays exact
@@ -301,10 +362,12 @@ assert.equal(Number((await pool.query("SELECT rake_cursor FROM businesses WHERE 
 // bank REAL profit for the house (honest play, no value seeded): matured losing tickets, until the
 // book can cover the rakeback owed on the volume since the cursor
 for (let i = 0; i < 300; i++) {
-  const dv = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+  const dv = (await pool.query('SELECT profit, distributed, jackpot FROM den_volume WHERE id=1')).rows[0];
   const volNow0 = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
   const owed = Math.floor((volNow0 - volAtBuy) * CASINO.RAKEBACK_BPS / 10000);
-  if (Number(dv.profit) - Number(dv.distributed) >= owed + 1000) break;
+  // THE VIG POT is a standing reservation denAvailable subtracts, so "the book can cover the
+  // rakeback" must clear the pot too — else the loop breaks early and the collect under-pays.
+  if (Number(dv.profit) - Number(dv.distributed) - Number(dv.jackpot) >= owed + 1000) break;
   rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 0, amount: 1000 } });
   assert.equal(rr.code, 200, `top-up ticket (${JSON.stringify(rr.body)})`);
   await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 500) % 1000} WHERE character_id='${cid}'`);

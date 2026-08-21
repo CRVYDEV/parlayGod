@@ -6338,3 +6338,24 @@ edge-draw day.
 **What is deliberately absent:** a separate ledger reason (the rail is shared), any change to the
 draw itself (the §7.11 seed is untouched — the consolation is a payout table on the same verifiable
 number), and any liability change (the 600× reservation strictly dominates the 5× consolation).
+
+## THE VIG POT — the progressive den jackpot (NetNet research rec C, 2026-08-21)
+
+The NetNet progressive-pool shape on the den's own book: `JACKPOT_BPS` of every PvE stake is
+RESERVED out of realized house profit (fed inside `takeHouse`, capped at `denAvailable` exactly
+like the street cut — the den never promises money the players have not lost), and an EXACT
+Numbers hit takes `JACKPOT_WIN_BPS` of the pot on top of the 600:1, the remainder reseeding so the
+pot never restarts from zero. The pot is a RESERVATION, not a cash bucket — money stays inside
+`den_volume.profit` until a win pays it as a ledgered `casino:win:jackpot` faucet, which rides the
+den-book `casino:win:%` LIKE pattern, so the `den profit` §10.4 identity absorbs it with ZERO
+invariant changes. `denAvailable` subtracts the pot, so street cuts and rakeback can never tip out
+money the pot has claimed (test-pinned at a constructed book state, deterministic).
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `CASINO.JACKPOT_BPS` | **50** (0.5% of PvE stake volume) | The feed. Profit-capped, so it is a redistribution of the house's realized edge, never emission-on-volume (the mint-on-top fix's own wall). `0` disables the feed; the pot then drains to nothing on its next hit. |
+| `CASINO.JACKPOT_WIN_BPS` | **5000** (a hit takes half) | The crack-vs-reseed split. Higher pays a bigger headline and restarts lower; lower keeps the marquee number climbing. |
+
+**What is deliberately absent:** any new §10.4 reason for the FEED (a reservation moves no value),
+any liability change (the pot is subtracted in `denAvailable` beside the ticket exposures), and any
+$OMR surface (the pot is den cash end to end).

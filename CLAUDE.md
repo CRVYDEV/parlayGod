@@ -15867,3 +15867,30 @@ second of the two feeds the den-book profit arithmetic, so leaving it would have
 rakeback recovery loop's expectations). Levers pinned; three mutations each caught at their own
 named assertion (the near branch dropped; the distance made linear — fails at the circular-edge
 test by name; the near payout unledgered).
+
+**THE VIG POT — the progressive den jackpot (NetNet rec C, 2026-08-21) — BUILT** (`schema.sql`
+`den_volume.jackpot` (ALTER-added — the boot-crash lesson), `src/rules.tail.js` `CASINO.JACKPOT_BPS`
+(50) / `JACKPOT_WIN_BPS` (5000), `src/casino.js` takeHouse/denAvailable/claimNumbers/denInfo,
+`src/server.js` `/v1/rules`, `src/events.js` (the pot rides the Numbers' "also today" line),
+`public/index.html`, `test/casino.js`; BALANCE.md § THE VIG POT). A progressive jackpot on the den's
+own audited book: **the pot is a RESERVATION, never a cash bucket** — `JACKPOT_BPS` of every PvE
+stake accrues inside `takeHouse` capped at `denAvailable` (the rakeback discipline: the den never
+promises money the players have not lost), the money stays inside `profit`, and `denAvailable`
+subtracts the pot so street cuts and rakeback can never tip out what the pot has claimed. An EXACT
+Numbers hit takes `JACKPOT_WIN_BPS` of it on top of the 600:1 — a ledgered `casino:win:jackpot`
+faucet riding the den-book `casino:win:%` LIKE pattern with `bumpProfit(-jp)`, so the `den profit`
+§10.4 identity holds with **ZERO invariants.js changes** — and the remainder RESEEDS (the marquee
+never restarts from zero). Surfaced everywhere the anticipation pays: denInfo + `/v1/rules`
+(`jackpot {pot, feedBps, winBps}`), the Den tab's live pot line, the events strip's Numbers line, a
+`jackpot_hit` me-notify + streets shout (BRANCHED — the two shapes carry different keys, THE WIRE
+LEDGER's rule 2), and the claim toast. **Two test disciplines earned their keep in one drop**: the
+craps mirror gained the pot and my own vacuity assert (`denPot > 0`) FLAKED on its first run — a
+session where the shooter beats the house throughout legitimately ends with the book and pot at
+zero (the recorded deterministic-assertion-on-a-probabilistic-precondition class) — so the feed is
+GUARANTEED instead (a balanced NULL `casino:bet:%` cushion row makes the book solvent, then ONE
+round must feed exactly `floor(stake × BPS/10000)`, win or lose); and the reservation wall gets a
+CONSTRUCTED deterministic probe (the book pinned so post-round available-with-reservation is ≤ $5
+while available-without would be ~$100k — the tip must come back capped and the pot must not feed
+itself past the wall). Four mutations, each caught at its own named assertion (the feed dropped;
+the reservation dropped from denAvailable; the reseed dropped — a hit taking the whole pot; the
+payout unledgered). Levers pinned + tabled.

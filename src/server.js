@@ -1494,6 +1494,7 @@ export async function buildServer() {
     casino: { district: CASINO.DISTRICT, minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET,
       dice: { pays: '1:1', nerve: CASINO.DICE_NERVE }, numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: CASINO.NUMBERS_PAYOUT,
         nearBand: CASINO.NUMBERS_NEAR_BAND, nearMult: CASINO.NUMBERS_NEAR_MULT },
+      jackpot: { feedBps: CASINO.JACKPOT_BPS, winBps: CASINO.JACKPOT_WIN_BPS },
       blackjack: { paysBps: CASINO.BJ_PAYS_BPS, dealerMin: CASINO.BJ_DEALER_MIN, hitSoft17: CASINO.BJ_HIT_SOFT_17 },
       poker: { min: CASINO.POKER_MIN, rakeBps: CASINO.PVP_RAKE_BPS },
       tournament: { buyin: CASINO.TOURNEY.BUYIN, rakeBps: CASINO.TOURNEY.RAKE_BPS, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS },

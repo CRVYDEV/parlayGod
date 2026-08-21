@@ -265,6 +265,15 @@ export const CASINO = {
   // quietly flip the book. openLiability needs NO change: a ticket resolves as EITHER a hit or a
   // near (never both) and the 600× reservation already covers the smaller payout.
   NUMBERS_NEAR_BAND: 5, NUMBERS_NEAR_MULT: 5,
+  // THE VIG POT (NetNet research rec C, 2026-08-21) — the progressive jackpot: JACKPOT_BPS of
+  // every PvE stake is RESERVED out of realized house profit (fed inside takeHouse, capped at
+  // denAvailable exactly like the street cut — the den never promises money the players have not
+  // lost), and an EXACT Numbers hit takes JACKPOT_WIN_BPS of the pot on top of the 600:1, the
+  // remainder reseeding so the pot never restarts from zero. The payout is a ledgered
+  // casino:win:jackpot faucet riding the den-book casino:win:% LIKE pattern (bumpProfit(-win)
+  // keeps `den profit` exact — zero new §10.4 reasons). Both are founder sign-off levers;
+  // JACKPOT_BPS: 0 disables the feed and the pot drains to nothing on its next hit.
+  JACKPOT_BPS: 50, JACKPOT_WIN_BPS: 5000,
   // ── step two (all founder sign-off levers) ──
   // The HIGH-STAKES ROOM: past HIGH_LVL the PvE dice table takes up to HIGH_MAX per roll, and
   // pots ≥ HIGH_FEED hit the public streets feed (whale theater).

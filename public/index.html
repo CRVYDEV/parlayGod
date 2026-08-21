@@ -2693,7 +2693,7 @@
       return `\u{1F5C2} the file on ${txt(d.name)} — ${txt(d.law && d.law.stage)} with the law, ${txt(d.wealth)}, ${d.record ? d.record.kills : 0} on the record${marks.length ? ` · ${marks.join(' · ')}` : ''}${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
     }
     if (body && body.ok && body.settled !== undefined && body.won !== undefined)
-      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected${body.nearWins ? ` (${body.nearWins} a near miss — the runner pays a consolation)` : ''}` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
+      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected${body.nearWins ? ` (${body.nearWins} a near miss — the runner pays a consolation)` : ''}${body.jackpot ? ` — AND THE VIG POT CRACKED: $${fmt(body.jackpot)} on top` : ''}` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
         : 'nothing to collect — no tickets have come up yet';
     if (body && body.ok && 'fadeLimit' in body)
       return body.fadeLimit ? `you're taking bets up to $${fmt(body.fadeLimit)} in the back room` : 'you\'re off the back-room board — no more fades';
@@ -7265,6 +7265,7 @@
       <button class="act" id="num-go">play</button>
       <button class="act" data-do="POST /v1/casino/numbers/claim">claim tickets</button>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:6px">yesterday's number: <b>${den.numbers?.yesterday ?? '—'}</b></div>
+      ${den.jackpot ? `<div class="d" style="margin-top:6px;font-size:13px">💰 <b>THE VIG POT</b> rides at <b style="color:var(--neon)">$${fmt(den.jackpot.pot)}</b> — an exact hit takes ${den.jackpot.winBps / 100}% of it on top of the 600:1, the rest reseeds. Every den stake feeds it (${den.jackpot.feedBps / 100}% of the action, only out of the house's own winnings).</div>` : ''}
       <h2 style="margin-top:14px">The Fight</h2>
       <div class="d" style="color:var(--dim);font-size:13.5px">${den.fight ? `<b>${den.fight.a}</b> ★ favorite (pays ${den.fight.favPays}×) &nbsp;vs&nbsp; <b>${den.fight.b}</b> underdog (pays ${den.fight.dogPays}×)` : '—'}</div>
       <button class="act" id="fight-a">back ${den.fight ? den.fight.a : 'the favorite'} (fav)</button>
@@ -10189,6 +10190,11 @@
       poker_hand: () => `${d.from} sat down heads-up — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
       numbers_hit: () => `YOUR NUMBER CAME UP — ${String(d.pick).padStart(3, '0')} paid ${$c(d.payout)}`,
       numbers_near: () => `SO CLOSE — you took ${String(d.pick).padStart(3, '0')}, the number was ${String(d.drawn).padStart(3, '0')} — the runner pays ${$c(d.payout)} consolation`,
+      // two shapes (THE WIRE LEDGER rule 2): the me-notify carries {day, pick, payout}; the streets
+      // shout carries {name, payout} — a template written for one renders the other as a lie.
+      jackpot_hit: () => d.name !== undefined
+        ? `${d.name} CRACKED THE VIG POT — the Numbers paid ${$c(d.payout)} on top of the hit`
+        : `THE VIG POT CRACKED — your number came up and the pot paid ${$c(d.payout)} on top`,
       tourney_result: () => `${d.place} of ${d.of} at the ${d.bracket ? 'bracket' : 'tournament'} — ${d.hand}${d.payout ? ` · ${$c(d.payout)}` : ' · nothing'}`,
       tourney_refund: () => `the tournament was short a field — ${$c(d.buyin)} back`,
       bracket_advance: () => `you're through to round ${d.round} — ${d.hand}`,

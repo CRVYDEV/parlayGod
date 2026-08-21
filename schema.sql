@@ -1087,6 +1087,15 @@ CREATE TABLE IF NOT EXISTS den_volume (
   distributed NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
+-- THE VIG POT (NetNet rec C, 2026-08-21): a progressive jackpot RESERVED out of realized den
+-- profit — a bps of each PvE stake accrues here (profit-capped, the rakeback discipline) and an
+-- exact Numbers hit takes JACKPOT_WIN_BPS of it, the rest reseeding. The pot is a RESERVATION on
+-- the house book, not a cash bucket: money stays inside `profit` until a win pays it out as a
+-- ledgered casino:win:jackpot faucet (which rides the den-book casino:win:% LIKE pattern, so the
+-- §10.4 den identities hold with zero invariant changes). denAvailable subtracts it, so street
+-- cuts and rakeback can never tip out money the pot has already claimed.
+-- ALTER not inline: den_volume EXISTS on live databases (the 2026-08-06 boot-crash lesson).
+ALTER TABLE den_volume ADD COLUMN IF NOT EXISTS jackpot NUMERIC NOT NULL DEFAULT 0;
 
 -- Den step three: BLACKJACK — a stateful PvE hand (one live hand per street at a time). The bet is
 -- taken (and profit-booked) at deal; the hand persists across hit/stand/double calls (each its own
