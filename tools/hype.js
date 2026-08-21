@@ -449,7 +449,7 @@ const VIDEOS = {
     { p: 'mm-noprint',       use: 2.8, off: 0.4, sub: 'NOTHING HERE IS PRINTED',
       sub2: 'no emission, no promises — a ledger anyone can audit' },
     { p: 'hero-backdrop',    use: 3.8, off: 0.5, title: 'OMERTÀ',
-      cta: 'play your way to a real book · extraction opens at launch · omerta.fun' },
+      cta: 'a real book · extraction opens at launch · omerta.fun' }, // 66 chars clipped both frame edges — the cta renderer fits ~62
   ] },
 };
 
