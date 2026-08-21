@@ -1239,6 +1239,7 @@ export async function buildServer() {
     crimes: CRIMES.map((c) => ({ id: c.id, name: c.name, lvl: c.lvl, nerve: c.nerve, cash: c.cash, base: c.base, jail: c.jail })),
     respecOmr: M8.RESPEC_OMR, // stat respec cost — so The Life tab can price the tradeoff before you commit
     respecStatMin: M8.RESPEC_STAT_MIN,
+    respecCdHours: Math.round(M8.RESPEC_CD_MS / 3600000), // ...and the CADENCE, which the card priced nowhere
     // THE WORKSHOP — craftable consumables (roll your own buffs from crates + cash). Public so The Garage
     // can render the catalog with real UI; crafting/using was previously reachable only via the raw deck.
     consumables: CONSUMABLES.map((c) => ({ id: c.id, name: c.name, cost: c.cost, cb: c.cb, effect: c.effect, desc: c.desc })),
