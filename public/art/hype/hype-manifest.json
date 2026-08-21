@@ -1,6 +1,6 @@
 {
   "model": "bytedance/seedance-2.5/image-to-video",
-  "spentUsd": 186.50000000000006,
+  "spentUsd": 193.61000000000007,
   "clips": [
     {
       "plate": "hero-poster",
@@ -241,6 +241,27 @@
       "plate": "mm-seats",
       "ar": "16:9",
       "t2v": true,
+      "est": 2.37
+    },
+    {
+      "plate": "mm-jailbreak",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73405/aR1b1XJv6UlPiHmNp3YOU_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-boatchase",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73409/yWNLUojeUyNVMO6WYP18j_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-streetrace",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73409/8SDMXcz71IjAgBu3tVMPs_video.mp4",
       "est": 2.37
     }
   ],

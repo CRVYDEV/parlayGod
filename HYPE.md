@@ -1,8 +1,9 @@
 # OMERTÀ — launch hype videos
 
-One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **six cuts** —
-five short hype cuts, each with its **own footage set and its own music track**, plus the long-form
-**money explainer** (`hype-money.mp4`), built from the same library.
+One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **seven cuts** —
+five short hype cuts, each with its **own footage set and its own music track**, the long-form
+**money explainer** (`hype-money.mp4`), and **the LIFE tour** (`hype-life.mp4` — every activity,
+path and loop in the game), all built from the same library.
 
 ## Build
 
@@ -14,6 +15,7 @@ node tools/hype.js --cut flywheel --music /tmp/music/flywheel.wav
 node tools/hype.js --cut earn   --music /tmp/music/earn.wav
 node tools/hype.js --cut short  --music /tmp/music/short.wav
 node tools/hype.js --cut money  --music public/art/hype/bed-legit.m4a   # the fees/flows explainer
+node tools/hype.js --cut life   --music public/art/hype/bed-streets.m4a # the all-paths tour
 node tools/hype.js --all                          # rebuild all cuts (one shared track / synth bed)
 node tools/hype.js                                # no key → free Ken-Burns montage → hype.mp4
 ```
@@ -37,6 +39,7 @@ the phone frame edge-to-edge — cleaner than a blur-fill of near-black footage)
 | `hype-earn.mp4` | 1920×1080 | ~13s | acquisition | risk-to-earn: play, take it, cash out |
 | `hype-short.mp4` | 1080×1920 | ~10s | social | vertical, fastest cut for X/TikTok/Reels |
 | `hype-money.mp4` | 1920×1080 | ~77s | explainer | the FULL money map — every fee, every flow, the RWA arc |
+| `hype-life.mp4` | 1920×1080 | ~87s | the tour | EVERY activity, path and loop — six act cards, Streets → Legit |
 
 The five hype cuts have **distinct footage** (no reused shots between cuts except the shared OMERTÀ
 end-plate) so they don't feel repetitive when posted together; the explainer, being ~5× longer, draws
@@ -49,6 +52,25 @@ Five distinct dark-phonk / mafia-trap beds (one per cut), generated on fal (stab
 OMERTÀ title reveal — the classic trailer "music bed + logo BRAAAM", so every cut lands a payoff even
 when the track's own dynamics don't. The bed is loudness-normalized (loudnorm I=-15) and the whole mix
 is compressed + limited. **Founder swaps a licensed track before public** (`--music track.mp3`).
+
+### The life tour (`hype-life.mp4`, 2026-08-21)
+
+Founder-directed: "a hype video of all the activities and paths … all the loops in the game & all
+possibilities", on a **$10 budget**. Built as a hype-paced TOUR (not a second explainer): six act
+cards mirroring the game's own journey groups — **Streets → Rackets → Vice → Blood → Family →
+Legit** — with each caption's gold detail line ENUMERATING the loops it stands for (crimes/cars/
+training/armory/freight · kitchen/fronts/heists/convoys/port/market · den/track/stable/boxing/
+races/speakeasy · contracts/vendettas/wire/loans/law/pen · crew/family/war/cartels/commission/
+monuments · estate/deeds/RWA), so nothing shippable is missed while the cut stays watchable.
+**$9.48 of the $10** bought four bespoke Seedance 2.5 t2v action clips for the loops the library
+had no ACTION footage for: `mm-streetrace` (pinks), `mm-jailbreak` (the Pen), `mm-boatchase` (the
+Port) — and `mm-knockout`, which **rendered on fal's side but the account LOCKED (TOP_UP) before
+the result could be fetched** (job `01a0235e-9eb9-7373-833d-7a8dba02818e`; the fight-card shot
+rides `cine-champion` meanwhile — once topped up, re-run `--bespoke` and point the shot back).
+Narration: 7 act-boundary segments (`NARRATION.life`), currently the **piper placeholder voice**
+(`--vo-local`) since fal TTS is behind the same lock — swap to the real MiniMax voice with `--vo`
+after a top-up (≈$0.10). Same copy rules; the closer states **extraction opens at launch**.
+Founder signs wording + voice + a licensed track before anything goes public.
 
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 

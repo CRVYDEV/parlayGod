@@ -115,6 +115,11 @@ const BESPOKE = {
   'mm-tickervote':`hands drop folded ballots into a brass ballot box, the teller cranks the wheel, then a ticker-tape machine bursts to life spitting tape into the air, camera punch-in, ${ACTION}`,
   'mm-stockbuy':  `ticker tape streams over a 1940s exchange floor, a broker snatches the tape, reads it and thrusts his arm up to buy, the floor erupting around him, handheld energy, ${ACTION}`,
   'mm-vaultdrop': `hands place embossed stock certificates into a small private deposit box, shut the brass door and turn two keys, a wall of numbered boxes gleaming, macro camera pull-back, ${ACTION}`,
+  // the `life` cut's action four (2026-08-21, $10 budget): the loops the library had no ACTION footage for.
+  'mm-streetrace': `two 1940s hot rods drag-race side by side down a rain-slick neon boulevard at night, engines flaring, one drifts across the finish line inches ahead, low fast tracking camera at wheel height, spray flying, ${ACTION}`,
+  'mm-knockout':  `a smoky 1940s boxing arena, a fighter ducks a swing and lands a hard cross, his opponent crashing to the canvas as the crowd surges up with flashing camera bulbs, dynamic ringside camera whip, ${ACTION}`,
+  'mm-jailbreak': `a prisoner scrambles over a high stone prison wall on a knotted rope at night, a searchlight beam sweeping just past him, he drops and sprints into the fog, urgent handheld tracking, ${ACTION}`,
+  'mm-boatchase': `a small smuggler's speedboat slams across black harbour swells at night, crates strapped down under tarps, a cutter's searchlight beam sweeping after it, spray exploding over the bow, low chase camera, ${ACTION}`,
 };
 
 // ── the cuts: each carries its own aspect + a mostly-distinct footage set ─────────────────────────
@@ -250,6 +255,97 @@ const VIDEOS = {
     { p: 'hero-backdrop',    use: 3.4, off: 0.5, title: 'OMERTÀ',
       cta: 'the ledger is public · extraction opens at launch · omerta.fun' },
   ] },
+  // 7 — THE LIFE: every activity, path and loop in the game (founder-directed 2026-08-21, $10 of
+  // new footage). A hype-paced TOUR rather than an explainer: six act cards mirroring the game's
+  // own journey groups (Streets → Rackets → Vice → Blood → Family → Legit), each caption's detail
+  // line ENUMERATING the loops it stands for, so nothing shippable is missed while the cut stays
+  // watchable. Four new bespoke action clips (street race, knockout, jailbreak, boat chase) cover
+  // the loops the library had no ACTION footage for; everything else is a free edit of the library.
+  // Copy rules as ever: mechanism-true, number-free, the closer states extraction opens at launch.
+  life: { w: 1920, h: 1080, ar: '16:9', overline: 'THE LIFE', shots: [
+    // ═══ COLD OPEN ═══
+    { p: 'hero-poster',      use: 2.2, off: 0.3, sub: 'ONE CITY. A THOUSAND WAYS TO RUN IT.' },
+    { p: 'mm-chase',         use: 2.0, off: 0.3, sub: 'PICK YOUR PATH — OR WALK THEM ALL' },
+    // ═══ ACT I — the street loops ═══
+    { p: 'district-neon',    use: 1.8, off: 0.6, kicker: 'I · THE STREETS' },
+    { p: 'crime-armored',    use: 2.2, off: 0.5, sub: 'PULL JOBS',
+      sub2: 'forty-three crimes — case it, do it, or go loud' },
+    { p: 'car-spectre',      use: 2.2, off: 0.6, sub: 'BOOST CARS',
+      sub2: 'build the fleet · tune it · race it · steal theirs' },
+    { p: 'interior-gym',     use: 2.2, off: 0.5, sub: 'TRAIN YOUR BUILD',
+      sub2: 'three stats · five disciplines · ten trades · a skill tree' },
+    { p: 'hitman-legbreaker', use: 2.2, off: 0.5, sub: 'ARM UP',
+      sub2: 'iron, vests and ammo — then go collect' },
+    { p: 'interior-trade',   use: 2.2, off: 0.5, sub: 'WORK THE FREIGHT',
+      sub2: 'buy cheap across town — sell where it’s rich' },
+    // ═══ ACT II — the earner loops ═══
+    { p: 'interior-empire',  use: 1.8, off: 0.5, kicker: 'II · THE RACKETS' },
+    { p: 'interior-kitchen', use: 2.2, off: 0.5, sub: 'COOK AND DEAL',
+      sub2: 'run the lab · work the corner · hire a crew' },
+    { p: 'business-casino',  use: 2.2, off: 0.4, sub: 'BUY THE FRONTS',
+      sub2: 'laundromat to casino — pay the pad, dodge the Bureau' },
+    { p: 'heist-goldvault',  use: 2.2, off: 0.5, sub: 'PULL A CREW SCORE',
+      sub2: 'five-man jobs — and maybe a rat in the crew' },
+    { p: 'crime-truck',      use: 2.2, off: 0.5, sub: 'RUN THE CONVOYS',
+      sub2: 'bulk freight, armed guards — bandits on the road' },
+    { p: 'mm-boatchase',     use: 2.4, off: 2.6, sub: 'SMUGGLE BY SEA',
+      sub2: 'boats, routes, piracy — outrun the Coast Guard' },
+    { p: 'interior-market',  use: 2.2, off: 0.5, sub: 'PLAY THE BLACK MARKET',
+      sub2: 'car auctions · buy orders · loan paper · the exchange' },
+    // ═══ ACT III — the vice loops ═══
+    { p: 'interior-den',     use: 1.8, off: 0.7, kicker: 'III · THE VICE' },
+    { p: 'game-dice',        use: 2.2, off: 0.5, sub: 'PLAY THE HOUSE',
+      sub2: 'craps · blackjack · the numbers · hold’em · the ring' },
+    { p: 'game-track',       use: 2.2, off: 0.5, sub: 'BET THE TRACK',
+      sub2: 'dogs and ponies — or enter your own runner' },
+    { p: 'interior-stable',  use: 2.2, off: 0.5, sub: 'OWN THE ANIMALS',
+      sub2: 'buy · train · breed · race the town’s best' },
+    // mm-knockout is RENDERED on fal's side (job 01a0235e-9eb9-7373-833d-7a8dba02818e) but the
+    // account locked (TOP_UP) before the result could be fetched — the fight-card library clip
+    // stands in. Once topped up: re-run --bespoke and point this shot back at mm-knockout.
+    { p: 'cine-champion',    use: 2.4, off: 0.5, sub: 'RUN A FIGHT STABLE',
+      sub2: 'sign fighters, take the belt — or fix the odds' },
+    { p: 'mm-streetrace',    use: 2.4, off: 0.3, sub: 'RACE FOR PINK SLIPS',
+      sub2: 'tune it, arm the nitrous — winner keeps the car' },
+    { p: 'interior-speakeasy', use: 2.2, off: 0.5, sub: 'OPEN A SPEAKEASY',
+      sub2: 'be seen, buy rounds — or stand over a rival’s club' },
+    // ═══ ACT IV — the blood loops ═══
+    { p: 'cine-funeral',     use: 1.8, off: 0.5, kicker: 'IV · THE BLOOD' },
+    { p: 'hitman-professional', use: 2.2, off: 0.5, sub: 'TAKE CONTRACTS',
+      sub2: 'open bounties · named hits · guns for hire' },
+    { p: 'cine-whacked',     use: 2.2, off: 0.5, sub: 'SETTLE VENDETTAS',
+      sub2: 'one life each — the ledger remembers the blood' },
+    { p: 'interior-wire',    use: 2.2, off: 0.5, sub: 'WORK THE WIRES',
+      sub2: 'taps · dossiers · blackmail · disinformation' },
+    { p: 'interior-loans',   use: 2.2, off: 0.5, sub: 'BE THE SHYLOCK',
+      sub2: 'lend it, collect it, seize the collateral' },
+    { p: 'interior-law',     use: 2.2, off: 0.5, sub: 'BEAT THE RICO CASE',
+      sub2: 'bribes, lawyers, juries — or flip and wear the wire' },
+    { p: 'mm-jailbreak',     use: 2.4, off: 0.3, sub: 'GO OVER THE WALL',
+      sub2: 'work the yard, run the crews — or break out' },
+    // ═══ ACT V — the family loops ═══
+    { p: 'mm-crew',          use: 1.8, off: 0.4, kicker: 'V · THE FAMILY' },
+    { p: 'mm-family',        use: 2.2, off: 0.4, sub: 'RISE — CREW TO FAMILY',
+      sub2: 'get made · pool tribute · claim turf' },
+    { p: 'cine-war',         use: 2.2, off: 0.5, sub: 'GO TO WAR',
+      sub2: 'seize districts, sack empires, crown the season' },
+    { p: 'outfit-volkov',    use: 2.2, off: 0.5, sub: 'BREAK THE CARTELS',
+      sub2: 'raid the outfits — take their turf and their tribute' },
+    { p: 'mm-seats',         use: 2.2, off: 0.4, sub: 'SIT ON THE COMMISSION',
+      sub2: 'decrees and vetoes — the five seats run the city' },
+    { p: 'crest',            use: 2.2, off: 0.6, sub: 'RAISE MONUMENTS',
+      sub2: 'seals, charters, a skyline with your name on it' },
+    // ═══ ACT VI — going legit ═══
+    { p: 'interior-legit',   use: 1.8, off: 0.5, kicker: 'VI · GOING LEGIT' },
+    { p: 'interior-estate',  use: 2.2, off: 0.5, sub: 'BUY THE COMPOUND',
+      sub2: 'staff it, name it, throw the gala' },
+    { p: 'district-brick',   use: 2.2, off: 0.5, sub: 'OWN YOUR STREET',
+      sub2: 'name it, run its corner — the deed is an NFT' },
+    { p: 'crime-ticker',     use: 2.4, off: 0.5, sub: 'PLAY YOUR WAY TO A REAL BOOK',
+      sub2: 'the treasury buys stock — split by play, into your street’s vault' },
+    { p: 'hero-backdrop',    use: 3.2, off: 0.5, title: 'OMERTÀ',
+      cta: 'every path is open · extraction opens at launch · omerta.fun' },
+  ] },
 };
 
 // a clip file is (plate, aspect) — 16:9 sources and 9:16 sources are distinct renders
@@ -293,6 +389,27 @@ const NARRATION = {
       + 'It buys tokenized stock — split among the players who played — '
       + 'delivered to your street\u2019s vault. Own the street, and the street holds your book.' },
     { at: 83.6, window: 2.9, text: 'Omert\u00e0. The ledger is public.' },
+  ],
+  life: [
+    { at: 0.4, window: 16.2, text:
+      'A thousand ways to run one city. Pull jobs. Boost cars. Train your build. '
+      + 'Arm up, and work the freight. And that\u2019s just the street.' },
+    { at: 17.2, window: 14.6, text:
+      'Go bigger. Cook and deal. Buy the fronts. Pull a crew score. '
+      + 'Run convoys. Smuggle by sea. Play the black market.' },
+    { at: 32.4, window: 14.8, text:
+      'Or play the vice. The house. The track. The animals. '
+      + 'Run a fight stable. Race for pink slips. Open a speakeasy of your own.' },
+    { at: 47.8, window: 14.6, text:
+      'And when it turns bloody \u2014 take contracts. Settle vendettas. Work the wires. '
+      + 'Lend hard money. Beat the case. Or go over the wall.' },
+    { at: 63.0, window: 12.4, text:
+      'Nobody climbs alone. Crews become families. Families take turf, '
+      + 'break cartels, and sit on the commission.' },
+    { at: 75.8, window: 8.2, text:
+      'Then the city goes legit. The compound. Your street\u2019s deed. '
+      + 'A real book \u2014 earned by playing.' },
+    { at: 84.4, window: 2.8, text: 'Omert\u00e0. Every path is open.' },
   ],
 };
 // fal TTS (the real voice): MiniMax speech-02-hd, a deep trailer read. Cached in the LIB beside the
@@ -367,7 +484,7 @@ async function buildVoMaster(cutId, mode) {
 }
 
 // ── title cards (SVG → PNG, transparent, display font), scaled to the cut ─────────────────────────
-function titlePng(shot, i, w, h) {
+function titlePng(shot, i, w, h, overline) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const portrait = h > w;
   const titleSize = Math.round(w * (portrait ? 0.14 : 0.10));
@@ -389,7 +506,7 @@ function titlePng(shot, i, w, h) {
     // an ACT HEADER for the explainer cut — centered, between the sub and the title in weight, with
     // a small gold overline so a chapter card reads as structure rather than as another caption.
     const kSize = Math.round(w * 0.052);
-    body += line(w / 2, h / 2 - kSize * 0.55, ctaSize, ctaSize * 0.3, '#c9a24b', 'THE MONEY MAP');
+    body += line(w / 2, h / 2 - kSize * 0.55, ctaSize, ctaSize * 0.3, '#c9a24b', overline || 'THE MONEY MAP');
     body += line(w / 2, h / 2 + kSize * 0.45, kSize, kSize * 0.07, '#f4efe6', shot.kicker);
   } else if (shot.sub) {
     const y = portrait ? h * 0.72 : h - Math.round(h * 0.13);
@@ -412,7 +529,7 @@ function titlePng(shot, i, w, h) {
 function shotClip(shot, i, v) {
   const src = clipFile(shot.p, v.ar), w = v.w, h = v.h;
   const out = path.join(TMP, `fx-${String(i).padStart(2, '0')}.mp4`);
-  const title = titlePng(shot, i, w, h);
+  const title = titlePng(shot, i, w, h, v.overline);
   const tOut = Math.max(0.4, shot.use - 0.45);
   // Seedance keeps the (landscape) source aspect regardless of the requested ratio. Cover-crop fills
   // the whole frame in every case: a landscape cut is a near no-op; the portrait short crops the wide
