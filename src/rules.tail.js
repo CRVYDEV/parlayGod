@@ -4920,9 +4920,9 @@ export const disciplineLvlOf = (xp) =>
   if (members.length !== arch.length || new Set(members).size !== members.length)
     throw new Error('FORGE_FAMILIES must cover every archetype exactly once');
   for (const m of members)
-    if (!WALLET_FORGE.ARCHETYPES[m]) throw new Error(`FORGE_FAMILIES names '${m}', which is not an archetype`);
+    if (!Object.hasOwn(WALLET_FORGE.ARCHETYPES, m)) throw new Error(`FORGE_FAMILIES names '${m}', which is not an archetype`);
   for (const fam of Object.keys(FORGE_FAMILIES))
-    if (!WALLET_FORGE.ARCHETYPES[fam]) throw new Error(`FORGE_FAMILIES family '${fam}' must itself be an archetype (backward compat: the original ids lead their families)`);
+    if (!Object.hasOwn(WALLET_FORGE.ARCHETYPES, fam)) throw new Error(`FORGE_FAMILIES family '${fam}' must itself be an archetype (backward compat: the original ids lead their families)`);
 }
 // THE CAP HELPERS — view, the coach and accrual all read these, so the three sites cannot disagree.
 // disc is the owned.disciplines xp map (or absent — a headless caller gets the base formula).
