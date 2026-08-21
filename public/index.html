@@ -2740,7 +2740,16 @@
     if (body.success === true && body.take !== undefined) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
     // a clean boost / a solo cartel raid — each carries success:true with no `take`, so each
     // needs its own line or the generic crime bit reads "clean job — $0" over a real result
-    if (body.success === true && body.car) bits.push(`boosted a${body.car.rarity && body.car.rarity !== 'common' ? ` ${body.car.rarity}` : ''} ride — she's in the garage${body.car.dmg ? ` (took some dents: ${body.car.dmg} dmg)` : ''}`);
+    // ...and it read "boosted a rare ride" — a rarity TIER over iron it never named, so a player had
+    // to open the Garage to find out what they had just stolen. The reply carried `model` (the id
+    // the art route keys on) and nothing else; it carries the catalog NAME beside it now.
+    // The numbered 1-of-N car needs nothing here and deliberately gets nothing: a `car.run` returns
+    // out of this function ~700 lines up, on its own line, before any of this runs.
+    if (body.success === true && body.car) {
+      const c = body.car;
+      const iron = `${c.rarity && c.rarity !== 'common' ? `${c.rarity} ` : ''}${c.name || 'ride'}${c.trimName ? ` · ${c.trimName}` : ''}`;
+      bits.push(`boosted a ${iron} — she's in the garage${c.dmg ? ` (took some dents: ${c.dmg} dmg)` : ''}`);
+    }
     // THE SOLO RAID dropped `frontier` — so a rout that planted the FAMILY'S FLAG on the outfit's
     // turf (which starts tribute accruing to the treasury and can be invaded) read byte-for-byte
     // like a rout by a man with no family at all. Its co-op sibling seven lines down reads that
@@ -3134,6 +3143,13 @@
     // told a player who had just paid to cool off that their heat had gone UP by what was left.
     // Now the server sends `cooled` (the real drop, smaller than the nominal when the clamp bites)
     // and `heatNow` (where it landed), and each verb says what it bought.
+    // THE REBUILD. `/v1/respec` is a paid, once-a-day reshaping of the only three numbers every
+    // opposed roll in the game reads — and it said "done." Name the build you now have, what the
+    // trainer took, and when he reopens: the last is the term the card priced NOWHERE, so the
+    // refusal on the tweak you immediately want was where a player first learned it existed.
+    if (body.stats && body.omr !== undefined && body.cooldownSeconds !== undefined)
+      return `💪 rebuilt — muscle ${body.stats.muscle} · cunning ${body.stats.cunning} · speed ${body.stats.speed}` +
+        ` — ${fmt(body.omr)} $OMR. The trainer reopens in ${minsTxt(body.cooldownSeconds)}.`;
     if (body.cooled !== undefined && body.heatNow !== undefined) {
       if (body.omr !== undefined)                 // clean papers: the deep wipe, paid in $OMR
         return `🧾 papers are clean — ${body.cooled} heat wiped, ${fmt(body.omr)} $OMR`;
@@ -9683,7 +9699,7 @@
           : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
       </div>
 
-      <h2 style="margin-top:12px">Respec Your Stats <span class="d" style="font-size:11px">(redistribute your base build — the total stays ${me.statTotal ?? 15}, each ≥ ${rules?.respecStatMin ?? 5} · costs ${rules?.respecOmr ?? 90} $OMR · on hand: ${fmt(Math.floor(me.omr || 0))})</span></h2>
+      <h2 style="margin-top:12px">Respec Your Stats <span class="d" style="font-size:11px">(redistribute your base build — the total stays ${me.statTotal ?? 15}, each ≥ ${rules?.respecStatMin ?? 5} · costs ${rules?.respecOmr ?? 90} $OMR · <b>one every ${rules?.respecCdHours ?? 24}h</b> · on hand: ${fmt(Math.floor(me.omr || 0))})</span></h2>
       <div class="card">
         <div class="d">base build now: <b>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}</b> (muscle / cunning / speed)</div>
         <div class="row" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">

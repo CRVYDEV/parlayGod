@@ -114,7 +114,12 @@ export async function boostCar(ch, client, h) {
     await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
     await bumpMastery(client, h, ch, 'wheels', 'boost'); // THE TRADES — a clean boost is the wheelman's craft
-    return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare, rarity,
+    // `model` here is the catalog ID (`junker`), which is what the ART route and every follow-on
+    // call key on — but it is not a name, and the reply carried nothing else, so the boost read
+    // "boosted a rare ride" on the game's most-repeated money verb. Send the NAME beside the id:
+    // the id keeps working for the art, and the line can finally say what was stolen.
+    return { ok: true, success: true, car: { id: carId, model: model.id, name: model.name, trim: trim.id,
+      trimName: trim.name || '', dmg, rare: !!model.rare, rarity,
       run: run ? { id: run.runId, name: run.name, serial: run.serial, cap: run.cap } : null } };
   }
   const stint = 15 + Math.floor(Math.random() * 16); // 15–30s
