@@ -2331,6 +2331,20 @@ const ACTIONS = [
   ['POST', '/v1/districts/docks/watch', { hour: 3 }],
   ['POST', '/v1/territory/docks/establish', { kind: 'protection' }],
   ['POST', '/v1/territory/docks/upgrade', null],
+  // THE SEVENTH OBLIGATION. The pad branch enumerated six things that use the word `paid` and
+  // claimed `fronts` as the pad's alone — and the FAMILY's territory upkeep is a byte-shape twin
+  // (`{paid, fronts, stillOwed}`), so a boss settling the family's books out of the TREASURY read
+  // "paid $24,000 of the pad across 1 front — square": a bill on a screen he was nowhere near,
+  // naming fronts he may not own, while his own pad sat unpaid. Both replies name their SYSTEM now.
+  // Arrears are backdated at drive time because the nothing-owed path returns a different shape and
+  // would test neither line.
+  ['POST', async () => {
+    // two flat queries, never a subquery in the WHERE — pg-mem cannot parse one (the /v1/gangs posture)
+    const g = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
+    if (!g) return null;
+    await app.pool.query("UPDATE territory_rackets SET upkeep_at = now() - interval '30 hours' WHERE owner_gang=$1", [g.gang_id]);
+    return '/v1/territory/upkeep';
+  }, null],
   ['POST', '/v1/gangs/tribute', { amount: 5000 }],       // cash and $OMR tribute share one shape —
   ['POST', '/v1/gangs/tribute/omr', { amount: 10 }],      // the currency marker is what tells them apart
   ['POST', '/v1/gangs/vanity/color', { color: '#3a5f7d' }],
@@ -2339,6 +2353,12 @@ const ACTIONS = [
   // tribute below fills it first — the ladder's first rung is 150), the rename from the boss's own.
   ['POST', '/v1/gangs/tribute/omr', { amount: 200 }],
   ['POST', '/v1/gangs/vanity/seal', null],
+  // THE FOUNDATION sits ONE LINE from that seal in describe(), comes out of the SAME pooled reserve,
+  // and named neither what was left nor what comes next — though the reply carries both. It also
+  // stated half its effect: the tier softens a filed case AND bleeds the meter faster, and the
+  // second half is the one that PREVENTS a case. The tribute above fills the reserve for both.
+  ['POST', '/v1/gangs/tribute/omr', { amount: 400 }],
+  ['POST', '/v1/gangs/foundation', null],
   ['POST', '/v1/gangs/vanity/name', { name: 'Ledger Two ' + Math.random().toString(36).slice(2, 5), tag: 'LD2' }],
   // DECLARING WAR said "done." — the loudest thing a boss can do, in a block where the pact, the
   // treaty and the oathbreak all state their terms in full. Resolved at drive time because the
@@ -3697,6 +3717,40 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   assert(typeof meNow.healCost === 'number' || meNow.healCost === null,
     `the Doc's bill is a number while there is something to patch up and null when there is not — `
     + `never absent, or the button has nothing to quote. Got: ${JSON.stringify(meNow.healCost)}`);
+}
+// ── WAVE 51: THE SEVENTH OBLIGATION ─────────────────────────────────────────
+// The pad branch's own comment enumerated six things that use the word `paid` and claimed `fronts`
+// as the pad's alone. There were SEVEN: the FAMILY's territory upkeep is a byte-shape twin
+// (`{paid, fronts, stillOwed}`), so a boss settling the family's books out of the TREASURY read
+// "paid $24,000 of the pad across 1 front — square" — a bill on a screen they were nowhere near,
+// naming fronts they may not own, while their own pad sat unpaid. Found by driving it.
+//
+// Both replies name their SYSTEM now, because a marker that names the STATE holds only until a
+// sibling adds the same field, and absence is no discriminator at all. Driven on the main token
+// (which founds a family in ACTIONS) with real arrears, because the nothing-owed path returns a
+// different shape and would test neither line.
+{
+  const upLine = said.get('/v1/territory/upkeep'), up = paidBody.get('/v1/territory/upkeep');
+  assert(up && up.paid > 0, 'the family upkeep row must actually have PAID for this to test anything — '
+    + 'the nothing-owed path returns a different shape and would assert over the wrong line');
+  assert(/famil|treasury/i.test(upLine) && /operation/i.test(upLine),
+    'the FAMILY pays its upkeep out of the TREASURY, across OPERATIONS — the personal pad is a '
+    + `different book and a different pocket. Got: ${JSON.stringify(upLine)}`);
+  assert(!/\bfronts?\b/i.test(upLine),
+    'a territory racket is not a front — that word belongs to the personal pad, and printing it here '
+    + `is the collision this block exists to catch. Got: ${JSON.stringify(upLine)}`);
+  assert(upLine.includes(fmtLike(up.paid)),
+    `the line must name what left the treasury (${up.paid}). Got: ${JSON.stringify(upLine)}`);
+
+  const fLine = said.get('/v1/gangs/foundation'), fnd = paidBody.get('/v1/gangs/foundation');
+  assert(fnd && fnd.foundation, 'the foundation row must actually have endowed — a skipped row reads '
+    + 'on the summary line exactly like a covered one');
+  assert(fLine.includes(fmtLike(fnd.reserve)),
+    'money out of a POOLED reserve every member tributed into has to say what is left — its own '
+    + `sibling the seal does, one line up. Reserve ${fnd.reserve}, got: ${JSON.stringify(fLine)}`);
+  assert(fnd.nextFoundation && fLine.includes(fmtLike(fnd.nextFoundation.omr)),
+    `and what the next rung costs (${fnd.nextFoundation?.omr}), so the ladder is visible from `
+    + `the rung you just bought. Got: ${JSON.stringify(fLine)}`);
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),

@@ -2931,15 +2931,26 @@
     // the clue-scroll dig ("cold ground"), and an unscoped read made a cold front announce itself as
     // a failed excavation. Two systems, one generic field name — scope to something unambiguous.
     if (body.businesses !== undefined && body.cold) bits.push(`${body.cold} front${body.cold > 1 ? 's are' : ' is'} COLD — it pays nothing until you pay the pad (The Empire → pay the pad)`);
-    if (body.paid !== undefined && body.stillOwed) bits.push(body.paid > 0
+    // THE FAMILY'S pad, not yours — the treasury pays it and what goes cold is the family's
+    // OPERATIONS. Its reply was a byte-shape twin of the personal one below (`{paid, fronts,
+    // stillOwed}`), so a boss settling the family's books read "the pad is square across 1 front":
+    // a bill on a screen they were nowhere near, naming fronts they may not even own, while their
+    // own pad sat unpaid. Both replies name their system now, so neither can claim the other's.
+    if (body.upkeep === 'territory' && body.stillOwed) bits.push(body.paid > 0
+      ? `paid $${fmt(body.paid)} of the family's upkeep out of the treasury — still $${fmt(body.stillOwed)} owed, so those operations stay cold`
+      : `the treasury couldn't cover the upkeep — $${fmt(body.stillOwed)} owed. Tribute it or collect, or the operations go cold.`);
+    else if (body.upkeep === 'territory' && body.paid > 0) bits.push(`the family's upkeep is square — $${fmt(body.paid)} out of the treasury across ${body.operations?.length || 0} operation${body.operations?.length === 1 ? '' : 's'}, and they keep earning`);
+    else if (body.paid !== undefined && body.stillOwed) bits.push(body.paid > 0
       ? `paid $${fmt(body.paid)} of the pad — still $${fmt(body.stillOwed)} owed, so those fronts stay cold`
       : `couldn't cover the pad — $${fmt(body.stillOwed)} owed and you don't have it. Earn it elsewhere; the fronts stay cold until it's square.`);
     // `paid` is a word six different obligations use, and this branch claimed it for one of them —
     // so repaying a $60,000 loan shark, settling hush money, paying the estate's staff, buying goods
     // on the Black Market and buying a car outright all read "the pad is square", naming a bill on a
-    // screen the player was nowhere near. `fronts` is what the pad's own reply carries and nothing
-    // else does; the five below get the line their own money deserves, ordered above the fallback.
-    else if (body.paid > 0 && Array.isArray(body.fronts)) bits.push(`paid $${fmt(body.paid)} of the pad across ${body.fronts.length} front${body.fronts.length === 1 ? '' : 's'} — square, and they keep earning`);
+    // screen the player was nowhere near. That enumeration was SIX and there were seven — the
+    // family's territory pad carried `fronts` too, and was found by driving it; both upkeeps now
+    // name their system, so this branch scopes to the personal one rather than to a field it once
+    // owned alone. The five below get the line their own money deserves, ordered above the fallback.
+    else if (body.upkeep === 'business' && body.paid > 0) bits.push(`paid $${fmt(body.paid)} of the pad across ${body.fronts?.length || 0} front${body.fronts?.length === 1 ? '' : 's'} — square, and they keep earning`);
     else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house. Your name's clean.`);
     else if (body.paid > 0 && body.interest !== undefined) bits.push(`paid the window back — $${fmt(body.paid)}, $${fmt(body.interest)} of it interest`);
     else if (body.paid > 0 && body.perDay !== undefined) bits.push(`staff wages settled — ${fmt(body.paid)} $OMR${body.staff ? ` for ${body.staff} on the household` : ''} (${fmt(body.perDay)} $OMR a day)`);
@@ -3164,7 +3175,18 @@
     // $OMR of the family's money. The reserve balance is the half a boss actually needs, because the
     // next rung is what they are saving toward and nothing else on the screen has re-rendered yet.
     if (body.seal && body.seal.name) bits.push(`\u{1F4DC} the family bears the ${body.seal.name} now — ${fmt(body.reserve)} $OMR left in the reserve${body.nextSeal ? `, next is the ${body.nextSeal.name} at ${fmt(body.nextSeal.omr)}` : ' — the finest seal in the city'}`);
-    if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
+    // ONE LINE APART from the seal above, out of the SAME pooled family reserve, and it named
+    // neither what was left nor what comes next — though the reply carries both. It also stated
+    // half its effect: the tier softens a filed case AND bleeds the meter faster, which is the
+    // half that PREVENTS one, and `bleedMult` is published per tier on /v1/rules.
+    if (body.foundation && body.foundation.name) {
+      const ft = (rules?.foundation || []).find((t) => t.tier === body.foundation.tier) || {};
+      const soft = Math.round((1 - (body.foundation.bustMult ?? 1)) * 100);
+      const bleed = ft.bleedMult ? `${Math.round((ft.bleedMult - 1) * 100)}% faster` : null;
+      bits.push(`\u{1F3DB} the family endowed the ${body.foundation.name} — ${fmt(body.reserve)} $OMR left in the reserve`
+        + (body.nextFoundation ? `, next is the ${body.nextFoundation.name} at ${fmt(body.nextFoundation.omr)}` : ' — the highest pillar there is')
+        + `. Every made man's trials run ${soft}% softer${bleed ? `, and the family's heat cools ${bleed}` : ''}`);
+    }
     // THE ENVELOPE named neither its price nor its clock, in a block where five siblings around it
     // name one or both. It is a RECURRING sink (the standing graft, not a one-shot bribe) and the
     // reply carries `spent` AND `envelopeSeconds` — so the player who has just burned 150 $OMR could
