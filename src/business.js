@@ -42,6 +42,18 @@ export const npcPendingScale = (isNpc, pending) =>
 export const upkeepBps = (count = 1) =>
   CONSTANTS.BUSINESS_UPKEEP_BPS + CONSTANTS.BUSINESS_UPKEEP_PROG_BPS * Math.max(0, count - 1);
 
+// THE PAD RATE a player is SHOWN, in whole dollars an hour. ONE implementation, because the board,
+// the catalog and the upgrade reply all quote this same number and three hand-written copies of one
+// expression is how the figure on a card and the figure at the till come to disagree (the class
+// that put sixty-nine private copies of three gate predicates in this tree).
+//
+// DELIBERATELY NOT reused by `upkeepOwed` below, though the arithmetic looks shared: that one
+// integrates the UNFLOORED rate over the elapsed clock and floors ONCE at the end. Routing it
+// through this helper would floor twice and quietly change what a signed economy sink charges —
+// on a tier whose hourly rate is not a whole number that is real money over a week-long clock.
+export const upkeepPerHr = (tier, count = 1) =>
+  Math.floor((tier?.incomePerHr || 0) * (upkeepBps(count) / 10000));
+
 // RECURRING SINKS ("the pad"): upkeep owed on one front, in whole dollars — upkeepBps(count) of
 // the tier's income per hour, accrued on its OWN clock (upkeep_at) up to BUSINESS_UPKEEP_CAP_MS.
 // Distinct from the 24h income cap: an absent owner owes up to a week while earning at most a day.
@@ -331,7 +343,16 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   if (pending > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pending, reason: 'business:income' });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: 'business:upgrade' });
   h.owned.businesses = await businessesOf(client, ch.id);
+  // FOUND BY PLAYING: this reply carried neither the price nor the consequence, so a $600,000
+  // upgrade read "the Laundromat moves up to tier 2" — the purchase named and the bill left off,
+  // and the bill is the sharp half: the pad is a PERCENTAGE of income, so climbing a tier RAISES
+  // the recurring obligation for good. That is the exact thing a tester asked about ("how can I owe
+  // more in wages than my laundromat brings in?"), and its own sibling three functions up — the BUY
+  // line — already says "mind the pad". `collected` was already here: an upgrade banks the pending
+  // take at the OLD rate first, which is a term too.
   return { ok: true, id: businessId, kind: r.kind, name: cat.name, tier: next.tier, collected: pending,
+    cost: next.cost, incomePerHr: next.incomePerHr,
+    upkeepPerHr: upkeepPerHr(next, h.owned.businesses.length),
     ...(raid.raided ? { raid } : {}) };
 }
 
@@ -584,7 +605,7 @@ export async function businessesOf(pool, characterId) {
       id: r.id, kind: r.kind, name: cat?.name || r.kind, tier: Number(r.tier),
       incomePerHr: tier?.incomePerHr || 0, pending: accrued(r),
       // recurring sinks ("the pad"): what's owed, the hourly rate, and whether the front's gone cold
-      upkeepOwed: upkeepOwed(r, rows.length), upkeepPerHr: Math.floor((tier?.incomePerHr || 0) * (upkeepBps(rows.length) / 10000)),
+      upkeepOwed: upkeepOwed(r, rows.length), upkeepPerHr: upkeepPerHr(tier, rows.length),
       cold: isCold(r), coldSeconds: coldSeconds(r),
       // THE PAD, stated rather than discovered. `padOutran` is the moment the deal turns: squaring
       // the envelope now costs more than the till can hand back, because income banks for a day and
@@ -622,7 +643,7 @@ export function catalog() {
     kind: b.kind, name: b.name, lvl: b.lvl, tiers: b.tiers,
     // the pad on tier 1 at a ONE-front empire — the honest floor, since upkeepBps rises with the
     // count (L1b) and the buyer of their first front is exactly who this number is for
-    upkeepPerHr: Math.floor(b.tiers[0].incomePerHr * (upkeepBps(1) / 10000)),
+    upkeepPerHr: upkeepPerHr(b.tiers[0], 1),
     upkeepBps: upkeepBps(1), progBps: CONSTANTS.BUSINESS_UPKEEP_PROG_BPS,
     incomeCapHours: Math.round(CONSTANTS.BUSINESS_CAP_MS / 3600000),
     upkeepCapHours: Math.round(CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000),

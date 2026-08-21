@@ -15155,6 +15155,53 @@ failure that names the wrong number is the thing this whole wave is about. Seven
 named failures. Suite 8/8, pgquery, **pgcheck 47/47 on a fresh real Postgres**, mobile 79/79, sim
 drift-0. Driven actions 213 → 219.
 
+**WAVE 48 — A $600,000 PURCHASE THAT NAMED NEITHER ITS PRICE NOR THE BILL IT RAISED
+(`src/business.js` + `public/index.html`, 2026-08-21).** The play session aimed itself with an
+extractor rather than a hunch: of **366 act()-pressed routes the console can fire, the action ledger
+names 246 and 201 have never been driven** — so the surface that has never been read back was
+enumerated instead of guessed at. Driving the personal-empire corner of it found the **racket
+upgrade's story one system over, and worse in one respect**: `upgradeBusiness` did not carry the
+price AT ALL, so a **$600,000** move read *"the Laundromat moves up to tier 2"* and **the client
+could not have said otherwise** — the purchase named and the bill left off, on the largest single
+spend on that screen. The half that matters is the recurring one: **the pad is a PERCENTAGE of
+income, so climbing a tier raises the obligation for good**, which is the exact thing a tester once
+asked about (*"how can I owe more in wages than my laundromat brings in?"*) — and the BUY line three
+functions up has said *"mind the pad"* since it shipped. The forgotten-sibling shape, three functions
+apart. The reply now carries `cost`/`incomePerHr`/`upkeepPerHr` (`collected` was already there — an
+upgrade banks the pending take at the OLD rate first, a term too), and the line states all four.
+**AND I NEARLY SHIPPED A SILENT ECONOMY DRIFT WHILE FIXING IT, which is the more useful half.** The
+board, the catalog and now the reply all quote the same hourly pad, so the three hand-written copies
+were collapsed into one exported `upkeepPerHr` — the sixty-nine-private-copies lesson. The tempting
+next step is routing `upkeepOwed` through it, because the arithmetic *looks* shared. It is not:
+**`upkeepOwed` integrates the UNFLOORED rate over the elapsed clock and floors ONCE at the end**, so
+the helper would floor twice and quietly change what a signed economy sink CHARGES — on a tier whose
+hourly rate is not a whole number that is real money over a week-long clock. Caught before running
+and now stated in the helper's own comment, so the next reader is told why the obvious refactor is
+wrong rather than discovering it in the ledger.
+**THE SECOND FINDING IS IN THE GUARD, and it is the vacuity class again.**
+`POST /v1/business/restaurant/buy` was **the only skipped action in the entire 217-action run** —
+`front` picked the first kind the seed does not own, which is the restaurant, which the main ACTIONS
+list already buys, so the row answered 400 `exists` and was skipped **reading on the summary line
+exactly like a covered action**. Found by INSTRUMENTING the loop rather than by reading it; the
+selection now excludes kinds ACTIONS already claims. The upgrade rides a **lazy URL resolver**
+(`['POST', async () => url|null, payload]`) because its id is created by the row directly above it —
+resolving up front reads a row the drive then replaces — and a resolver returning falsy skips in
+SILENCE, so the named assertion is what actually holds it. Three mutations, three named failures;
+a fourth (reverting the front selection) **passed at 218 driven actions**, which is informative
+rather than a hole: with `front` = restaurant the *buy* row skips while the upgrade resolver still
+finds the row the literal entry bought, so that fix is load-bearing for the buy's coverage (217 →
+219), not for the upgrade's. Suite green, sim drift-0, mobile 79/79, pgquery, **pgcheck 47/47 on a
+fresh real Postgres**. Driven actions 217 → 219.
+**Process note, paid for twice.** An inline `node -e` extractor came back with **209 false "never
+driven"** because bash double-quote escaping mangled its regex — then its own self-check control was
+ALSO wrong (I asserted two routes were in `test/client.js` that genuinely are not; they live in
+`test/casino.js`). Fixed by writing it as a `.mjs` file and drawing the control from **the head of
+`ACTIONS` itself**, so it cannot be a guess about what is driven. *A finding produced by a tool you
+wrote and did not check is not a finding*, for the sixth session running. And a `git checkout
+test/client.js` used to undo a mutation **destroyed three uncommitted edits in that same file** —
+the recorded rule exists for exactly this: **mutations go on a scratchpad copy (`cp` out, `cp`
+back), never `git checkout`, while uncommitted work is in the tree.**
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and

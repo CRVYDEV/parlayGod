@@ -2195,7 +2195,13 @@
       return `\u{1F3F4} the family is ${txt(body.name)} [${txt(body.tag)}] now — the name changes everywhere it's written`;
     if (body && body.ok && body.id && body.kind && body.name && body.tier !== undefined)
       return body.tier > 1
-        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
+        // the price AND the consequence. The pad is a percentage of income, so a tier raises the
+        // recurring bill for good — the buy line one branch down says "mind the pad" and this, the
+        // six-figure move that MAKES the pad bigger, used to say only which tier it reached.
+        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.cost ? ` — $${fmt(body.cost)}` : ''}`
+          + `${body.collected ? `, $${fmt(body.collected)} banked at the old rate first` : ''}`
+          + `${body.incomePerHr ? `. It earns $${fmt(body.incomePerHr)}/hr now`
+            + `${body.upkeepPerHr ? `, and the pad rises with it: $${fmt(body.upkeepPerHr)}/hr` : ''}.` : ''}`
         : `the ${txt(body.name)} is yours — collect the till, and mind the pad`;
     if (body && body.ok && body.berths !== undefined && body.fleetMax !== undefined)
       return `slip rented — $${fmt(body.spent)}, ${body.berths} berth${body.berths > 1 ? 's' : ''} held, room for ${body.fleetMax} boats`;
