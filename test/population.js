@@ -26,6 +26,11 @@ import { joinGang, removeMember } from '../src/social/gangs.js';
 import { opsOverview } from '../src/ops.js';
 import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO, BOXING, STABLE, RACES } from '../src/rules.js';
 
+// The City Standing / recruiters boards are CACHED in production (standing.js — they were the most
+// expensive polled reads in the game). This suite reads boards it has just written, so it pins the
+// TTL to 0; the cache itself is proven in test/standing.js.
+process.env.STANDING_CACHE_MS = '0';
+
 const app = await buildServer();
 const pool = app.pool;
 const call = async (method, url, { token, body, headers } = {}) => {
