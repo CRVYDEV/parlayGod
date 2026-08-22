@@ -164,7 +164,7 @@ export async function yardCards(ch, client, h) {
   if (Number(ch.energy) < PEN.CARDS_ENERGY) throw new GameError('energy', `A seat at the blanket takes ${PEN.CARDS_ENERGY} energy.`);
   ch.energy = Number(ch.energy) - PEN.CARDS_ENERGY;
   await bumpMastery(client, h, ch, 'gambling', 'cards');
-  return { ok: true, cards: true, track: 'gambling', xp: MASTERY.XP.cards };
+  return { ok: true, cards: true, track: 'gambling', trackName: MASTERY.TRACKS.find((t) => t.id === 'gambling')?.name || 'gambling', xp: MASTERY.XP.cards };
 }
 
 // THE YARD CHARACTER — a seed-drawn fictional inmate to TALK to, once a day (the drill-claim
@@ -188,7 +188,7 @@ export async function yardTalk(ch, client, h) {
       sentenceSeconds: jailSecondsLeft(ch) });
   } else {
     await bumpMastery(client, h, ch, c.track, 'yardtale');
-    Object.assign(out, { track: c.track, xp: MASTERY.XP.yardtale });
+    Object.assign(out, { track: c.track, trackName: MASTERY.TRACKS.find((t) => t.id === c.track)?.name || c.track, xp: MASTERY.XP.yardtale });
   }
   return out;
 }
@@ -209,7 +209,7 @@ export async function buyContraband(ch, itemId, client, h) {
   // crafted consumable, and this branch sits first — so a medkit rolled at the bench would read
   // "the guard slips you a medkit". Absence is not a discriminator either: the workshop reply had
   // no `cost` only until it needed to state its price.
-  return { ok: true, op: 'commissary', item: itemId, cost: item.cost };
+  return { ok: true, op: 'commissary', item: itemId, name: item.name, cost: item.cost };
 }
 
 // the yard boss prices cover off the man's liquid wealth (the SAFEHOUSE_NW_BPS pattern) — a flat rate

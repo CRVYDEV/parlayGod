@@ -50,7 +50,7 @@ export async function upgradeLab(ch, client, h) {
     h.acct.omr = Number(h.acct.omr) - next.omr;
     await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -next.omr, reason: `lab:${next.id}` });
   }
-  return { ok: true, lab: next.id, cap: next.cap };
+  return { ok: true, lab: next.id, name: next.name, cap: next.cap };
 }
 
 // ── COOK (§7.10): rank-gated, batch cap by kitchen, 1 📦/20 units, prod = demo×12 ──

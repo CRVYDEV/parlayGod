@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect, bumpCrewObjective, hunterSearchMs } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf , SHIPMENT, usd } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, carOf, boatOf , SHIPMENT, usd } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { recordRival, revengeOwed } from '../rivals.js';
@@ -833,7 +833,7 @@ export async function stealCar(ch, victim, client, h) {
     h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false, nos: 0 });
     h.victimOwned.cars = (h.victimOwned.cars || []).filter((c) => c.id !== car.id); // keep the in-memory fleet honest
     await logCarCollect(client, ch.id, car.id); // THE COLLECTION — the sixth car-transfer site
-    await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id });
+    await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id, name: carOf(car.model_id)?.name });
     await recordRival(client, victim.account_id, ch, 'car_theft', { model: car.model_id });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
     bus.emit('streets', { type: 'car_theft', by: ch.name, on: victim.name });

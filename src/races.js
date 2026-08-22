@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
-import { RACES, POPULATION, REGIMEN, raceTierOf, raceRankOf, carPower, carVal, levelOf, disciplineLvlOf, jailed, hospitalized, usd } from './rules.js';
+import { RACES, POPULATION, REGIMEN, raceTierOf, raceRankOf, carOf, carPower, carVal, levelOf, disciplineLvlOf, jailed, hospitalized, usd } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -69,14 +69,14 @@ export async function raceNpc(ch, carId, tierId, useNos, client, h) {
     await bumpWheel(client, ch.account_id);
     await h.track(client, ch.account_id, 'race', { mode: 'npc', tier: tier.id, win: true });
     bus.emit('streets', { type: 'race_win', by: ch.name, race: tier.name, purse: tier.purse });
-    return { ok: true, win: true, tier: tier.id, purse: tier.purse, fee: tier.fee, net: tier.purse - tier.fee, power: mine, field, nos: nos > 0 };
+    return { ok: true, win: true, tier: tier.id, name: tier.name, purse: tier.purse, fee: tier.fee, net: tier.purse - tier.fee, power: mine, field, nos: nos > 0 };
   }
   // a loss dings the car (the existing damage mechanic — absolute write, pg-mem-safe)
   const nd = Math.min(100, Number(car.dmg) + RACES.LOSS_DMG);
   await client.query('UPDATE cars SET dmg=$2 WHERE id=$1', [car.id, nd]);
   car.dmg = nd;
   await h.track(client, ch.account_id, 'race', { mode: 'npc', tier: tier.id, win: false });
-  return { ok: true, win: false, tier: tier.id, fee: tier.fee, net: -tier.fee, dmg: nd, power: mine, field, nos: nos > 0 };
+  return { ok: true, win: false, tier: tier.id, name: tier.name, fee: tier.fee, net: -tier.fee, dmg: nd, power: mine, field, nos: nos > 0 };
 }
 
 // POST /v1/races/nos/:carId — buy a NITROUS charge for a car (a §10.4 cash sink; capped NOS_MAX).
@@ -269,7 +269,7 @@ export async function pinkSlipRace(ch, opponent, body, client, h) {
   // race spends earning its XP, so it schools Wheels too (the raceNpc/raceChallenge hook)
   await bumpMastery(client, h, ch, 'wheels', 'race');
   await h.rngLog(client, ch.id, `race:pink:${their.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} for pinks (${mine} vs ${theirs})`);
-  await h.notify(client, opponent.id, 'race_pink', { from: ch.name, theyWon: !win, car: wonCar.model_id });
+  await h.notify(client, opponent.id, 'race_pink', { from: ch.name, theyWon: !win, car: wonCar.model_id, name: carOf(wonCar.model_id)?.name });
   bus.emit('streets', { type: 'race_pink', by: ch.name, vs: opponent.name, win });
   await h.track(client, ch.account_id, 'race', { mode: 'pink', win });
   return { ok: true, win, forPinks: true, wonCar: win ? { id: wonCar.id, model: wonCar.model_id } : null,

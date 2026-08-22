@@ -4500,7 +4500,10 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
     `the score's stake is FRONTED and that term rides the line the leader reads when they pay. ` +
     `Got: ${JSON.stringify(planLine)}`);
   const joinLine = L44.get('get in on the score');
-  assert(joinLine !== planLine && /in on the job/i.test(joinLine),
+  // The literal "in on the job" was a PROXY for the property; wave 60 gave the join the job's NAME
+  // (the reply carried only `job.id`, so it could not say which score you were in on), so the check
+  // asserts what it always meant: the join is not the plan's sentence, and carries none of its terms.
+  assert(joinLine !== planLine && /in on /i.test(joinLine) && !/fronted/i.test(joinLine),
     `JOINING a score is not planning one — the join carries a role and a crewNeeded, which is what ` +
     `the plan branch guarded on, so it printed the plan's sentence with the plan's fields missing. ` +
     `Got: ${JSON.stringify(joinLine)}`);
@@ -5592,6 +5595,64 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
     assert(sell.line.includes(gd.name),
       `WAVE 59: selling read "sold 1 at $190 a unit". Got: ${JSON.stringify(sell.line)}`);
   }
+}
+
+// ── WAVE 60: THE RAW-KEY CLASS, on lines the ledger ALREADY DRIVES. Every one of these routes has
+// been in ACTIONS for waves, and every one passed check 8 — because check 8 catches a line that says
+// NOTHING, and these said something fluent and wrong. `the laundro is yours` on a racket purchase
+// (the client's "resolver" was `String(id).replace(/_/g,' ')`, which resolves nothing: 18 of 18
+// racket ids have no underscore at all, so it printed the lowercase key); `the payroll came off HOT`
+// on the biggest co-op payout in the game; `you're walking the gun path`. The source-side guard is
+// THE RAW-KEY LEDGER in test/gates.js; this is the other half — it reads the rendered line back.
+//
+// The precondition is asserted for each: a catalog whose name EQUALS its id would make the assertion
+// vacuous, and it would pass over a tree with the bug fully present.
+{
+  const pairs = [
+    ['racket buy',    [...said.keys()].find((u) => /^\/v1\/rackets\/.+\/buy$/.test(u)),     RACKETS],
+    ['racket upgrade',[...said.keys()].find((u) => /^\/v1\/rackets\/.+\/upgrade$/.test(u)), RACKETS],
+    ['asset buy',     [...said.keys()].find((u) => /^\/v1\/assets\/.+\/buy$/.test(u)),      ASSETS],
+    ['asset sell',    [...said.keys()].find((u) => /^\/v1\/assets\/.+\/sell$/.test(u)),     ASSETS],
+  ];
+  let checked = 0;
+  for (const [label, url, catalog] of pairs) {
+    if (!url) continue;                       // the fixture may not reach it; the floor below bites
+    const id = url.split('/')[3];
+    const entry = catalog.find((x) => x.id === id);
+    assert(entry, `WAVE 60: ${label} drove ${url} but ${id} is in no catalog — the fixture moved`);
+    assert.notEqual(entry.name.toLowerCase(), id.replace(/_/g, ' '),
+      `WAVE 60 precondition: ${label}'s catalog rung is named the same as its id, so this assertion `
+      + 'cannot tell a name from a key. Pick a rung whose name differs.');
+    const line = said.get(url);
+    assert(line && line.includes(entry.name), `WAVE 60: ${label} must NAME the rung — the client has no `
+      + `catalog handle, so with only the id it can print nothing but "${id}". Got: ${JSON.stringify(line)}`);
+    assert(!new RegExp(`\\b${id}\\b`).test(line), `WAVE 60: ${label} still renders the raw id `
+      + `"${id}" at the player. Got: ${JSON.stringify(line)}`);
+    checked++;
+  }
+  const pathLine = said.get('/v1/path');
+  if (pathLine) {
+    const p = PATHS[0];
+    assert(pathLine.includes(p.name), `WAVE 60: declaring a Path read "the ${p.id} path" — the trade `
+      + `has a NAME (${p.name}) and the reply now carries it. Got: ${JSON.stringify(pathLine)}`);
+    checked++;
+  }
+  const labLine = said.get('/v1/kitchen/lab/upgrade');
+  if (labLine) {
+    assert(!/\b(bathtub|cellar|basement)\b/.test(labLine), `WAVE 60: the lab line renders the raw bench `
+      + `key. Got: ${JSON.stringify(labLine)}`);
+    checked++;
+  }
+  // The WIRE half, as a labelled SOURCE tripwire: `port_bust` is a notification, so it cannot be
+  // driven through act() — and it printed "the Coast Guard took the deeprun run", a raw lane key on
+  // the one line that tells a smuggler what the Coast Guard just cost them.
+  assert(/port_bust:.*routeName/.test(html), 'the port_bust wire line must read the route NAME the '
+    + 'reply now carries — with only the id it prints "the deeprun run" at the player');
+  // anti-vacuity: with none of these driven the loop above asserts nothing and the block reads as a
+  // pass — the declared-but-never-driven shape this file has been bitten by three times.
+  assert(checked >= 5, `WAVE 60 checked only ${checked} raw-key lines — the fixture stopped driving `
+    + 'them, and an undriven row reads on the summary line exactly like a covered one.');
+  console.log(`  ✓ wave 60: ${checked} catalog lines name the rung instead of its key`);
 }
 
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made

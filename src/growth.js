@@ -33,7 +33,7 @@ export async function choosePath(ch, pathId, client, h) {
   // the clock is a direct-SQL column (off persistCharacter's positional UPDATE — the respec_at
   // pattern); stamped on EVERY choice so the first pick starts the same week as a switch
   await client.query('UPDATE characters SET path_at=now() WHERE id=$1', [ch.id]);
-  return { ok: true, path: pathId };
+  return { ok: true, path: pathId, name: pt.name };
 }
 
 // M8 — STAT RESPEC: redistribute the points you already trained (§5.1 stats). The TOTAL is

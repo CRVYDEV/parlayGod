@@ -721,7 +721,7 @@ export async function bumpMastery(client, h, ch, trackId, action) {
         await client.query('UPDATE characters SET statuse_used=$2, statuse_at=$3 WHERE id=$1',
           [ch.id, used + 1, new Date(now)]);
         ch.statuse_used = used + 1; ch.statuse_at = new Date(now);
-        await notify(client, ch.id, 'stat_use', { track: trackId, stat: track.stat, value: ch[track.stat] });
+        await notify(client, ch.id, 'stat_use', { track: trackId, name: track.name, stat: track.stat, value: ch[track.stat] });
       }
     }
   }
