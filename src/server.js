@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import websocket from '@fastify/websocket';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { makeDb } from './db.js';
 import { isDbDown, pingDb } from './dbhealth.js';
 import { preflight } from './preflight.js';
@@ -251,32 +252,100 @@ export async function buildServer() {
   app.decorate('routes', routeRegistry);
   const baseUrl = process.env.PUBLIC_URL || SOCIAL_GAME_URL;
 
+  // ── THE WIRE — what the player actually DOWNLOADS ─────────────────────────────────────────────
+  // tools/pageweight.js measured a cold load of the landing at 5.3 MB on a phone, of which 757 KB was
+  // text shipped uncompressed: index.html alone is 1,047,078 bytes and gzips to 319,499 (31%), while
+  // every neighbouring static route (the icons, the art plates, the manifest, the portraits) already
+  // set a cache-control and this one set none. The forgotten-sibling shape, on the single most-fetched
+  // thing we serve, paid by every player on every cold load and worst on the phone the PWA targets.
+  //
+  // Hand-rolled rather than a plugin, on the sol.js/avatar.js precedent: the whole of it is a short
+  // list of decidable conditions, each pinned in test/routes.js, and the alternative is a dependency
+  // on the one response path every route in the game passes through.
+  //
+  // NARROW ON PURPOSE, and each exclusion is a property rather than a preference:
+  //   • gzip only. Brotli is better and needs an encoding negotiation this does not have; gzip is
+  //     understood by every client that has existed since 1999 and gets ~70% of the bytes.
+  //   • enumerated content types only. Images, video and fonts are ALREADY compressed — gzipping a
+  //     JPEG spends CPU to make it very slightly bigger.
+  //   • above a threshold. Under ~1 KB the framing overhead can grow the payload, and the CPU is
+  //     never worth a round trip that was one packet anyway.
+  //   • never on 204/304/206 or a HEAD. A range response is the sharp one: /art/:file serves video
+  //     with `accept-ranges: bytes`, and compressing a byte range makes the range a lie.
+  //   • never over an existing content-encoding, and never once the head is on the wire (the
+  //     fail-safe the header hook above already documents — an onSend must not crash the server).
+  //   • ALWAYS Vary: Accept-Encoding, or a shared cache serves the gzipped bytes to a client that
+  //     said it could not read them.
+  const GZIP_MIN = 1024;
+  const COMPRESSIBLE = /^(?:text\/|application\/(?:json|javascript|manifest\+json|xml)|image\/svg)/;
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (reply.raw.headersSent) return payload;
+    if (req.method === 'HEAD') return payload;
+    if (reply.statusCode === 204 || reply.statusCode === 304 || reply.statusCode === 206) return payload;
+    if (reply.getHeader('content-encoding')) return payload;
+    if (!COMPRESSIBLE.test(String(reply.getHeader('content-type') || ''))) return payload;
+    if (!/\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''))) {
+      // Still declare the variance: a cache that stored this uncompressed copy must not hand it to
+      // a client that would have got the gzipped one, or the ETag on the static pages goes wrong.
+      reply.header('Vary', 'Accept-Encoding');
+      return payload;
+    }
+    const buf = typeof payload === 'string' ? Buffer.from(payload)
+      : Buffer.isBuffer(payload) ? payload : null;
+    if (!buf || buf.length < GZIP_MIN) { reply.header('Vary', 'Accept-Encoding'); return payload; }
+    const gz = zlib.gzipSync(buf, { level: 6 });
+    reply.header('content-encoding', 'gzip').header('Vary', 'Accept-Encoding')
+      .header('content-length', gz.length);
+    return gz;
+  });
+
+  // The five served pages are the same bytes for the life of the process, so they are compressed and
+  // hashed ONCE at boot rather than per request — gzipping a megabyte on every cold load is ~30ms of
+  // CPU for a result that cannot have changed. The ETag is what makes a REPEAT visit free: the shell
+  // changes on every deploy, so it is `no-cache` (revalidate, never stale) rather than a max-age, and
+  // an unchanged deploy answers 304 in a few hundred bytes instead of 319 KB. That is the same
+  // reasoning public/sw.js already applies to navigations, one layer down.
+  const servePage = (html, extra = {}) => {
+    const raw = Buffer.from(html, 'utf8');
+    const gz = zlib.gzipSync(raw, { level: 9 });   // level 9: paid once at boot, saved on every hit
+    const etag = '"' + crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16) + '"';
+    return async (req, reply) => {
+      reply.type('text/html; charset=utf-8').header('etag', etag)
+        .header('cache-control', 'no-cache').header('Vary', 'Accept-Encoding');
+      for (const [k, v] of Object.entries(extra)) reply.header(k, v);
+      if (req.headers['if-none-match'] === etag) return reply.code(304).send();
+      if (/\bgzip\b/i.test(String(req.headers['accept-encoding'] || '')))
+        return reply.header('content-encoding', 'gzip').send(gz);
+      return reply.send(raw);
+    };
+  };
+
   // ── the playable console: one static file, no build step, no new deps (public/index.html) ──
   // Read once at boot; a missing file degrades to a pointer, never a crash (tests boot headless).
   let clientHtml = '<!doctype html><title>OMERTA</title><p>API up. Client file missing (public/index.html).</p>';
   try { clientHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'index.html'), 'utf8'); } catch { /* headless */ }
-  app.get('/', async (req, reply) => reply.type('text/html; charset=utf-8').send(clientHtml));
+  app.get('/', servePage(clientHtml));
   // the LIVE-OPS dashboard (mod-key gated client-side; every call carries x-mod-key) — public/admin.html
   let adminHtml = '<!doctype html><title>OMERTA ops</title><p>Ops console file missing (public/admin.html).</p>';
   try { adminHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'admin.html'), 'utf8'); } catch { /* headless */ }
   // (red-team R20) the mod ops console — deny framing (clickjacking defense-in-depth; the dashboard holds
   // the mod key in sessionStorage and drives confiscate/ban/mint). No CSP (would break its inline scripts).
-  app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('X-Frame-Options', 'DENY').header('Referrer-Policy', 'no-referrer').send(adminHtml));
+  app.get('/admin', servePage(adminHtml, { 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' }));
   // the CODEX: the in-game wiki — every system + gameplay loop (public/wiki.html); public, read-only
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
-  app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  app.get('/wiki', servePage(wikiHtml));
   // THE ARENA: the public, keyless agent showcase (public/arena.html) — "watch the machines run the
   // city." The agent differentiator AND a shareable/indexable marketing surface, in one. Read-only,
   // fetches GET /v1/arena for its data; §10.4-free (banded, no exact per-agent liquid).
   let arenaHtml = '<!doctype html><title>OMERTA arena</title><p>Arena file missing (public/arena.html).</p>';
   try { arenaHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'arena.html'), 'utf8'); } catch { /* headless */ }
-  app.get('/arena', async (req, reply) => reply.type('text/html; charset=utf-8').send(arenaHtml));
+  app.get('/arena', servePage(arenaHtml));
 
   // The no-code onboarding walkthrough (set up Claude Desktop to play via the MCP connector).
   let playHtml = '<!doctype html><title>Play OMERTA with Claude</title><p>Walkthrough file missing (public/play.html).</p>';
   try { playHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'play.html'), 'utf8'); } catch { /* headless */ }
-  app.get('/play', async (req, reply) => reply.type('text/html; charset=utf-8').send(playHtml));
+  app.get('/play', servePage(playHtml));
   // WEB PUSH service worker — must be served from the origin ROOT so it can control the whole scope.
   let swJs = '';
   try { swJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sw.js'), 'utf8'); } catch { /* headless */ }
