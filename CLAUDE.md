@@ -16207,6 +16207,38 @@ dropped; `art()` reduced to dropping the article → the wave-10 fix, caught by 
 LOSING line's outfit dropped). No SQL moved, so the real-Postgres gates are not triggered — checked
 rather than assumed. Driven actions 240 → 243. Suite 8/8 + sim drift-0 + mobile 81/81.
 
+**PLAY WAVE 59 — THE EDGE RUNG, CONTINUED: SIX LINES, TWO CATALOGS, NOT ONE NAMED WHAT IT SOLD
+(2026-08-22).** Wave 58 fixed two of the seven catalogs its extractor found driven at rung 1; this
+finishes the sweep on two more, and they are the same shape ONE LOOP OVER. `cook` has named its drug
+since wave 45 and **its three siblings never did**, so the whole kitchen — buy the makings, pull the
+batch, work the corner — read ONE sentence whichever of the eight lines you were running (*"20 lots of
+makings — $580"* against *"20 lots of makings — $98,280"*, a 170× price difference and identical
+wording), and the ten trade goods read *"bought 2 at $190 a unit"* whether it was the cheapest crate or
+the dearest. **Neither client line could have said otherwise**: `describe()` has no drug catalog at all,
+and the goods reply carried **no id whatsoever** — so the fix is at the SOURCE on all five replies
+(makings/collect/deal gain the name the way `cook` already had it; goods gain the id, which the client
+resolves through the `goodName` helper off the published catalog, the established idiom). The
+regression drives BOTH edges of each catalog, because driving one rung is exactly what let this hide.
+**TWO OF MY OWN PROBE'S "FINDINGS" WERE THE PROBE, and both are the recorded class.** It reported
+*"ready in 32400"* — raw seconds on the apex cook line — which would have been a real defect and was
+not: the ad-hoc probe grows a helper's slice until it COMPILES, and `const minsTxt = (s) => s <= 0 ?
+'0s' : s` compiles perfectly and returns the raw number. That is precisely the trap `test/client.js`
+guards with a load-bearing token pinned per helper, which my throwaway lacked; pinned, the same drive
+reads *"ready in 9h"*. It then reported `bought 2 × gin` — the raw key — which was the probe stubbing
+`rules` with two fields instead of fetching the real `/v1/rules`. *A finding produced by a tool you
+wrote and did not check is not a finding*, for the seventh session running — and the useful half is
+that BOTH were caught by asking why the tool disagreed with the source rather than by filing them.
+**A collision was checked BEFORE the field was added rather than discovered after**: the goods reply's
+new `good` id is the same key the FAVOR lines already use, and three describe() branches sit below the
+goods one — they are safe only because a favor reply carries no `unit`, which was verified in
+`favors.js` rather than assumed. And an existing SYNTHETIC (wave 45's cut-vs-collect collision test)
+carries no drug at all, so the first cut of the collect line rendered an empty `×` — the line degrades
+gracefully now rather than the synthetic being reshaped to suit it, since a real collect always carries
+the name and a defensive line costs nothing. Five mutations, each caught at its own named assertion
+(each of the four server fields dropped → `Got: undefined`; the client's `goodName` resolution removed →
+the original sentence reproduced verbatim). No SQL moved — checked with a diff filter, not assumed.
+Driven actions 243 → 253. Suite 8/8 + sim drift-0 + mobile 81/81.
+
 **THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
 (2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
 outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived

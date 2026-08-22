@@ -296,7 +296,10 @@ export async function buyGood(ch, goodId, qty, client, h) {
   // side counted (the dice-counter class from the daily pool), so a buy-only day couldn't complete
   // either. The bump costs the buyer the 2% take either way; the contract payout is unchanged.
   await h.bumpDaily(client, ch.id, 'goods');
-  return { ok: true, unit, qty: n, spent: cost + fee + tax };
+  // WAVE 59 — ten goods lines and one sentence: "bought 2 at $190 a unit" named nothing, so the
+  // cheapest crate and the dearest read identically but for the figure. The id is enough here — the
+  // client resolves it through goodName off the published /v1/rules catalog.
+  return { ok: true, good: goodId, unit, qty: n, spent: cost + fee + tax };
 }
 
 export async function sellGood(ch, goodId, qty, client, h) {
@@ -318,7 +321,7 @@ export async function sellGood(ch, goodId, qty, client, h) {
   await takeHouse(client, tax);
   await h.bumpDaily(client, ch.id, 'goods');
   await bumpMastery(client, h, ch, 'commerce', 'sell'); // THE TRADES — goods moved at a margin is commerce
-  return { ok: true, unit, qty: n, earned: net };
+  return { ok: true, good: goodId, unit, qty: n, earned: net };
 }
 
 // ═══════════════════ RACKETS & ASSETS (§5.4) ═══════════════════

@@ -2564,8 +2564,8 @@
       return `you're in ${txt($dist(body.loc))} now`;
     if (body && body.ok && body.qty !== undefined && body.unit !== undefined && (body.spent !== undefined || body.earned !== undefined))
       return body.spent !== undefined
-        ? `bought ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.spent)} out of pocket`
-        : `sold ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.earned)} in`;
+        ? `bought ${body.qty} × ${txt(goodName(body.good))} at $${fmt(body.unit)} a unit — $${fmt(body.spent)} out of pocket`
+        : `sold ${body.qty} × ${txt(goodName(body.good))} at $${fmt(body.unit)} a unit — $${fmt(body.earned)} in`;
     if (body && body.ok && body.vest && body.mult !== undefined) return `strapped into the ${String(body.vest).replace(/_/g, ' ')} — it soaks ${Math.round((body.mult - 1) * 100)}% more punishment`;
     if (body && body.ok && body.racket && body.income !== undefined)
       return `the ${String(body.racket).replace(/_/g, ' ')} is yours — about $${fmt(Math.round(body.income * 60))} an hour while you're not looking`;
@@ -2996,7 +2996,7 @@
       : `the hit is OFF — ${body.name || 'they'} ${body.calledOff === 'family' ? 'is family now' : 'runs with your crew now'}. Your search is cleared.`);
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
-    if (body.earned && body.delivered === undefined) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
+    if (body.earned && body.delivered === undefined) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'}${body.op === 'deal' ? ` — ${body.units} × ${txt(body.name || body.drug)}` : ''} · +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
     // THE FREIGHT lands in CRATES, not dollars, and it comes off a trunk-load at a time — so the
     // convoy's `collected` is a COUNT and must be read before the business collect's dollars below,
     // or a three-crate landing renders as "collected $3". `remaining` is the convoy shape's tell.
@@ -3180,7 +3180,10 @@
     // to, because that trade is the entire mechanic. A line reporting only the new totals is a
     // receipt for a decision it never mentions you made.
     if (body.op === 'cut') bits.push(`stepped on the ${body.name || body.drug} — +${body.added} units, now ${body.qty} at q${body.quality} · $${fmt(body.cost)}`);
-    else if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
+    // WAVE 59: it named no line either — the whole kitchen loop read the same sentence whichever of
+    // the eight drugs you were running. The reply carries the name now (the `cook` line above has
+    // since it shipped; its three siblings did not — the forgotten-sibling shape one loop over).
+    else if (body.qty && body.quality) bits.push(`pulled ${body.qty}${body.name || body.drug ? ` × ${txt(body.name || body.drug)}` : ' units'} at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     // The cook debits a SECOND currency (crates) and the only thing a player needs back is when to
     // return for it, so the old line — which named neither, nor even what was cooking — reported the
@@ -3449,7 +3452,7 @@
     // on the buy that feeds every cook. The response already carries the line, the count and the
     // unit price.
     if (body.unit !== undefined && body.qty !== undefined && body.cost !== undefined && !body.credited)
-      bits.push(`\u{1F9EA} ${fmt(body.qty)} lot${body.qty === 1 ? '' : 's'} of makings — $${fmt(body.cost)} ($${fmt(body.unit)} each)`);
+      bits.push(`\u{1F9EA} ${fmt(body.qty)} lot${body.qty === 1 ? '' : 's'} of ${txt(body.name || body.drug || 'makings')} makings — $${fmt(body.cost)} ($${fmt(body.unit)} each)`);
     // PUTTING A PRICE ON SOMEBODY. The escrow is posted, the take is kept, and the MARK IS TOLD —
     // it is the loudest thing you can do to another player, and it said "done."
     if (body.total !== undefined && body.expiresHours !== undefined && body.kind)

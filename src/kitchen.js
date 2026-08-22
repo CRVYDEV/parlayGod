@@ -30,7 +30,10 @@ export async function buyMakings(ch, drugId, qty, client, h) {
   ch.cash = Number(ch.cash) - cost;
   h.owned.makings[drugId] = (h.owned.makings[drugId] || 0) + n;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: `makings:${drugId}` });
-  return { ok: true, unit, qty: n, cost };
+  // WAVE 59 — the EDGE RUNG, one loop over: `cook` names its line (wave 45) and its three
+  // siblings did not, so the Supplier read "20 lots of makings" whether you bought the $29 line or
+  // the $4,914 one. The client has no drug catalog, so the name has to ride with the reply.
+  return { ok: true, op: 'makings', drug: drugId, name: d.name, unit, qty: n, cost };
 }
 
 // ── LAB LADDER (§5.3): sequential tiers; the top two burn $OMR ──
@@ -98,7 +101,7 @@ export async function collect(ch, client, h) {
     ch.health = Math.max(1, Number(ch.health) - 20);
     ch.heat = Math.min(100, Number(ch.heat || 0) + 5);
     await h.rngLog(client, ch.id, 'cook:fire', fireRoll, 'batch lost');
-    return { ok: true, op: 'collect', fire: true, qty: 0 };
+    return { ok: true, op: 'collect', fire: true, qty: 0, drug: b.drug_id, name: drugOf(b.drug_id)?.name || b.drug_id };
   }
   const cunning = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
   // LAB MODULE (Tier-4) — the Purity Rig lifts the quality floor
@@ -119,7 +122,8 @@ export async function collect(ch, client, h) {
   // Marked for the same reason the cut is: pulling a batch off the burner and CUTTING the stash both
   // answer with a qty and a quality, so a client keyed on those two fields renders whichever branch
   // it reaches first — and the two actions mean opposite things about where the quality went.
-  return { ok: true, op: 'collect', fire: false, qty: Number(b.qty), quality: Math.round(q * 100) / 100 };
+  return { ok: true, op: 'collect', fire: false, drug: b.drug_id, name: drugOf(b.drug_id)?.name || b.drug_id,
+    qty: Number(b.qty), quality: Math.round(q * 100) / 100 };
 }
 
 // ── DEAL (§7.10): demand × quality × event × trade-rank bonus; heat; nerve 1/10 ──
@@ -178,7 +182,7 @@ export async function deal(ch, drugId, qty, client, h, play) {
   await h.track(client, ch.account_id, 'deal', { drug: drugId, units: n, heat: Math.round(heatGain * 10) / 10 });
   await h.bumpDaily(client, ch.id, 'deal');
   await bumpMastery(client, h, ch, 'chemistry', 'deal'); // THE TRADES — moving product works the same craft
-  return { ok: true, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
+  return { ok: true, op: 'deal', drug: drugId, name: d.name, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
     play: pl.id, nerve: nerveCost,
     cornerPremium: cornerPremium > 0,
     tradeRank: tradeRankIdx(Number(ch.trade_rep)) };

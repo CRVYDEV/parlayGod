@@ -5508,6 +5508,92 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
     `outright is the wave-10 fix and reads clipped. Got: ${JSON.stringify(runs[firstRoute.id].line)}`);
 }
 
+// ── WAVE 59: THE EDGE RUNG, CONTINUED. Wave 58 fixed two of the seven catalogs its extractor found
+// driven at rung 1. These are two more, and they are the same shape one loop over: `cook` has NAMED
+// its drug since wave 45 and its three siblings never did, so the whole kitchen — buy the makings,
+// pull the batch, work the corner — read one sentence whichever of the EIGHT lines you were running,
+// and the ten trade goods read "bought 2 at $190 a unit" whether it was the $190 crate or the $2,249
+// one. Neither client line could have said otherwise: `describe()` has no drug catalog at all, and
+// the goods reply carried no id to resolve. So the fix is at the SOURCE on all five replies, and the
+// regression drives BOTH edges of each catalog, because driving one rung is exactly what let this
+// hide for as long as it did.
+{
+  const { DRUGS, GOODS, TRADE_RANKS, KITCHENS } = await import('../src/rules.js');
+  const cheapDrug = DRUGS[0], apexDrug = DRUGS[DRUGS.length - 1];
+  const cheapGood = GOODS[0], apexGood = GOODS[GOODS.length - 1];
+  assert(cheapDrug.id !== apexDrug.id && cheapGood.id !== apexGood.id,
+    'WAVE 59: both catalogs must hold two distinct rungs, or driving "both edges" drives one');
+  assert(apexDrug.unlock > 0,
+    'WAVE 59 fixture: the apex drug is rank-gated, so the fixture must buy that rank — if this ever ' +
+    'stops being true the setup below is doing nothing and the apex rung is untested');
+
+  const g = await inject('POST', '/v1/auth/guest', null, {});
+  const t59 = g.body.token;
+  await inject('POST', '/v1/character', t59, { name: 'Ledger Lines ' + Math.random().toString(36).slice(2, 6) });
+  const id59 = (await inject('GET', '/v1/me', t59, null)).body.character.id;
+  const topRank = TRADE_RANKS[TRADE_RANKS.length - 1].at;
+  const topLab = KITCHENS[KITCHENS.length - 1].id;
+  await app.pool.query(
+    "UPDATE characters SET cash=900000000, respect=6000000, energy=999, nerve=999, cb=500, " +
+    "trade_rep=$2, lab=$3, loc='canal' WHERE id=$1", [id59, topRank * 2, topLab]);
+
+  const drive59 = async (url, label, payload) => {
+    const r = await inject('POST', url, t59, payload || null);
+    assert.equal(r.code, 200, `WAVE 59 could not drive ${label} (${JSON.stringify(r.body)}) — a skipped ` +
+      `row reads on the summary line exactly like a covered one`);
+    described++;
+    const line = String(describeFn(r.body, 200));
+    said.set(`${url}#${label}`, line);
+    return { r, line };
+  };
+
+  // THE KITCHEN, at the cheapest line and the apex line.
+  for (const d of [cheapDrug, apexDrug]) {
+    const mk = await drive59(`/v1/kitchen/makings/${d.id}`, `makings ${d.id}`, { qty: 20 });
+    assert.equal(mk.r.body.name, d.name,
+      `WAVE 59: the Supplier's reply must NAME the line — the client has no drug catalog, so with only ` +
+      `the price it can print nothing but "lots of makings". Got: ${JSON.stringify(mk.r.body.name)}`);
+    assert(mk.line.includes(d.name),
+      `WAVE 59: buying makings read "20 lots of makings" for every one of the ${DRUGS.length} lines. ` +
+      `Got: ${JSON.stringify(mk.line)}`);
+
+    await drive59('/v1/kitchen/cook', `cook ${d.id}`, { drugId: d.id, qty: 5 });
+    await app.pool.query("UPDATE batches SET done_at=now() - interval '1 hour' WHERE character_id=$1", [id59]);
+    const col = await drive59('/v1/kitchen/collect', `collect ${d.id}`, null);
+    assert.equal(col.r.body.name, d.name,
+      `WAVE 59: pulling the batch must NAME what came off the burner. Got: ${JSON.stringify(col.r.body.name)}`);
+    assert(col.line.includes(d.name),
+      `WAVE 59: the collect read "pulled 5 units at q1.1" — the same sentence for every line. ` +
+      `Got: ${JSON.stringify(col.line)}`);
+
+    await app.pool.query('UPDATE characters SET nerve=999, heat=0 WHERE id=$1', [id59]);
+    const deal = await drive59('/v1/kitchen/deal', `deal ${d.id}`, { drugId: d.id, qty: 3 });
+    assert.equal(deal.r.body.name, d.name,
+      `WAVE 59: the corner deal must NAME what moved. Got: ${JSON.stringify(deal.r.body.name)}`);
+    assert(deal.line.includes(d.name) && /\b3\b/.test(deal.line),
+      `WAVE 59: the deal read "moved product — +$470" — neither the line nor the units. ` +
+      `Got: ${JSON.stringify(deal.line)}`);
+  }
+
+  // THE TRADE GOODS, at both edges. The id is enough here — the client resolves it through goodName
+  // off the published catalog, which is why this asserts the reply carries the ID and the LINE
+  // carries the NAME: two different claims, and only the pair proves the resolution actually happens.
+  await app.pool.query("UPDATE characters SET loc='docks', cash=900000000 WHERE id=$1", [id59]);
+  for (const gd of [cheapGood, apexGood]) {
+    const buy = await drive59('/v1/goods/buy', `buy ${gd.id}`, { goodId: gd.id, qty: 2 });
+    assert.equal(buy.r.body.good, gd.id,
+      `WAVE 59: the goods reply carried NO id at all, so the client could not have named it. ` +
+      `Got: ${JSON.stringify(buy.r.body.good)}`);
+    assert(buy.line.includes(gd.name),
+      `WAVE 59: buying read "bought 2 at $190 a unit" for all ${GOODS.length} lines. ` +
+      `Got: ${JSON.stringify(buy.line)}`);
+    const sell = await drive59('/v1/goods/sell', `sell ${gd.id}`, { goodId: gd.id, qty: 1 });
+    assert.equal(sell.r.body.good, gd.id, `WAVE 59: the sell reply must carry the id too`);
+    assert(sell.line.includes(gd.name),
+      `WAVE 59: selling read "sold 1 at $190 a unit". Got: ${JSON.stringify(sell.line)}`);
+  }
+}
+
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
 // every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
 // upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED
