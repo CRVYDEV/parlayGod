@@ -168,7 +168,7 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   const rep = await smugglerRep(client, ch.account_id);
   const heat = await heatLane(client, ch.id, portLaneKey(route.id), rep.decayMult, rep.gainMult);
   await h.track(client, ch.account_id, 'port', { act: 'launch', route: route.id, hold });
-  return { ok: true, boat: boat.id, route: route.id, hold, cost, escort: !!escort, notoriety: Math.round(heat), arrivesSeconds: Math.ceil(runMsOf(route) / 1000) };
+  return { ok: true, boat: boat.id, route: route.id, routeName: route.name, hold, cost, escort: !!escort, notoriety: Math.round(heat), arrivesSeconds: Math.ceil(runMsOf(route) / 1000) };
 }
 
 // POST /v1/port/collect/:boatId {warehouse} — the boat's home: roll the Coast Guard, then land the cargo

@@ -105,7 +105,7 @@ export async function worldBoard(pool, ch = null, h = null) {
       const members = mrows.map((m) => ({ name: m.name, hired: !!m.hired, leader: m.character_id === r.leader_character }));
       const crew = members.length, hired = members.filter((m) => m.hired).length;
       const leader = r.leader_character === ch.id;
-      myRaid = { id: r.id, npc: r.npc_id, leader, crew, hired, members, crewMax: WORLD.COOP_MAX_CREW,
+      myRaid = { id: r.id, npc: r.npc_id, name: WORLD_NPCS[r.npc_id]?.name, leader, crew, hired, members, crewMax: WORLD.COOP_MAX_CREW,
         needMore: Math.max(0, WORLD.COOP_MIN - crew),   // how many more bodies before the go is legal
         canHire: leader && crew < WORLD.COOP_MAX_CREW && hired < WORLD.HIRE_MAX, hireFee: WORLD.HIRE_FEE };
     }
@@ -278,7 +278,7 @@ export async function raidNpc(ch, npcId, client, h) {
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3 WHERE npc_id=$1', [fixture.id, strength, now]);
     await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: false });
     const soldier = second ? await soldierResult(client, h, ch, second, { success: false, cause: `repelled by ${fixture.name}` }) : null;
-    return { ok: true, success: false, npc: fixture.id, enraged, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000), soldier };
+    return { ok: true, success: false, npc: fixture.id, outfit: fixture.name, enraged, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000), soldier };
   }
 
   // landed — loot a bounded slice of the reservoir (GRAB_BPS, capped), draining it by exactly the loot
@@ -326,7 +326,7 @@ export async function raidNpc(ch, npcId, client, h) {
   }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, loot, routed });
   const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
-  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, routUnits, material: routUnits ? SHIPMENT.MATERIAL : null, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100), soldier };
+  return { ok: true, success: true, npc: fixture.id, outfit: fixture.name, loot, routed, routBonus, routUnits, material: routUnits ? SHIPMENT.MATERIAL : null, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100), soldier };
 }
 
 // ── STEP THREE — CO-OP CREW RAIDS on the apex outfits (the crew-heist machinery) ──
@@ -380,7 +380,7 @@ export async function joinRaid(ch, raidId, client, h) {
   // `name` rides along because the line names the outfit, and the id is not its name — the PLAN
   // reply carries both and reads "The Volkov Bratva" while this one carried only `npc` and rendered
   // the raw `volkov` at the player, on the same screen, for the same outfit.
-  return { ok: true, op: 'raid', id: raidId, npc: fixture.id, name: fixture.name, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
+  return { ok: true, op: 'raid', id: raidId, npc: fixture.id, name: fixture.name, outfit: fixture.name, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
 // POST /v1/world/raids/:id/hire — THE HIRED GUNS (the fillHeist twin). The leader hires an NPC resident
@@ -425,7 +425,7 @@ export async function hireRaid(ch, raidId, client, h) {
   await client.query('INSERT INTO world_raid_members (raid_id, character_id, hired) VALUES ($1,$2,true)', [raidId, free.id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -WORLD.HIRE_FEE, reason: 'world:hire' });
   await h.track(client, ch.account_id, 'world_raid_hire', { npc: fixture.id });
-  return { ok: true, id: raidId, npc: fixture.id, hired: true, fee: WORLD.HIRE_FEE, crew: members.length + 1, crewMax: WORLD.COOP_MAX_CREW };
+  return { ok: true, id: raidId, npc: fixture.id, outfit: fixture.name, name: fixture.name, hired: true, fee: WORLD.HIRE_FEE, crew: members.length + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
 // POST /v1/world/raids/:id/dismiss — the leader sends a hired gun home (real crew is preferred over paid
@@ -538,11 +538,11 @@ export async function executeRaid(ch, raidId, client, h) {
     for (const m of crewRows) {
       if (hiredIds.has(m.id)) continue;
       if (m.id === ch.id) ch.hosp_until = hospTo;
-      else { await setMember(m.id, 'hosp_until=$2', [hospTo]); await h.notify(client, m.id, 'world_raid_fail', { npc: fixture.id }); }
+      else { await setMember(m.id, 'hosp_until=$2', [hospTo]); await h.notify(client, m.id, 'world_raid_fail', { npc: fixture.name }); }
     }
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3 WHERE npc_id=$1', [fixture.id, strength, now]);
     await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: false, crew: crewRows.length });
-    return { ok: true, success: false, npc: fixture.id, crew: crewRows.length, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000) };
+    return { ok: true, success: false, npc: fixture.id, outfit: fixture.name, crew: crewRows.length, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000) };
   }
 
   // landed — the bounded reservoir slice is the pot (+ the rout windfall if this crossing routs it)
@@ -562,7 +562,7 @@ export async function executeRaid(ch, raidId, client, h) {
   for (const m of realCrew) {
     const share = shares[m.id];
     if (m.id === ch.id) ch.cash = Number(ch.cash) + share;
-    else { await setMember(m.id, 'cash=$2', [Number(m.cash) + share]); await h.notify(client, m.id, 'world_raid_score', { npc: fixture.id, share, routed }); }
+    else { await setMember(m.id, 'cash=$2', [Number(m.cash) + share]); await h.notify(client, m.id, 'world_raid_score', { npc: fixture.name, share, routed }); }
     if (share > 0) {
       await h.ledger(client, { characterId: m.id, currency: 'cash', amount: share, reason: 'world:raid', counterparty: fixture.id });
       await client.query('UPDATE account_persistent SET cartel_damage = cartel_damage + $2 WHERE account_id=$1', [m.account_id, share]);
@@ -591,7 +591,7 @@ export async function executeRaid(ch, raidId, client, h) {
       if (m.id === ch.id) ch.shipment = Number(ch.shipment || 0) + units;
       else {
         await setMember(m.id, 'shipment=$2', [Number(m.shipment || 0) + units]);
-        await h.notify(client, m.id, 'world_raid_material', { npc: fixture.id, units, material: SHIPMENT.MATERIAL });
+        await h.notify(client, m.id, 'world_raid_material', { npc: fixture.name, units, material: SHIPMENT.MATERIAL });
       }
     }
   }
@@ -609,7 +609,7 @@ export async function executeRaid(ch, raidId, client, h) {
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
   }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, pot, routed, crew: crewRows.length });
-  return { ok: true, success: true, npc: fixture.id, crew: crewRows.length, pot, share: shares[ch.id], routed,
+  return { ok: true, success: true, npc: fixture.id, outfit: fixture.name, crew: crewRows.length, pot, share: shares[ch.id], routed,
     routUnits: routUnits[ch.id] || 0, material: routUnits[ch.id] ? SHIPMENT.MATERIAL : null,
     frontier: routed && !!heldGang, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
 }

@@ -2802,7 +2802,7 @@
     // field, and `routUnits`/`material` with it: the forgotten-sibling shape with the sibling that
     // gets it right in the same block. Both terms are guarded, so a raid that takes neither is
     // unchanged — and if the solo path is ever given the material, the line already says so.
-    if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided the ${body.npc} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
+    if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided ${art(body.outfit || body.npc)} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
     // THE CO-OP RAID has its OWN shape — a crew splits a `pot` into a `share` where a soloist takes
     // `loot` — so the line above (keyed on `loot`) never fired for it and the deepest co-operative
     // content in the game reported "done." for a rout and "it went sideways" for a repel that put the
@@ -2817,9 +2817,9 @@
     if (body && body.ok && body.op === 'raid' && body.crew !== undefined)
       // phrased like the PLAN line above it ("the hit on X"): every outfit's name already carries its
       // own article, so "the ${name} job" reads "the The Volkov Bratva job".
-      return `\u{1F52B} you're in on the hit on ${txt(body.name || body.npc)} — ${body.crew} of ${body.crewMax} on the crew`;
-    if (coop && body.success === true) bits.push(`cracked the ${body.npc} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
-    if (coop && body.success === false) bits.push(`the ${body.npc} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
+      return `\u{1F52B} you're in on the hit on ${txt(body.outfit || body.name || body.npc)} — ${body.crew} of ${body.crewMax} on the crew`;
+    if (coop && body.success === true) bits.push(`cracked ${art(body.outfit || body.npc)} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
+    if (coop && body.success === false) bits.push(`${art(body.outfit || body.npc, 'The')} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
     // THE CREW HEIST is the same class again: the SOLO score returns `take`/`success` (the line above),
     // the crew job returns `score`/`share`/`pot`/`hot` — so the flagship co-op content reported "done."
     // for a score AND for a bust that jails the whole crew. `hot` matters most of all: a hot job pays
@@ -2844,7 +2844,7 @@
     // shapes nobody else owns and let the hospital term ride when it is there.
     if (body.success === false && !coop && body.family === undefined)
       bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup`
-        : body.hospSeconds ? `driven off — ${minsTxt(body.hospSeconds)} in the hospital`
+        : body.hospSeconds ? `driven off${body.outfit ? ` by ${art(body.outfit)}` : ''} — ${minsTxt(body.hospSeconds)} in the hospital`
         : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
     // THE HUSTLE — a checked-in stop vs the payoff (the `contact` field is the chain's marker)
     if (body.contact && body.step !== undefined && body.of === 3)
@@ -3294,7 +3294,7 @@
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
     if (body.interdicted === true) bits.push(`⚓ BUSTED AT SEA — the Coast Guard seized the cargo, fined $${fmt(body.fine)}${body.sunk ? ' and SANK her' : ''}`);
-    if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on the ${body.route} run — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
+    if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on ${art(body.routeName || body.route)} — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
     if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought ${art(body.boat.name)} — $${fmt(body.spent)}`);
     if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
     // THE SEAL, and its own sibling on the same card got it right. Both are bought from the family's
@@ -7155,7 +7155,7 @@
           ${n.heldBy?.mine && w.frontier?.canCommand ? `<button class="act" data-reinforce="${n.id}" style="border-color:var(--gold)">reinforce garrison (min $${fmt(n.reinforceMin)})</button>` : ''}
           ${n.invadeCost != null && w.frontier?.canCommand ? `<button class="act" data-invade="${n.id}" style="border-color:var(--blood)">invade ($${fmt(n.invadeCost)} from treasury)</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">the streets are quiet</span>'}</div>
       <h2 style="margin-top:12px">Crew Raids <span class="d" style="font-size:11px">(the apex outfits take a crew of ${w.coop?.min || 2}–${w.coop?.max || 4} — combined firepower cracks their defense; rout one to seize its frontier)</span></h2>
-      ${w.myRaid ? `<div class="card" style="border-color:var(--neon)"><span class="t">your raid on ${w.myRaid.npc}</span> <span class="chip">crew ${w.myRaid.crew}/${w.myRaid.crewMax}</span>${w.myRaid.hired ? ` <span class="chip">${w.myRaid.hired} hired</span>` : ''}${w.myRaid.leader ? ' <span class="chip good">you lead</span>' : ''}
+      ${w.myRaid ? `<div class="card" style="border-color:var(--neon)"><span class="t">your raid on ${esc(w.myRaid.name || w.myRaid.npc)}</span> <span class="chip">crew ${w.myRaid.crew}/${w.myRaid.crewMax}</span>${w.myRaid.hired ? ` <span class="chip">${w.myRaid.hired} hired</span>` : ''}${w.myRaid.leader ? ' <span class="chip good">you lead</span>' : ''}
         <div class="d" style="margin-top:3px">${(w.myRaid.members || []).map((m) => `${m.leader ? '★ ' : ''}${esc(m.name)}${m.hired ? ' <span style="color:var(--dim)">(hired gun — no cut)</span>' : m.leader ? '' : ' <span style="color:var(--neon)">(crew)</span>'}`).join(' · ')}</div>
         ${w.myRaid.needMore > 0 ? `<div class="d" style="color:var(--warn)">needs ${w.myRaid.needMore} more ${w.myRaid.needMore === 1 ? 'body' : 'bodies'} before the go — join up a friend or hire a gun</div>` : '<div class="d" style="color:var(--good)">crew is ready — call the go</div>'}
         <div style="margin-top:4px">${w.myRaid.leader ? `<button class="act" data-go="${w.myRaid.id}">call the go</button>` : ''}${w.myRaid.canHire ? `<button class="act" data-hireraid="${w.myRaid.id}" title="a merc's firepower helps crack the outfit, but takes no cut of the pot">hire a gun ($${fmt(w.myRaid.hireFee)})</button>` : ''}${w.myRaid.leader && w.myRaid.hired ? `<button class="act" data-dismissgun="${w.myRaid.id}" title="send a hired gun home to free a slot for a real crewman — the fee's already spent">send a gun home</button>` : ''}<button class="act" data-leaveraid="${w.myRaid.id}">${w.myRaid.leader ? 'disband' : 'walk away'}</button></div></div>` : ''}
@@ -10145,9 +10145,9 @@
       // rest of the crew only ever get this) and the shout when an apex outfit finally falls. Both
       // used to fall through to the generic renderer, which turned a crewman's share of an apex score
       // into the words "world raid score".
-      world_raid_score: () => `your cut of the ${d.npc} raid — ${$c(d.share)}${d.routed ? ' · the outfit is BROKEN' : ''}`,
-      world_raid_material: () => `${d.units} of ${d.material} came out of the ${d.npc}'s hold — your share of the score`,
-      world_routed: () => `${d.who}'s crew broke the ${d.npc}${d.crew ? ` — ${d.crew} of them went in` : ''}`,
+      world_raid_score: () => `your cut of the raid on ${art(d.npc)} — ${$c(d.share)}${d.routed ? ' · the outfit is BROKEN' : ''}`,
+      world_raid_material: () => `${d.units} of ${d.material} came out of ${art(d.npc)}'s hold — your share of the score`,
+      world_routed: () => `${d.who}'s crew broke ${art(d.npc)}${d.crew ? ` — ${d.crew} of them went in` : ''}`,
       errand_done: () => (d.bonus != null ? `you finished ${d.npc}'s errand — +${d.bonus} standing`
         : `${d.who} did right by ${d.npc}`),
       vendetta_settled: () => `a vendetta was settled in blood`,
@@ -10312,7 +10312,7 @@
       fee_credited: () => `your ${String(d.kind || '').replace(/_/g, ' ')} payment landed`,
       store_grant: () => `${d.name} is yours`,
       // ── the world
-      world_raid_fail: () => `the ${d.npc} held — their guns put you in hospital`,
+      world_raid_fail: () => `${art(d.npc, 'The')} held — their guns put you in hospital`,
       // ── the ones the field-stitcher could not reach. It stitches `who`/`by`/`on`/`victim`, and
       // these carry `from`/`guard`/`killer` instead — so a MURDERED player's wire read the single
       // word "whacked", and a kill contract on your head read "bounty on you". (Several already had

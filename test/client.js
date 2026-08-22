@@ -5388,6 +5388,126 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
     `WAVE 57: the refusal must name the rung it refused. Got: ${JSON.stringify(cash.body.message)}`);
 }
 
+// ── WAVE 58: THE EDGE RUNG. Wave 57's real finding was not a mute button — it was that a DRIVEN
+// route can still be an UNREAD route, because the fixture picked the one rung that reads fine
+// either way (the Panel Van, never The Semi). That is a class, not an instance, so this wave asked
+// the question of every catalog-backed value this ledger drives: where does the rung it picks sit
+// in its own catalog? Seven of them drive the FIRST rung, and two of those catalogs turned out to
+// be identified by their KEY rather than their name on every line that reports a result.
+//
+// THE CARTEL OUTFITS. `raidNpc` and the co-op `executeRaid` answered `npc: fixture.id`, and four
+// describe() lines plus four feed lines rendered it — so the deepest PvE content in the game read
+// "raided the dockrats", "cracked the kryl 3-handed", "the volkov held". All FIVE outfit names
+// begin with "The" (The Dock Rats … The Volkov Bratva), so this is wave 57's class arriving from
+// underneath: naming them naively would have read "raided the The Dock Rats". The plan line nine
+// lines up already knew — its own comment says every outfit's name carries its own article — while
+// its three siblings printed a raw key. Two of the four FEED lines (world_routed, frontier_seized)
+// already shipped the name, so the same feed named the same outfit two different ways.
+//
+// THE PORT ROUTES, the same shape with a second edge on top: `launchRun` answered `route: route.id`
+// and the line appended a noun — "cast off on the coastal run" — so the apex rung, whose real name
+// is "The Deep Run", would have read "the The Deep Run run" the moment it was named. The name says
+// it; the noun goes.
+//
+// Both are fixed at the SOURCE (the reply names the outfit and the route) because the client has no
+// catalog of either — the same reason `npcName`/`taskLabel`/`goodName` ship from the server. The
+// outfit key is `outfit` and NOT `npcName`: that one is claimed by an early Underworld branch in
+// describe() (`body.ok && body.npcName` returns a FAVOR line), which is the collision this sweep
+// keeps finding — so the marker names the system rather than reusing a word already spoken for.
+{
+  const { WORLD_NPCS, PORT } = await import('../src/rules.js');
+  const outfits = Object.values(WORLD_NPCS);
+  const solo = outfits.find((f) => !f.coop);
+  const routes = Object.values(PORT.ROUTES);
+  const firstRoute = routes[0];
+  const apexRoute = routes[routes.length - 1];
+  // The preconditions, asserted rather than assumed: without an article-bearing outfit name and a
+  // pair of routes where ONE carries its own article and one does not, every claim below passes
+  // over a tree where the whole class is present.
+  assert(solo && /^the\s/i.test(solo.name),
+    'WAVE 58: the solo outfit must carry its own article, or the doubling half is untested');
+  assert(apexRoute && /^the\s/i.test(apexRoute.name) && !/^the\s/i.test(firstRoute.name),
+    'WAVE 58: the port catalog must hold BOTH an article-bearing route and a plain one, or one half ' +
+    'of the article rule is untested');
+
+  const mk58 = async (prefix) => {
+    const g = await inject('POST', '/v1/auth/guest', null, {});
+    const t = g.body.token;
+    await inject('POST', '/v1/character', t, { name: prefix + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t, null)).body.character.id;
+    await app.pool.query(
+      'UPDATE characters SET cash=900000000, respect=6000000, energy=999, nerve=999, ammo=99999, ' +
+      'muscle=200, cunning=200, speed=200, world_raid_at=NULL, hosp_until=NULL WHERE id=$1', [id]);
+    return { t, id };
+  };
+  const drive58 = async (t, url, label, payload) => {
+    const r = await inject('POST', url, t, payload || null);
+    assert.equal(r.code, 200, `WAVE 58 could not drive ${label} (${JSON.stringify(r.body)}) — a skipped ` +
+      `row reads on the summary line exactly like a covered one`);
+    described++;
+    const line = String(describeFn(r.body, 200));
+    said.set(`${url}#${label}`, line);
+    return { r, line };
+  };
+
+  const hunter = await mk58('Ledger Outfit ');
+  // The roll is PINNED, and that is not a convenience. Driven live, this block passed on luck: a raid
+  // that FAILS renders a different branch entirely, so the assertion below rested on a probabilistic
+  // precondition — the recorded flake shape, and the mutation run is what exposed it (M1 failed
+  // reporting "driven off — 20m in the hospital", a line with no outfit in it at all). Both outcomes
+  // are driven, because a name dropped on the losing line is the same defect as one dropped on the
+  // winning line and only one of them was ever going to turn up by chance.
+  const clearRaid = () => app.pool.query(
+    'UPDATE characters SET world_raid_at=NULL, hosp_until=NULL, energy=999, ammo=99999 WHERE id=$1', [hunter.id]);
+  process.env.WORLD_RAID_P = '1';
+  await clearRaid();
+  const raid = await drive58(hunter.t, `/v1/world/${solo.id}/raid`, 'raid the outfit');
+  assert.equal(raid.r.body.success, true,
+    'WAVE 58 fixture: the roll is pinned to a win, so a loss here means the knob stopped being read');
+  process.env.WORLD_RAID_P = '0';
+  await clearRaid();
+  const repel = await drive58(hunter.t, `/v1/world/${solo.id}/raid`, 'get driven off the outfit');
+  delete process.env.WORLD_RAID_P;
+  assert.equal(repel.r.body.success, false, 'WAVE 58 fixture: the repel roll is pinned to a loss');
+  assert(repel.line.includes(solo.name),
+    `WAVE 58: the LOSING line drops the outfit too — a repel read "driven off" and named nobody, ` +
+    `while the reply carried the name all along. Got: ${JSON.stringify(repel.line)}`);
+  assert(!/\bthe\s+the\s/i.test(repel.line),
+    `WAVE 58: the repel line doubles the article. Got: ${JSON.stringify(repel.line)}`);
+  assert.equal(raid.r.body.outfit, solo.name,
+    `WAVE 58: the raid reply must NAME the outfit — the client has no catalog of the cartels, so with ` +
+    `only the key it can print nothing but the key. Got: ${JSON.stringify(raid.r.body.outfit)}`);
+  assert(raid.line.includes(solo.name),
+    `WAVE 58: the deepest PvE content in the game read "raided the ${solo.id}" — a raw key where a ` +
+    `name belongs. Got: ${JSON.stringify(raid.line)}`);
+  assert(!/\bthe\s+the\s/i.test(raid.line),
+    `WAVE 58: every outfit's name already carries its own article, so naming it naively reads ` +
+    `"raided the ${solo.name}". Got: ${JSON.stringify(raid.line)}`);
+
+  // THE PORT, at BOTH edges — because the two rungs prove different halves of the same rule, and
+  // either one alone passes over the other's failure.
+  const captain = await mk58('Ledger Port ');
+  await inject('POST', '/v1/port/boat/cigarette', captain.t, null);
+  await inject('POST', '/v1/travel/docks', captain.t, null);
+  const boatId = (await app.pool.query('SELECT id FROM boats WHERE character_id=$1 LIMIT 1', [captain.id])).rows[0]?.id;
+  assert(boatId, 'WAVE 58 fixture: no boat, so neither route can be driven');
+  const runs = {};
+  for (const route of [firstRoute, apexRoute]) {
+    await app.pool.query('UPDATE boats SET run_until=NULL, run_route=NULL WHERE character_id=$1', [captain.id]);
+    await app.pool.query('UPDATE characters SET hosp_until=NULL, health=100, energy=999 WHERE id=$1', [captain.id]);
+    runs[route.id] = await drive58(captain.t, `/v1/port/run/${boatId}`, `cast off on ${route.id}`, { route: route.id });
+  }
+  assert.equal(runs[apexRoute.id].r.body.routeName, apexRoute.name,
+    `WAVE 58: the launch reply must NAME the route — the client has no catalog of the sea lanes`);
+  assert(runs[apexRoute.id].line.includes(apexRoute.name) && !/\bthe\s+the\s/i.test(runs[apexRoute.id].line),
+    `WAVE 58: the apex lane is "${apexRoute.name}" and the line read "cast off on the ${apexRoute.id} run" — ` +
+    `a key, and one that reads "the ${apexRoute.name} run" the moment it is named. ` +
+    `Got: ${JSON.stringify(runs[apexRoute.id].line)}`);
+  assert(new RegExp(`\\bthe ${firstRoute.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(runs[firstRoute.id].line),
+    `WAVE 58: the article must still appear on a lane whose name does NOT supply one — dropping it ` +
+    `outright is the wave-10 fix and reads clipped. Got: ${JSON.stringify(runs[firstRoute.id].line)}`);
+}
+
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
 // every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
 // upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED

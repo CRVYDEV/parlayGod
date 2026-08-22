@@ -16167,6 +16167,46 @@ plain-rung assertion; the ledger's narrowing broken → the anti-vacuity floor).
 on the extracted script after every template-literal edit, for the third time. Driven actions 238 →
 240. Suite green + sim drift-0 + mobile 81/81.
 
+**PLAY WAVE 58 — THE EDGE RUNG: A DRIVEN ROUTE IS NOT A READ ROUTE (2026-08-22).** Wave 57's real
+finding was not a mute button — it was that the convoy rig had been in the ACTION ledger since wave 45
+and still shipped `"the The Semi is in the yard"`, because the fixture drove the **Panel Van**: the one
+rung of that catalog that reads fine either way. That is a CLASS, not an instance. Every ledger row
+drives ONE value, and the values worth reading are the apex price, the clamped quantity, the zero case
+and the maxed stat — so this wave re-drove already-covered actions at their EDGE rung rather than
+chasing never-driven ones, on the argument that **a route nobody has driven is a known unknown, while a
+route driven at its blandest case reads on the summary line as covered.** An extractor cross-referenced
+the literal catalog ids in every ACTIONS payload against the catalogs in `rules.js`: **seven catalogs
+were driven at rung 1**, and two of them were carrying live defects.
+**THE FIVE CARTEL OUTFITS WERE IDENTIFIED BY THEIR KEY ON SEVEN SURFACES AND BY THEIR NAME ON TWO.**
+The deepest PvE content in the game read **"raided the dockrats"**, and it could not have read
+otherwise: `describe()` has no catalog of the cartels, so with only `npc: fixture.id` it can print
+nothing but the key — the raw-key class (`npcName`/`taskLabel`/`goodName` precedent), and the fix
+belongs at the SOURCE. Worse, the same feed named the same outfit two ways: `world_routed` and
+`frontier_seized` already shipped the NAME while their three siblings (`world_raid_fail`,
+`world_raid_score`, `world_raid_material`) shipped the key. And because **every one of the five names
+begins with "The"**, naming them naively lands straight in wave 57's article class from underneath —
+the plan line's own comment already knew this while its three siblings printed a raw key. Six raid
+replies now carry `outfit`, the three notifies carry the name, the board row carries it (matching the
+raid LIST, which already did), and every line reads it through `art()`.
+**THE PORT WAS THE SAME BUG WAITING**: the launch reply sent the route KEY and the line appended a
+noun, so the apex lane would have read *"cast off on the The Deep Run run"* the moment it was named —
+the noun is dropped, since a catalog whose entries are already called *Coastal Hop* and *The Deep Run*
+does not need one.
+**THE MUTATION RUN FOUND THE FLAKE IN MY OWN GUARD, which is the more useful half.** M1 failed
+reporting `"driven off — 20m in the hospital"` — a LOSS line, with no outfit in it at all. Two things
+followed. The assertion had been resting on a **probabilistic precondition** (the raid roll), the
+recorded flake shape, and passed on luck; the roll is PINNED now (`WORLD_RAID_P`, the existing
+TEST-ONLY knob) and **both outcomes are driven**, because a name dropped on the losing line is the same
+defect as one dropped on the winning line and only one of them was ever going to turn up by chance.
+And the loss line was a real second instance: the generic `success:false` branch is shared across
+systems, so it is scoped on `body.outfit` — a field only world raids send — and now reads *"driven off
+by The Dock Rats"*. Both lines were READ rather than trusted from a green run.
+Six mutations, each caught at its own named assertion (the reply's `outfit` dropped; the client back to
+printing the key; `art()` dropped on the outfit → the doubling returns; the port reply's `routeName`
+dropped; `art()` reduced to dropping the article → the wave-10 fix, caught by the plain-rung half; the
+LOSING line's outfit dropped). No SQL moved, so the real-Postgres gates are not triggered — checked
+rather than assumed. Driven actions 240 → 243. Suite 8/8 + sim drift-0 + mobile 81/81.
+
 **THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
 (2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
 outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived
