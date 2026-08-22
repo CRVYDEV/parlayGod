@@ -438,7 +438,9 @@ export async function buyPaper(ch, seller, loanId, client, h) {
   await h.ledger(client, { currency: 'cash', amount: -take, reason: 'loan:paper' }); // NULL-char take → pool (the market-take precedent)
   await h.notify(client, seller.id, 'paper_sold', { to: ch.name, price: toSeller });
   if (loan.borrower_character) await h.notify(client, loan.borrower_character, 'paper_transferred', { to: ch.name });
-  return { ok: true, price, toSeller, take };
+  // `toSeller` alone read as the SPEAKEASY buyout ("took over the club — $undefined paid"): the marker
+  // names this system, and `owed` is what the buyer actually acquired.
+  return { ok: true, paper: 'bought', price, toSeller, take, owed: loanOwed(loan.principal, loan.rate) };
 }
 
 // POST /v1/loans/square — pay to square your name: clears WANTED (calls off the NPC hunters + the pool

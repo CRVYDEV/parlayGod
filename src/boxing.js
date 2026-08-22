@@ -188,7 +188,9 @@ export async function acceptCallout(ch, client, h) {
   await h.notify(client, title.callout_char, 'boxing_callout_accepted', { champion: champF.name, challenger: chalF.name });
   bus.emit('streets', { type: 'boxing_title_fight', card: `${champF.name} v ${chalF.name}` });
   await h.track(client, ch.account_id, 'boxing_callout_accept', {});
-  return { ok: true, bout: id, card: `${champF.name} vs ${chalF.name}`, title: true, closesSeconds: Math.ceil(mainEventMs() / 1000) };
+  // `title: true` here read as VANITY's title-clear reply ({ok, title}) — the byte-shape collision class:
+  // a booked TITLE FIGHT toasted "they call you true now". The marker names the SYSTEM (titleBout), never a state.
+  return { ok: true, bout: id, card: `${champF.name} vs ${chalF.name}`, titleBout: true, closesSeconds: Math.ceil(mainEventMs() / 1000) };
 }
 
 // ── the stable: sign a contender (up to STABLE_MAX). A cash SINK; stats rolled. ──

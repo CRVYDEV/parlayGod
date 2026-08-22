@@ -16580,3 +16580,55 @@ the wave-44 join assertion was repaired in passing, since its `/in on the job/i`
 for the property (the join is not the plan's sentence and carries none of its terms) and the wave's
 own fix made the proxy false. Suite green + sim drift-0 + mobile + client wiring/mirror; no SQL moved
 (checked with a diff filter, not assumed), so the real-Postgres gates do not apply.
+
+**PLAY WAVE 61 — THE COLLISION LEDGER: the class fixed fifteen times by hand, made a guard
+(2026-08-22).** Every wave since 45 has found the same shape at least once — `describe()` is a flat
+`if` chain over field NAMES, so a reply whose field-set happens to satisfy another system's branch
+gets that system's LINE. It is the worst class in the sweep and the only one no silence pattern can
+see, because the failures are **fluent and false**: a lender told he took the loan he just funded, a
+race result stamped with a boxing glove, a $600,000 renovation reported as an empty till, a mission
+claim reading *"title dropped — just your name from here"*. Fifteen instances fixed one at a time,
+each with the same remedy (a SYSTEM marker at the source) and no guard behind it — the RT#7 shape
+exactly. **THE COLLISION LEDGER** (check 13 in `test/client.js`, the eleventh catalogue-or-declare
+guard) converts it: extract every `return {…}` literal from `src/`, run each through an
+**instrumented copy of the REAL `describe()`**, and fail if any branch is claimed by replies from
+more than one MODULE unless declared with the property that makes the sharing correct. **508
+act()-reachable replies over 319 branches — 14 deliberately shared, none colliding.**
+
+**FOUR DECISIONS MAKE IT DECIDABLE RATHER THAN A MATTER OF TASTE, and each replaced a prototype that
+did not work.** (1) **The parser is the oracle** — a hand-rolled key scanner invented keys no module
+sends, so a literal becomes a real object via `vm.runInNewContext('with (g) { (lit) }')` with a
+Proxy global and Proxy sentinels; anything unparseable is COUNTED, never silently dropped. (2) **The
+corpus is bounded by REACHABILITY** — a `describe()`-rendered reply is the reply of a route the
+console POSTs, so only literals returned by a function CALLED inside a mutating route registration
+count (508 of 1218; the 710 dropped are boards, mod reads and internal helpers, which the client
+never renders through this path). (3) **Function attribution is brace-matched, not "nearest
+preceding declaration"** — the heuristic credited literals to inner helpers (`uid`,
+`deadlockToRetry`) and dropped 1126 of 1218, i.e. it would have reported a clean sweep over a tree
+carrying every one of the six defects. (4) **Waivers are keyed on CONTENT, never a line** — a
+line-keyed waiver rots on any edit above it, which the connection ledger's viem waivers cost once
+already.
+
+**SIX LIVE DEFECTS ON ITS FIRST RUN, each fixed at the SOURCE.** A `title: true` from an accepted
+championship callout landed on the **vanity title-clear** branch, so booking the biggest fight in
+the game read *"title dropped"* (`titleBout`); **buying loan paper** rendered the speakeasy's club
+buyout; a **rival racket raid** rendered the business shakedown; a **SOV siege loss** rendered the
+generic paid-and-lost line; a **piracy haul** at sea rendered nothing; and the **hired gun** on a
+world raid printed `crew 2/undefined` because the reply shipped no ceiling. Two more surfaced by
+DRIVING the fixes: `game: 'race'` was **already taken** by the stable's match race, so a street race
+read *"undefined WINS at the wire"* (retargeted `game: 'street'`), and the two club lines doubled
+their article — *"took over the The Copa"* — the wave-57 class arriving from underneath.
+
+**THREE OF THE SEVEN MUTATIONS SURVIVED AND ALL THREE WERE RIGHT TO**, which is the more useful
+half: those fixes are PAIRS (a server marker plus a client branch), so reverting one half leaves the
+other independently closing the collision — the mutation that matters reverts BOTH, and fails by
+name. **And the stale-waiver assert can only be verified by ADDING a bogus declaration**: renaming a
+live one trips the BRANCH assertion first, so the run that "proves" it is proving something else
+(the sixth session in which a check appeared to hold for the wrong reason). Two anti-vacuity floors,
+because they fail differently — one catches an extractor that has stopped seeing literals, the other
+a corpus bound that has stopped admitting any. A **TDZ bug of my own** was caught the same way the
+`$dist` one was: `saidNet` was declared 160 lines below the checkered branch, so the race line's echo
+fix could not have run — hoisted to the head of the accumulator. Driven actions 259; the WAVE 61
+block pins all eight lines through the real `describeFn`. Suite green + sim drift-0 + mobile + client
+wiring/mirror; **no SQL moved** (checked with a diff filter over the added lines, not assumed), so
+the real-Postgres gates do not apply.

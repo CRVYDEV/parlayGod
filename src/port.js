@@ -343,7 +343,8 @@ export async function interceptRun(ch, targetBoatId, client, h) {
     if (take >= 250000) bus.emit('streets', { type: 'port_piracy', by: ch.name, route: route?.id, routeName: route?.name });
     await bumpMastery(client, h, ch, 'seamanship', 'piracy'); // THE TRADES — a prize taken at sea
     await h.track(client, ch.account_id, 'port', { act: 'piracy', win: true, take });
-    return { ok: true, win: true, take, route: boat.run_route };
+    // without `op` this fell to the GENERIC win line, which reads `net` — so the haul rendered "+$0".
+    return { ok: true, op: 'piracy', win: true, take, route: boat.run_route, routeName: route?.name };
   }
   // outrun — the run's escort/guns put the pirate in the water
   ch.health = Math.max(1, Number(ch.health) - (20 + rand(20)));

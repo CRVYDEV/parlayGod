@@ -212,7 +212,7 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   await h.notify(client, opponent.id, 'race_pvp', { from: ch.name, amount: amt, theyWon: !win });
   bus.emit('streets', { type: 'race_pvp', by: ch.name, vs: opponent.name, amount: pot, win });
   await h.track(client, ch.account_id, 'race', { mode: 'pvp', amt, win });
-  return { ok: true, win, wager: amt, rake, net: win ? amt - rake : -amt,
+  return { ok: true, game: 'street', win, wager: amt, rake, net: win ? amt - rake : -amt,
     you: { car: winCar === my ? my.model_id : my.model_id, score: mine }, them: { score: theirs } };
 }
 
