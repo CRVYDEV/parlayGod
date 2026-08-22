@@ -3,6 +3,7 @@
 // closure it used to read directly (pool, auth), so nothing about what is mounted or how it is
 // authenticated moves with it; test/routes.js asserts the mounted surface is identical either way.
 import * as Bloodline from '../bloodline.js';
+import { memo } from '../memo.js';
 import * as Bonds from '../bonds.js';
 import * as Boxing from '../boxing.js';
 import * as Business from '../business.js';
@@ -70,9 +71,16 @@ export function register(app, { pool, auth, modAuth }) {
     app.get('/v1/leaderboard/city', { preHandler: auth }, async (req) => ({
       board: await Standing.cityStanding(pool), you: await Standing.myStanding(pool, req.user.sub) }));
     // The RECRUITERS (§7.13): the organic-growth hall of fame + the family recruitment board. Status only.
-    app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
+    // Every field here is SERVER-WIDE — the hall of fame, the family board and the active drive are the
+    // same answer for everybody — so the whole payload memoizes, unlike /v1/leaderboard/city where only
+    // the board half may (see standing.js). Measured at 6.3ms against a 3,000-player population against
+    // that route's 57ms: an order of magnitude cheaper, but it sits on the SAME landing screen and grows
+    // with the playerbase the same way, so it is cut in the same pass. /v1/landmarks measured 0.3ms —
+    // six districts, flat — and is deliberately left alone rather than churned.
+    const recruitersBoard = memo(async () => ({
       recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool),
-      push: await G.referralPushStatus(pool) })); // the active recruitment DRIVE (2×… payouts), publicly visible
+      push: await G.referralPushStatus(pool) }), Standing.standingCacheMs);
+    app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => recruitersBoard()); // the active recruitment DRIVE (2×… payouts), publicly visible
     // THE AGENT LEADERBOARD: a SEPARATE machine hall of fame (net worth / kills / $OMR extracted). See AGENTS.md.
     app.get('/v1/leaderboard/agents', { preHandler: auth }, async () => ({ agents: await W.agentLeaderboard(pool) }));
     // THE CAPO'S LICENSE — an agent's recruiting perks board (count, tier, what counts). Authed;

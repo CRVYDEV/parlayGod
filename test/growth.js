@@ -12,6 +12,11 @@ import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTL
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals, gainRespect } from '../src/game.js';
 
+// The City Standing / recruiters boards are CACHED in production (standing.js — they were the most
+// expensive polled reads in the game). This suite reads boards it has just written, so it pins the
+// TTL to 0; the cache itself is proven in test/standing.js.
+process.env.STANDING_CACHE_MS = '0';
+
 const app = await buildServer();
 const pool = app.pool;
 const call = async (method, url, { token, body, headers } = {}) => {

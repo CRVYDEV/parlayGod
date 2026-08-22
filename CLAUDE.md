@@ -16632,3 +16632,56 @@ fix could not have run — hoisted to the head of the accumulator. Driven action
 block pins all eight lines through the real `describeFn`. Suite green + sim drift-0 + mobile + client
 wiring/mirror; **no SQL moved** (checked with a diff filter over the added lines, not assumed), so
 the real-Postgres gates do not apply.
+
+**THE STANDING CACHE — the landing screen's two leaderboards were quadratic, and pg-mem said the wrong
+thing about it (2026-08-22).** `tools/pollcost.js` names the worst screen, and after the Home/streets/city
+aggregates it named **`start`** — so the question was which of its requests is expensive, and the answer
+came from ENUMERATING them rather than reasoning about cadence (my first instinct was the 30s sheet tick,
+which is 50% of the sustained count and near-zero cost). Two server-wide leaderboards sit on that screen,
+and `/v1/leaderboard/city` ran an **unbounded population scan TWICE per call** — once for the board, once
+to find the caller's own rank. **Measured on a fresh real Postgres at a 3,000-player population: 57.1 ms
+per call.** Every idle player polls it, so the SERVER-WIDE total is **quadratic**: at the poll-cost ceiling
+(~4,350 concurrent) that is ~180 seconds of database time a minute — roughly **three CPU cores for one
+card**, on the half the scaling measurement already calls binding (~1.9 cores DB against node's ~1 at 284
+req/s; +50% per doubling of DB CPU against +2% for the API's).
+**pg-mem REPORTED A SUPER-LINEAR CURVE AND REAL POSTGRES A LINEAR ONE**, and checking is what stopped an
+over-claim shipping in the comment: the honest statement is that the per-call cost is linear in N and the
+TOTAL is quadratic because each of N players pays cost(N). Sizing all three of that screen's boards at
+3,000 players (**57.1 / 6.3 / 0.3 ms**) is also what bounded the fix — `/v1/landmarks` is six districts,
+flat, and is deliberately left alone rather than churned.
+**`src/memo.js` is a SHARED TTL + single-flight memo, not a fourth hand-rolled cache.** `/health` already
+carries this pattern and citywide carries two more; a fourth written by hand is how twenty subtle lines
+come to disagree (this codebase spent a session collapsing sixty-nine private copies of three gate
+predicates for exactly that reason). **Both halves earn their place separately and the second is the one
+people leave out**: the TTL bounds the SUSTAINED cost (one computation per window however many callers
+arrive) while single-flight bounds the CONCURRENT one — without it the whole first-hit window is uncovered,
+so a burst of 200 arrivals opens 200 scans, which is precisely the shape a flood produces (the `/health`
+measurement: 400 concurrent hits → 2 queries with both, 400 without). The TTL is read **per call**, never
+captured at import (the `ratelimit.js` discipline), so a test can set it to 0 and assert against a live
+computation instead of fighting a stale one.
+**WHAT IS CACHED IS THE SHARED HALF ONLY, and that split is the whole correctness argument.**
+`myStanding` still computes its own answer out of the memoized array, so nothing belonging to one player
+is ever handed to another; caching the route's `{board, you}` payload instead is the classic leak, and
+`you` is exactly the field that makes it tempting. The window's cost is honest and small (for up to the
+TTL a brand-new account can read `rank: null` — which is already what an account outside the population
+reads, and its standing is 0 either way); a cache-bypass for the not-found case was considered and
+REJECTED, because it hands every caller a way to force the full scan, i.e. the amplification this exists
+to remove. The recruiters board memoizes WHOLE, because every field of it is server-wide — and it imports
+`standingCacheMs` from `standing.js` rather than restating the default, since two copies of a number is
+how the two come to disagree.
+**Re-measured on the same fresh real Postgres: 57.1 ms → 0.05 ms warm, and 200 concurrent callers → 10 ms
+total** (single-flight demonstrated — 200 arrivals costing one scan).
+**THE GUARD'S SHAPE IS DECIDED BY WHAT A DATABASE PROBE CANNOT SEE.** Single-flight is a COUNT of
+computations, so it is proven **directly on the helper** with a counting compute function (200 concurrent
+arrivals ⇒ exactly one computation, warm hits ⇒ none, TTL 0 ⇒ every call live, `clear()` ⇒ one more), and
+the integration half asserts warmth and — the load-bearing one — **the leak**: two players hitting the
+cached board each read their OWN `you`. **The leak assertion had to be reshaped twice**: its first cut
+failed at its own vacuity precondition rather than at the property (the recorded "a failure that names the
+wrong thing" class), and the fix is to take both personal truths LIVE with the cache still off and have
+the legend-less caller go FIRST, so a payload-level cache hands the second caller the first one's zero and
+fails by name. `STANDING_CACHE_MS` is classified TEST_ONLY beside `HEALTH_TTL_MS` (zero disables the
+cache, so it belongs there rather than in an operator's hands), and the two suites that read these boards
+immediately after writing them (`growth`, `population`) pin it to 0 — `growth` failed loudly on the stale
+board, which is the pin being necessary rather than defensive. Six mutations, six distinct named kills
+(single-flight removed; the TTL ignored; `clear()` a no-op; the per-player payload cached — the leak; the
+standing memo removed; the recruiters memo removed).

@@ -39,6 +39,11 @@ export const TEST_ONLY_ENV = [
   // /health's cache window. It is what stops a keyless flood amplifying into DB work (R32 F2);
   // zero disables the cache, so it belongs here rather than in an operator's hands.
   'HEALTH_TTL_MS',
+  // The server-wide leaderboard cache window (City Standing + the recruiters board). Same argument as
+  // HEALTH_TTL_MS: zero disables the cache, and that cache is what stops the most expensive polled read
+  // in the game costing three cores of database at the poll-cost ceiling — so it belongs here rather
+  // than in an operator's hands. A test sets it to 0 to assert against a live computation.
+  'STANDING_CACHE_MS',
   // QA escape hatches — these let a mod route fabricate value or bypass an auth check
   'ALLOW_MOD_REAL_REVENUE', 'X_TRUST_USER_TOKEN',
   // TOKENOMICS v2 — opens the redemption window while cash can still BUY $OMR, which is a money

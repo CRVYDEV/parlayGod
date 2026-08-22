@@ -10,8 +10,11 @@
 // Scoring: each pillar sums its member columns, then scores LOG-SHARE vs the population max
 // (log(1+v)/log(1+max) × 100) so breadth across many axes beats maxing one, and a linear whale can't
 // swamp the board. City Standing = the sum of the six pillar scores (0–600). It's RELATIVE by
-// construction (your standing among the living), recomputed on every read — nothing is stored.
+// construction (your standing among the living) and nothing is stored — it is recomputed from the
+// living population, cached server-wide for a short window (see the memo below, which is why that
+// sentence no longer reads "on every read").
 import { levelOf } from './rules.js';
+import { memo } from './memo.js';
 
 // The six pillars — every account-level legend grouped into a legible theme. Columns are all NUMERIC
 // survives-death legends on account_persistent (kills/hitman_rep included — used by hitmanLeaderboard).
@@ -64,11 +67,36 @@ function scoreAll(rows) {
 const rankTitle = (s) => s >= 480 ? 'Capo di Tutti Capi' : s >= 360 ? 'Boss of the City' : s >= 240 ? 'Made Legend' :
   s >= 120 ? 'Rising Name' : s >= 40 ? 'Known on the Street' : 'Nobody Yet';
 
+// THE SCORED POPULATION IS THE SAME ARRAY FOR EVERY PLAYER, so computing one per caller is that scan
+// N times over — and this was the most expensive polled read in the game. Measured on real Postgres at
+// a 3,000-player population: 57ms per /v1/leaderboard/city call, because the route ran this scan TWICE
+// (once for the board, once to find the caller's rank). Every idle player on the landing screen polls
+// it, so the SERVER-WIDE total is quadratic: at the poll-cost ceiling (~4,350 concurrent) that is ~180
+// seconds of database time a minute — three CPU cores for one card, on the half the scaling
+// measurement already calls binding. pg-mem reported a super-linear curve here and real Postgres a
+// linear one; the linear figure is the real one, and it is still quadratic in TOTAL because each of N
+// players pays cost(N).
+//
+// So the shared half is memoized and the PERSONAL half is not, and that split is the whole correctness
+// argument: myStanding still computes its own answer out of the shared array, so nothing belonging to
+// one player is ever handed to another. Caching the route's {board, you} payload instead would be the
+// classic leak, and `you` is exactly the field that makes it tempting.
+//
+// The cost of the window is honest and small: for up to STANDING_CACHE_MS a brand-new account can read
+// `rank: null` — which is already what an account outside the population reads, and a new account's
+// standing is 0 either way. A cache-bypass for the not-found case was considered and rejected: it hands
+// every caller a way to force the full scan, which is the amplification this exists to remove.
+//
+// The window, exported so the recruiters board on the same landing screen shares ONE definition of it
+// rather than restating the default — two copies of a number is how the two come to disagree.
+export const standingCacheMs = () => Number(process.env.STANDING_CACHE_MS ?? 30000);
+const scoredPopulation = memo(async (pool) => scoreAll(await population(pool)), standingCacheMs);
+
 // GET /v1/leaderboard/city — the master board. Top N by City Standing with the pillar breakdown, so a
 // reader sees not just the rank but WHY (top in Blood, thin in Legit…). The one place that answers
 // "who is actually winning this city."
 export async function cityStanding(pool, limit = 25) {
-  const scored = scoreAll(await population(pool));
+  const scored = await scoredPopulation(pool);
   return scored.slice(0, limit).map((r, i) => ({
     rank: i + 1, name: r.name, level: r.level, standing: r.standing,
     title: rankTitle(r.standing), pillars: r.pillars,
@@ -79,7 +107,7 @@ export async function cityStanding(pool, limit = 25) {
 // the console so the spine is personal, not just a board you scroll. Computed against the full
 // population (rank is real), so an account with no legends yet reads 0 / unranked.
 export async function myStanding(pool, accountId) {
-  const scored = scoreAll(await population(pool));
+  const scored = await scoredPopulation(pool);
   const idx = scored.findIndex((r) => r.accountId === accountId);
   if (idx < 0) return { standing: 0, title: rankTitle(0), rank: null, of: scored.length,
     pillars: Object.fromEntries(STANDING_PILLARS.map((p) => [p.key, 0])),

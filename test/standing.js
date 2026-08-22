@@ -8,7 +8,13 @@
 // "never seed value" rule is about the ledger, and standing legends move no value).
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
+import { memo } from '../src/memo.js';
 import { cityStanding, myStanding, STANDING_PILLARS } from '../src/standing.js';
+
+// The scored population is CACHED in production (see standing.js — it was the most expensive polled
+// read in the game). Every assertion below reads state it has just written, so the suite pins the TTL
+// to 0 and the cache block at the foot turns it back on to prove the cache itself.
+process.env.STANDING_CACHE_MS = '0';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -23,6 +29,33 @@ const mk = async (name) => {
   return { token, id, aid: (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a };
 };
 const seed = (aid, cols) => pool.query(`UPDATE account_persistent SET ${cols} WHERE account_id='${aid}'`);
+
+// ── THE MEMO: single-flight and the TTL, proven directly on the shared helper ──
+// Directly, because the property that matters is a COUNT of computations and a database probe cannot
+// see one: a burst of N arrivals must cost ONE computation, not N. That is the half people leave out
+// of a hand-rolled cache, and the half the /health measurement (400 concurrent hits -> 2 queries with
+// it, 400 without) exists to demonstrate.
+let computes = 0;
+let ttl = 60000;
+const slow = memo(async () => { computes++; await new Promise((r) => setTimeout(r, 20)); return { n: computes }; }, () => ttl);
+
+const burst = await Promise.all(Array.from({ length: 200 }, () => slow()));
+assert.equal(computes, 1, 'SINGLE-FLIGHT: 200 arrivals inside one cold window cost exactly ONE computation');
+assert.ok(burst.every((b) => b.n === 1), 'and every one of them is served the same answer');
+
+await slow();
+assert.equal(computes, 1, 'a warm hit inside the TTL recomputes nothing');
+
+ttl = 0;
+await slow(); await slow();
+assert.equal(computes, 3, 'TTL 0 disables the cache entirely — every call is a live computation');
+
+ttl = 60000;
+await slow();
+const before = computes;
+slow.clear();
+await slow();
+assert.equal(computes, before + 1, 'clear() forces the next caller to recompute');
 
 const blood = await mk('Vito Blood');        // maxes ONE pillar hard
 const spanner = await mk('Sal Spanner');     // present across TWO pillars, each modest
@@ -70,5 +103,53 @@ await pool.query(`UPDATE accounts SET status='banned' WHERE id='${blood.aid}'`);
 const board2 = await cityStanding(pool);
 assert.ok(!board2.some((b) => b.name === 'Vito Blood'), 'a banned account drops off the spine');
 
-console.log('ok - city standing: spine board, breadth>depth, pillar breakdown, agent+banned exclusion, personal rank, no-legend zero');
+// ── THE STANDING CACHE: warm, and — the load-bearing half — never leaking one player's own figures ──
+// the two personal truths, taken LIVE (the cache is still off here) so the leak assertions below
+// compare against a figure the cache cannot have influenced.
+const spanTruth = await myStanding(pool, spanner.aid);
+assert.ok(spanTruth.standing > 0 && spanTruth.rank > 0, 'the spanner has a real standing to be robbed of');
+
+process.env.STANDING_CACHE_MS = '60000';
+const spanToken = spanner.token, nobodyToken = nobody.token;
+
+await call('GET', '/v1/leaderboard/city', { token: spanToken });   // warm it
+await seed(nobody.aid, 'kills=123456789');                          // a mutation the warm window must not see
+const warm = await call('GET', '/v1/leaderboard/city', { token: spanToken });
+assert.equal(warm.body.board.find((b) => b.name === 'Guido Nobody')?.standing ?? 0, 0,
+  'the board is served from the warm cache — the write inside the window is not reflected');
+
+// THE LEAK: the shared half is cached, the PERSONAL half is not. Two players hitting the cached board
+// must each read their OWN `you`, or the cache is handing one player another player's figures.
+// NOBODY calls first, so a payload-level cache would hand the SPANNER the previous caller's zero —
+// and the two truths are taken with the cache OFF above, so the comparison cannot go vacuous under a
+// mutation that makes both readings identical.
+const asNobody = await call('GET', '/v1/leaderboard/city', { token: nobodyToken });
+const asSpan = await call('GET', '/v1/leaderboard/city', { token: spanToken });
+assert.equal(asNobody.body.you.standing, 0, "the legend-less street reads their OWN zero");
+assert.equal(asSpan.body.you.standing, spanTruth.standing, "and the spanner reads their OWN standing, never the previous caller's");
+assert.equal(asSpan.body.you.rank, spanTruth.rank, 'their own rank too');
+assert.notEqual(asSpan.body.you.rank, asNobody.body.you.rank, 'two callers of one cached board read two different ranks');
+assert.deepEqual(asSpan.body.board.map((b) => b.name), asNobody.body.board.map((b) => b.name),
+  'while the SHARED half really is the same array for both — which is what makes caching it correct');
+
+// the RECRUITERS board on the same landing screen is cached WHOLE, because every field of it is
+// server-wide — so the warmth is asserted the same way, and it shares standing.js's window rather than
+// restating the default.
+const rec0 = await call('GET', '/v1/leaderboard/recruiters', { token: spanToken });
+assert.equal(rec0.body.recruiters.find((x) => x.name === 'Sal Spanner'), undefined, 'the spanner has recruited nobody yet');
+await seed(spanner.aid, 'recruits=7');
+const rec1 = await call('GET', '/v1/leaderboard/recruiters', { token: spanToken });
+assert.equal(rec1.body.recruiters.find((x) => x.name === 'Sal Spanner'), undefined,
+  'the recruiters board is served from the warm cache too — the write inside the window is not reflected');
+
+// and with the cache off the same write is live immediately
+process.env.STANDING_CACHE_MS = '0';
+const fresh = await call('GET', '/v1/leaderboard/city', { token: spanToken });
+assert.ok((fresh.body.board.find((b) => b.name === 'Guido Nobody')?.standing ?? 0) > 0,
+  'STANDING_CACHE_MS=0 disables it — the write is reflected on the next read');
+const recFresh = await call('GET', '/v1/leaderboard/recruiters', { token: spanToken });
+assert.equal(recFresh.body.recruiters.find((x) => x.name === 'Sal Spanner')?.recruits, 7,
+  '…on both boards, which is what proves they share one window rather than two copies of the default');
+
+console.log('ok - city standing: spine board, breadth>depth, pillar breakdown, agent+banned exclusion, personal rank, no-legend zero, the cache (single-flight, TTL, no per-player leak)');
 await app.close();
