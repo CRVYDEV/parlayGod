@@ -167,7 +167,15 @@ if (failures.length) {
 // return zero rows on pg-mem and the board would silently report every stranded deed as nameless.
 // 74 → 75 (2026-08-21, the bulletproof batch): `sweepTelemetry`'s keep-list NOT IN — a placeholder
 // fan-out over TELEMETRY_KEEP_EVENTS ($2..$n), every value a bound parameter, never a user string.
-const CEILING = { interpolated: 75, unreadable: 40 };
+// 75 → 78 (2026-08-22, THE ANY-OF-ARRAY BAN): three sites converted OFF `= ANY($n)` and onto generated
+// placeholder lists — `agentEconomyStats`' withdrawal sum over the agent account ids, and chain.js's
+// two `kind IN (…)` filters over VOUCHER_CLAIM_KINDS. The ban exists because `= ANY($1)` binds a JS
+// array, which pg-mem answers with ZERO ROWS the moment the filtered column is indexed — silently, so
+// the suites pass over a query that found nothing (it took `ix_char_account` landing to expose two
+// live referral sites that had read fine for as long as the column was unindexed). The IN form is the
+// only portable one and it is not preparable, so the ceiling rises by exactly the three converted
+// sites: a raise that BUYS a class of latent bug being enforced away, which is what warrants one.
+const CEILING = { interpolated: 78, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

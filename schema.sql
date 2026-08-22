@@ -1967,6 +1967,19 @@ CREATE INDEX IF NOT EXISTS ix_char_lower_name ON characters (lower(name));
 -- Hot paths that would otherwise full-scan under load: the Streets board, gang
 -- rosters, the exchange, and the nightly §10.4 ledger sweep.
 CREATE INDEX IF NOT EXISTS ix_char_respect ON characters (respect);
+-- THE HOTTEST LOOKUP IN THE GAME, and it was a sequential scan. `withCharacter`/`readCharacter` open
+-- every authed request with `WHERE account_id = $1 AND alive` (§7.1 lazy accrual makes even a READ take
+-- it), and 78 further sites across src/ look a character up by account. The table carried indexes on
+-- name, lower(name), respect, lfg and seeking_mentor — every SECONDARY lookup — and none on the join
+-- key the request wrapper itself uses, which is the shape you get when the wrapper is written first and
+-- the indexes are added later, one reported slow page at a time.
+-- Measured on real Postgres at 3,000 players: seq scan, 144 buffers, 0.62ms — and it is paid PER
+-- REQUEST, so the server-wide total is quadratic in the playerbase exactly like the standing scan was.
+-- PLAIN, not `WHERE alive`: the partial index measured marginally faster on the hot query (0.164ms vs
+-- 0.193ms — noise at this size) and serves only the subset that carries `AND alive`, while this one
+-- also serves the estate/chain paths that read a bloodline's DEAD rows (`ORDER BY alive DESC`) and the
+-- `account_id IN (…)` batch reads. Coverage across 78 sites beats 0.03ms on one of them.
+CREATE INDEX IF NOT EXISTS ix_char_account ON characters (account_id);
 CREATE INDEX IF NOT EXISTS ix_gang_members_gang ON gang_members (gang_id);
 CREATE INDEX IF NOT EXISTS ix_listings_created ON listings (created_at);
 CREATE INDEX IF NOT EXISTS ix_tx_currency_reason ON transactions (currency, reason);
