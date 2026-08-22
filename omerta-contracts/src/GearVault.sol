@@ -123,23 +123,28 @@ contract GearVault is ERC1155, Ownable2Step {
         _mint(to, tokenId, amount, "");
     }
 
-    /// @notice Burn an extracted CAR or BOAT back toward the game — the on-chain half of re-import
+    /// @notice Burn an extracted item (car, boat, or — since the founder-signed §7, 2026-08-21 —
+    ///         GEAR) back toward the game: the on-chain half of re-import
     ///         (omerta-nft-reimport-design.md). The burn IS the ownership proof: only the holder can
     ///         call it (`_burn` reverts otherwise), so only they can trigger a re-import to their own
     ///         linked account, and no server signature is needed (unlike a mint — the event is the
-    ///         authority). The backend watcher re-creates the in-game row on the burner's living
-    ///         character after CHAIN_CONFIRMATIONS.
+    ///         authority). The backend watcher re-creates the in-game row (cars/boats: on the
+    ///         burner's living character; gear: on their ACCOUNT) after CHAIN_CONFIRMATIONS.
     ///
-    ///         GEAR IS DELIBERATELY NOT REDEEMABLE. Gear's in-game form is account-level SET MEMBERSHIP
-    ///         (account_gear), not an instance row, so "re-create the row" is ambiguous the same way it
-    ///         is for character_assets — and chain.js already documents gear as one-way. Rejecting it
-    ///         here means a player can never burn a gear NFT expecting a re-import that will not happen.
+    ///         GEAR BURNS ONE AT A TIME (`amount == 1`). Gear's in-game form is account-level SET
+    ///         MEMBERSHIP (account_gear), so each Redeemed event must map to exactly ONE membership
+    ///         change the backend's three-case rule can queue individually — a batch burn would
+    ///         collapse N tokens into one membership and silently destroy the rest. Cars/boats are
+    ///         instance rows and may batch.
     ///
     ///         `minted` is NOT decremented; `redeemed` is incremented, so the token vacates one
     ///         live-supply slot without ever letting live supply exceed the cap (see `mint`).
     function redeem(uint256 tokenId, uint256 amount) external {
         require(amount != 0, "GearVault: zero");
-        require(_isCar(tokenId) || _isBoat(tokenId), "GearVault: not redeemable");
+        require(tokenId != 0, "GearVault: not redeemable"); // gearId 0 is reserved (never mintable)
+        if (!_isCar(tokenId) && !_isBoat(tokenId)) {
+            require(amount == 1, "GearVault: gear one at a time");
+        }
         _burn(msg.sender, tokenId, amount); // reverts if the caller doesn't hold `amount` — the proof
         redeemed[tokenId] += amount;
         emit Redeemed(msg.sender, tokenId, amount);

@@ -150,3 +150,63 @@ here because the asset now conveys power. The founder signs the exact wording.
 
 **None of this is a launch item.** The chain is dormant in production; re-import rides behind the same
 gates as extraction itself.
+
+## 7. GEAR joins the round trip (founder-directed 2026-08-21: "when items like cars or other assets
+get minted as NFTs, other users should be able to buy them on an NFT marketplace and bring them back
+into the game and apply them to their character") — DESIGN, gated
+
+Cars, boats and Street Deeds already do the full loop the founder describes: buy the NFT anywhere →
+`redeem()` (the burn IS the ownership proof, no server signature) → the watcher lands it on the
+**burner's** linked account. GEAR — the one class that literally "applies to the character"
+(`effStat` reads it at every till) — is the one class with no road back, and §0's rejection reason
+was a real ambiguity, not caution: `account_gear` is SET MEMBERSHIP (one row per (account, class)),
+so "re-create the row" had no defined answer when the burner already holds the class.
+
+**The prerequisite landed first (2026-08-21, this commit): extracted gear now actually LEAVES PLAY.**
+Before it, `loadOwned` never filtered `minted_onchain` out of `owned.gear`, so an extracted piece was
+loot-immune AND still boosting every till — extraction was strictly free upside, contradicting the
+stated tradeoff, and any re-import would have double-counted the buyer's gear. Now: `owned.gear` is
+in-play only, `owned.gearOnchain` carries the extracted set (the row still holds the PK, so it blocks
+a re-mint — refused honestly as `extracted`, not "you already hold it" — and dedupes kill-loot).
+Test-pinned in test/chain.js + test/social.js, three mutations each failing by name.
+
+**The three-case rule that resolves §0's ambiguity** (the deed's wait-until-deedless pattern, adapted
+to set membership; a `Redeemed` gear log stays `pending` and the sweep retries forever):
+
+1. **Burner's account has NO row for the class** → INSERT `(account, gear, minted_onchain=false)`.
+   The marketplace buyer's case — the piece is theirs, live, boosting.
+2. **Burner's account holds the class EXTRACTED (`minted_onchain=true`)** → flip it back to `false`.
+   Their own token came home; un-flagging is exactly right here (the "never un-flag" rule in §1
+   protects the ORIGINAL EXTRACTOR's row when a DIFFERENT wallet burns — that is case 1, and the
+   original extractor's row… does not exist for gear: gear is fungible per class, and the burner's
+   own row is the only row in question).
+3. **Burner's account holds the class IN-GAME already** → wait `pending` (the deed's "already hold a
+   street" rule). The burn is not lost; it applies the moment they extract or lose their in-game copy.
+
+**Build list, in order** (all audit-batch-gated — the burn path is a contract change):
+- **FREEZE THE GEAR TOKEN-ID MAP FIRST.** `gearNumId` is a positional `MARKET.findIndex + 1`; a
+  MARKET reorder re-points every on-chain cap and every held token (flagged in
+  AUDIT-chain-onchain.md). Re-import makes those ids LOAD-BEARING in both directions — an explicit
+  frozen id map is the fix, and it must land before any gear token is worth money.
+- `GearVault.redeem` accepts gear ids (or a `redeemGear`), forge tests, into the audit batch.
+- `nftDecode` gains the gear inverse (fail-closed on out-of-range).
+- `reimportItem` gains `kind='gear'` + the three-case rule; `nft_reimports.kind` doc updated.
+- Client copy (the Collection card + the wallet card) and a `strandedItems` operator read (the
+  deed's `strandedDeeds` twin — a burn from a never-linking wallet currently waits invisibly).
+
+**The founder call this section IS (sign before build):** §0's pivot — "the marketplace becomes a
+pay-for-power channel" — was signed for cars/boats, whose power is property (races, hauls). Gear is
+the STAT layer: a bought-and-burned piece raises `effStat` at every contest in the game. Same
+decision, materially larger. It also touches the RICO wall ("staked $OMR and minted gear are SAFE"
+— unchanged: safety still applies only while on-chain) and the kill-loot economy (a re-imported
+piece is lootable again — correct, and worth saying in the copy).
+
+**SIGNED AND BUILT (founder, 2026-08-21: "Gear joins the roundtrip").** The whole build list above
+landed the same day: `GEAR_TOKEN_IDS` frozen (load-guarded against MARKET membership, append-only),
+`gearNumId` reads the map, `nftDecode` decodes gear (rarity null), `GearVault.redeem` accepts gear
+ONE AT A TIME (`amount == 1` — each Redeemed event maps to exactly one membership change, so a
+batch burn can never collapse N tokens into one membership), `applyReimport` implements the
+three-case rule (account-level — a linked wallet suffices, NO living character needed, proven in
+test/reimport.js with a character-less account), and `GET /v1/mod/items/stranded` names each
+pending burn's reason. The `rarity` column stores `''` for gear (NOT NULL on live DBs — never an
+ALTER for a sentinel); readers surface it as null.

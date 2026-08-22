@@ -421,7 +421,10 @@ export async function fire(ch, victim, client, h, rounds) {
     // env-overridable for tests (the SEARCH_MS pattern); production reads the M3 default
     if (lootable && gearRoll < Number(process.env.GEAR_LOOT_CHANCE ?? M3.GEAR_LOOT_CHANCE)) {
       const vg = (await client.query('SELECT gear_id FROM account_gear WHERE account_id=$1 AND NOT minted_onchain', [victim.account_id])).rows.map((x) => x.gear_id);
-      const killerHas = new Set(h.owned.gear || []);
+      // the dedupe must see the killer's EXTRACTED gear too: loadOwned filters it out of owned.gear
+      // (it boosts nothing any more) but the account_gear row still occupies the PK, so looting the
+      // same class would 23505 → contention → the whole KILL rolls back
+      const killerHas = new Set([...(h.owned.gear || []), ...(h.owned.gearOnchain || [])]);
       const takeable = vg.filter((g) => !killerHas.has(g));
       if (takeable.length) {
         gearLoot = takeable[Math.floor(Math.random() * takeable.length)];

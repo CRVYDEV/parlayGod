@@ -203,8 +203,11 @@ const SECTIONS = [
       <b>in-game items are lootable; extracted NFTs are safe, and inert</b>. An extracted car is an ERC-1155 in your own
       wallet — nobody can steal it, win it in a pink-slip race, chop it off your corpse or take it in a war, and it
       <b>survives your death</b> and passes down the bloodline. In exchange it never races, hauls, melts, fences or
-      earns again. Use it or own it; you cannot do both, and there is no way back. You must be MADE to take anything
-      on-chain.</p>
+      earns again while it stays on-chain. The door swings both ways: whoever <b>holds</b> the NFT — you, or whoever
+      bought it on a marketplace — can <b>burn it (redeem)</b> from their wallet, and the real thing comes back into
+      play on <i>their</i> account, fresh and stock (tune, trim and damage do not make the trip). Gear makes the same
+      round trip: burn a gear NFT and the class joins the burner's account — unless they already run the in-game copy,
+      in which case the burn waits until that copy extracts or is lost. You must be MADE to take anything on-chain.</p>
       ${R(`POST /v1/garage/boost · /garage/:carId/melt|fence|repair · /armory/gun/:id/buy|equip · /armory/ammo · /workshop/craft/:id · GET /v1/nft · POST /v1/nft/:kind/:id/upgrade|withdraw`)}` },
 
   { id: 'city', group: 'The Basics', title: 'The City & the Living World', tag: 'events, weather, districts, NPC families',
@@ -658,7 +661,14 @@ const SECTIONS = [
       time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).</p>
       <p><b>Withdraw $OMR</b> — burns your $OMR and signs a voucher <b>only if the reserve can back it</b> (if not, it
       waits in a queue). <b>Only a minted account can extract.</b> <b>Gear withdrawal</b> mints your gear as an NFT (it
-      leaves the game). <b>Wallet link</b> is SIWE; <b>character mint</b> makes a trial character permanent — a one-off
+      leaves the game). <b>Wallet link</b> is SIWE. <b>The Forge</b>: a linked wallet's on-chain history — its age and
+      mileage, never a balance — can cast your build as one of <b>twelve named archetypes</b> (four history
+      families; the exact face is a stable function of the wallet itself, so the same wallet forges the same
+      face forever), plus a small capped bonus on its
+      strong suit, and a genuinely deep history forges a slightly bigger budget (a few extra points spread
+      across the whole build, hard-capped) and schools the archetype's own regimen discipline with a banded
+      head start; once per wallet, ever; free early, a re-roll credit
+      past level 5 (and a later paid re-roll replaces the whole build, bonus and budget perk included); <b>character mint</b> makes a trial character permanent — a one-off
       ETH fee on a published schedule (five waves, 0.01 at the founding wave, never above 0.05; the Store shows
       the current one), or a mint credit earned outright off the mission ladder.
       <b>Bonds</b> — deposit ETH for discounted $OMR that vests over time; the ETH deepens the pool and feeds the

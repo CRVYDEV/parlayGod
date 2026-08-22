@@ -2779,6 +2779,8 @@
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
+    // THE WALLET FORGE — `forged` + `stats` is this reply's own shape (nothing else sends `forged` on an action)
+    if (body.forged && body.stats) bits.push(`🔥 ${body.name ? `the ledger names you ${txt(body.name)}` : 'the ledger is silent — an ordinary hand rolled'} — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}${body.bonus ? ` (+${body.bonus} forged into the strong suit)` : ''}${body.budgetExtra ? ` (+${body.budgetExtra} onto the whole budget)` : ''}${body.affinity ? ` · schooled in ${txt(body.affinity.name || body.affinity.discipline)} (level ${body.affinity.level})` : ''}${body.spentCredit ? ' · one re-roll credit spent' : ''}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true && body.take !== undefined) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
@@ -4597,7 +4599,7 @@
       <div class="row stathelp" data-stathelp="health" title="Tap for how to heal up."><span class="k">${T('k_health')} <i class="ihint">ⓘ</i></span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
       <div class="row stathelp" data-stathelp="heat" title="Tap for how to cool off."><span class="k">${T('k_heat')} <i class="ihint">ⓘ</i></span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
       <div class="row"><span class="k">${T('k_stats')}</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
-      <div class="row"><span class="k">base build <span class="d" style="font-size:10px">(rolled at birth · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
+      <div class="row"><span class="k">base build <span class="d" style="font-size:10px">(${me.forgedName ? `forged: ${me.forgedName}` : 'rolled at birth'} · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
         ${me.rerollCredits > 0 ? `<button class="act" id="reroll-go" style="font-size:10px;padding:1px 5px">re-roll (${me.rerollCredits})</button>` : ''}</span></div>
       <div class="row"><span class="k">${T('k_gun')}</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">${T('k_ammo')}</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
@@ -6779,10 +6781,10 @@
     const train = (rules?.stats || []).map((s) =>
       `<button class="act" data-do="POST /v1/train/${s}"${gymCd > 0 ? ' disabled' : ''}>${s}</button>`).join('')
       + (gymCd > 0 ? ` <span class="d">gym reopens in ${mins(gymCd)}</span>` : '');
-    // THE REGIMEN — five disciplines on the SAME gym clock + the fixtures' daily drills
+    // THE REGIMEN — eight disciplines on the SAME gym clock + the fixtures' daily drills
     const regCd = Number(gym.trainSeconds || 0);
     const regimenBlock = !gym.disciplines ? '' : `
-      <div class="d" style="margin-top:10px"><b>The Regimen</b> — five disciplines, trained on the same gym clock (${gym.energy} energy a session). Breadth, not shortcuts:</div>
+      <div class="d" style="margin-top:10px"><b>The Regimen</b> — eight disciplines, trained on the same gym clock (${gym.energy} energy a session). Breadth, not shortcuts:</div>
       <div class="grid" style="margin-top:4px">${gym.disciplines.map((d) => `
         <div class="card"><span class="t">${d.name}</span> <span class="chip">${d.level >= d.cap ? 'MASTERED' : `lvl ${d.level}`}</span>
           <div class="d">${d.desc}</div>
@@ -6959,7 +6961,7 @@
       ${pathBlock}
       <div id="clue-slot"></div>
       ${sect('streets-daily', 'Daily Work', '3 contracts a day (all three pays a $OMR bonus) + the Daily Score', `<div class="grid">${dailyCards}</div>`, dailyReady)}
-      ${sect('streets-train', 'The Gym &amp; The Regimen', 'raise your core stats + five trainable disciplines · daily drills from the fixtures', `
+      ${sect('streets-train', 'The Gym &amp; The Regimen', 'raise your core stats + eight trainable disciplines · daily drills from the fixtures', `
         <div class="d" style="margin-bottom:4px"><b>Core stats</b> — muscle powers fights, cunning powers schemes, speed powers wheels:</div>
         <div>${train}</div>
         ${regimenBlock}`)}
@@ -8286,7 +8288,9 @@
       <div class="d" style="margin-bottom:6px">Every car and boat carries a rarity, rolled when you EARN it. Pay $OMR to buy
         exactly the next tier — a known item at a known price, never a gamble. Take one ON-CHAIN and it becomes an NFT in your
         own wallet: <b>safe</b> (it survives your death, nobody can steal or win it) but <b>inert</b> (it never races, hauls,
-        melts or fences again). Use it or own it. <span class="chip cold">the on-chain rail opens at launch</span>
+        melts or fences again — while it stays on-chain). The door swings both ways: whoever HOLDS the NFT — you, or whoever
+        bought it on a marketplace — can <b>burn it (redeem)</b> from their wallet and the real thing comes home to <i>their</i>
+        garage, fresh and stock (tune, trim and damage don't make the trip). <span class="chip cold">the on-chain rail opens at launch</span>
         ${nft.minted ? '' : ' <span class="chip cold">you must be MADE to take anything on-chain</span>'}</div>
       ${(nft.items || []).length ? `<div class="grid">${nft.items.map((i) => `
         <div class="card"><span class="t">${esc(i.name)}</span>
@@ -8296,7 +8300,7 @@
           ${i.upgrade ? `<button class="act" data-rup="${i.kind}:${i.id}">upgrade to ${esc(i.upgrade.toName)} — ${i.upgrade.omr} $OMR</button>`
             : '<div class="d">top of the ladder</div>'}
           ${nft.minted && !i.blocked ? `<button class="act" data-rnft="${i.kind}:${i.id}"
-            data-confirm="Take it on-chain? It becomes a tradeable NFT in your wallet — safe from death and theft forever, but it will never race, haul or melt again. There is no way back.">take it on-chain</button>` : ''}</div>`).join('')}</div>`
+            data-confirm="Take it on-chain? It becomes a tradeable NFT in your wallet — safe from death and theft forever, but inert while it stays there: it never races, hauls or melts. The way back: whoever holds the NFT burns it (redeem) from their wallet, and it returns to THEIR account as a fresh, stock instance — tune, trim and damage don't survive the trip.">take it on-chain</button>` : ''}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">nothing to collect yet — boost a car or buy a boat</span>'}
       ${(nft.onChain || []).length ? `<div class="d" style="margin-top:6px">ON-CHAIN: ${nft.onChain.map((i) =>
         `${esc(i.name)} <span class="chip good">${esc(i.rarityName)}</span> <span class="d">#${i.tokenId}</span>`).join(' · ')}</div>` : ''}
@@ -9174,6 +9178,8 @@
       api('GET', '/v1/brokers'), api('GET', '/v1/drop'),
       api('GET', '/v1/provenance'),
     ]);
+    const fgR = await api('GET', '/v1/forge');
+    const fg = fgR.body || {};
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
     const wd = wdR.body || {}, bk = bkR.body || {};
@@ -9274,6 +9280,26 @@
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
+
+      ${fg.available ? `
+      <h2 style="margin-top:12px">The Forge <span class="d" style="font-size:11px">(your wallet's history shapes the build — once per wallet, ever)</span></h2>
+      <div class="card">
+        ${fg.forged
+          ? `<span class="t">Ledger-born: <b style="color:var(--neon)">${fg.archetypes?.[fg.forged]?.name || 'an unknown hand'}</b></span>
+             <div class="d">this street's build was forged from a wallet's history — the shape is yours for life.</div>`
+          : !fg.linked
+            ? `<div class="d">Link a wallet above and the forge reads its <b>history</b> — how old it is, how much it has worked —
+               and casts your build as one of <b>twelve archetypes</b>, with up to <b>+${fg.bonusMax}</b> on the archetype's strong suit,
+               a deep history forging up to <b>+${fg.budgetMax}</b> onto the whole budget, and a head start in the archetype's
+               own <b>discipline</b>. Never a balance read; never twice per wallet.</div>`
+            : fg.walletForged
+              ? `<div class="d">This wallet already forged a build — one forge per wallet, <b>ever</b>. A fresh street can still roll the ordinary way.</div>`
+              : `<div class="d">The forge reads your wallet's <b>age and mileage</b> — never a balance — and casts the build as one of
+                 <b>twelve archetypes</b>, with up to <b>+${fg.bonusMax}</b> on its strong suit, a deep history forging up to <b>+${fg.budgetMax}</b>
+                 onto the whole budget, and a head start in the archetype's own <b>discipline</b>. Once per wallet, ever.
+                 ${fg.free ? '<b>Free at your level.</b>' : `Past level ${fg.freeLvl} it takes one paid re-roll credit (you hold ${fg.rerollCredits}).`}</div>
+                 <button class="act" id="forge-go" data-do="POST /v1/character/forge" data-confirm="Forge your build from this wallet's history? It replaces your current base stats, and the wallet can never forge again." style="border-color:var(--neon)">forge the build</button>`}
+      </div>` : ''}
 
       ${dr.announced ? `
       <h2 style="margin-top:12px">The Envelope <span class="d" style="font-size:11px">(the community drop — wallets the snapshots saw claim in-game $OMR, once, ever)</span></h2>
@@ -10282,6 +10308,7 @@
       // ── the chain & the store
       made: () => `YOU'RE MADE — the city knows your name now`,
       rerolled: () => `a new hand dealt — your build is re-rolled`,
+      forged: () => `the ledger speaks — ${d.name ? `born ${d.name}` : 'a build rolled from an unknown hand'}${d.bonus ? ` (+${d.bonus} on the strong suit)` : ''}${d.budgetExtra ? ` (+${d.budgetExtra} to the budget)` : ''}${d.affinity ? ` · schooled in ${d.affinity.name || d.affinity.discipline}` : ''}`,
       fee_credited: () => `your ${String(d.kind || '').replace(/_/g, ' ')} payment landed`,
       store_grant: () => `${d.name} is yours`,
       // ── the world

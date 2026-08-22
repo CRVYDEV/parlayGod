@@ -136,17 +136,36 @@ contract OmertaTest is Test {
         vm.prank(player); vc.claim(v3, s3);
     }
 
-    // Gear proper is NOT redeemable (GearVault.redeem rejects it), so its `redeemed` stays 0 and the
-    // pre-flight is a lifetime bound for gear regardless — the change above cannot loosen that class.
-    function test_gear_class_has_no_slot_to_free() public {
+    // GEAR JOINED THE ROUND TRIP (nft-reimport §7, founder-signed 2026-08-21): a gear burn vacates a
+    // live-supply slot the bridge can re-extract, exactly as a car's does — the same regression shape
+    // as test_reimport_frees_a_slot_the_bridge_can_re_extract, on the class that used to be one-way.
+    function test_gear_redeem_frees_a_slot_the_bridge_can_re_extract() public {
         vm.prank(safe); gear.setGearCap(9, 1);
         vm.prank(safe); vc.setGearSupplyCap(9, 1);
         VoucherClaim.Voucher memory v1 = _voucher(player, 1, 1, 9, 511);
         vm.prank(player); vc.claim(v1, _sign(v1, signerPk));
+        vm.prank(player); gear.redeem(9, 1);
+        assertEq(gear.minted(9) - gear.redeemed(9), 0, "gear burn vacates the live slot");
+        VoucherClaim.Voucher memory v2 = _voucher(player, 1, 1, 9, 512);
+        vm.prank(player); vc.claim(v2, _sign(v2, signerPk));
+        assertEq(gear.balanceOf(player, 9), 1, "re-extracted into the slot the burn vacated");
+    }
+
+    // Gear burns ONE AT A TIME: its in-game form is account-level SET MEMBERSHIP, so each Redeemed
+    // event must map to exactly one membership change — a batch burn would collapse N tokens into one
+    // membership and silently destroy the rest. Cars/boats (instance rows) may still batch.
+    function test_gear_redeem_is_one_at_a_time() public {
+        vm.prank(safe); gear.setGearCap(9, 2);
+        vm.prank(safe); vc.setGearSupplyCap(9, 2);
+        VoucherClaim.Voucher memory v1 = _voucher(player, 1, 1, 9, 513);
+        vm.prank(player); vc.claim(v1, _sign(v1, signerPk));
+        VoucherClaim.Voucher memory v2 = _voucher(player, 1, 1, 9, 514);
+        vm.prank(player); vc.claim(v2, _sign(v2, signerPk));
         vm.prank(player);
-        vm.expectRevert("GearVault: not redeemable");
-        gear.redeem(9, 1);
-        assertEq(gear.redeemed(9), 0, "gear can never vacate a slot");
+        vm.expectRevert("GearVault: gear one at a time");
+        gear.redeem(9, 2);
+        vm.prank(player); vm.expectRevert("GearVault: not redeemable");
+        gear.redeem(0, 1); // gearId 0 stays reserved — never redeemable
     }
 
     function test_set_gear_cap_only_owner() public {

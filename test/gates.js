@@ -1159,13 +1159,20 @@ const SCENERY_WAIVED = {
   // catalogue-or-declare: a `client` that is NOT a pg connection. viem batches real network reads
   // concurrently and is the whole point of a Promise.all there, so each is waived BY SITE with the
   // reason — a new one has to be classified rather than silently inheriting the exemption.
+  // Keyed on FILE + a CONTENT mark inside the call's own argument, never a line number: the first
+  // cut waived `src/chain.js:1533`, and a two-line COMMENT added 1,200 lines above it shifted the
+  // site to :1535 and failed the build on an edit that changed nothing — a line-keyed waiver rots
+  // on any edit above it (the preflight-restatement class, in a guard). Every waiver must MATCH
+  // (the stale-waiver assert below), so a mark that stops matching fails loudly instead of leaving
+  // a real pg site quietly waived.
   const VIEM_CLIENTS = [
-    'src/bank.js:404',        // client.readContract — viem, reading the Alchemist market
-    'src/watcher.js:388',     // client.getLogs — viem, three fee-event streams over one range
-    'src/chain.js:1533',      // client.readContract — viem, the oracle's PERIOD + lastUpdate
-    'src/chain.js:1623',      // client.readContract — viem, OmertaBond's three immutable bps
-    'src/chainparams.js:289', // client.readContract — viem, the control-room live-value sweep
+    { file: 'src/bank.js', mark: 'readContract', why: 'viem, reading the Alchemist market' },
+    { file: 'src/watcher.js', mark: 'getLogs', why: 'viem, three fee-event streams over one range' },
+    { file: 'src/chain.js', mark: "functionName: 'PERIOD'", why: "viem, the oracle's PERIOD + lastUpdate" },
+    { file: 'src/chain.js', mark: "functionName: 'polBps'", why: "viem, OmertaBond's three immutable bps" },
+    { file: 'src/chainparams.js', mark: 'readContract', why: 'viem, the control-room live-value sweep' },
   ];
+  const waiverHits = new Map(VIEM_CLIENTS.map((w) => [`${w.file}#${w.mark}`, 0]));
   const offenders = [];
   let scanned = 0;
   // balanced-paren extraction, not a fixed window: a `.slice(+N)` runs past the call into the next
@@ -1194,12 +1201,18 @@ const SCENERY_WAIVED = {
       // the client to a reader inside a `.map`, and `dynasty.js` calls a closure that captures it —
       // and a guard that misses the sites it exists for is worse than no guard.
       if (!/\bclient\b/.test(arg)) continue;
-      if (VIEM_CLIENTS.includes(site)) continue;                 // a viem client IS genuinely concurrent
+      const shortFile = f.replace(/^.*\/src\//, 'src/');
+      const waiver = VIEM_CLIENTS.find((w) => w.file === shortFile && arg.includes(w.mark));
+      if (waiver) { waiverHits.set(`${waiver.file}#${waiver.mark}`, waiverHits.get(`${waiver.file}#${waiver.mark}`) + 1); continue; }
       offenders.push(site);
     }
   }
   assert(scanned >= 8, `the Promise.all scan found only ${scanned} sites — the extractor has stopped `
     + 'reading src/, so a green run here would mean nothing');
+  // a waiver that matches NOTHING is stale — either the site changed shape (re-classify it) or it
+  // is gone (delete the waiver); leaving it standing is how a future pg site inherits the exemption
+  for (const [key, hits] of waiverHits) assert(hits >= 1,
+    `the viem waiver "${key}" matched no Promise.all site — stale: the site moved or changed shape; re-classify or delete it`);
   assert.deepEqual(offenders, [], 'a Promise.all issues CONCURRENT queries on a SHARED pg client. One '
     + 'connection cannot do that: node-pg queues them behind a deprecation warning today and THROWS '
     + 'from pg@9, and the parallel form buys no speed because the connection serializes them either '

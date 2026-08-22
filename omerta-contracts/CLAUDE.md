@@ -4,7 +4,7 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 1. `forge test` must pass after every change; new behavior needs new tests (happy path + every revert).
    **The suite IS runnable in the sandboxed build environment**: `./run-forge-test-sandboxed.sh`
    (forge from the official npm dist, forge-std/OZ/v4-core from npm, solc native-or-shim).
-   First executed 2026-07-23 (73/73); **296/296 green** after THE BANK's Denari market (né nUSD),
+   First executed 2026-07-23 (73/73); **306/306 green** after THE BANK's Denari market (né nUSD),
    `GenesisOracle`, the hook's buy side, and GearVault's on-chain metadata rail, incl. the 512-run fuzzes. The runner PREFERS the
    NATIVE solc binary and NEEDS it — the solc-js shim (same version+commit) runs out of wasm heap
    compiling v4's `PoolManager`, so on a shim-only box every suite runs EXCEPT `OmertaHook.t.sol`. On an open-internet machine prefer

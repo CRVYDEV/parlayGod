@@ -6419,3 +6419,37 @@ never competes with itself) is satisfied trivially — there is no price-respons
 (wall 1; bonds are GM-throttled by THE DAILY OFFERING) — and is recorded at the lever block for the
 day one is ever proposed. All four numbers are founder sign-off levers (pinned in test/levers.js);
 `MAX_X: 1` puts the desk back to the flat clip exactly.
+
+## § THE LEDGER-BORN (THE WALLET FORGE, depth B — founder-signed 2026-08-21)
+
+The founder signed depth B of `omerta-wallet-forged-stats-design.md` §6: a SIWE-proven wallet's
+on-chain history forges the living build — an ARCHETYPE shape on the same `CREATE_STAT_TOTAL` (15)
+budget every random roll gets, PLUS a banded bonus of up to `WALLET_FORGE.BONUS_MAX` (3) points on
+the archetype's boost stat. **This is a bounded, deliberate retirement of "outside wealth must not
+buy power" ON THE STAT LAYER ONLY**, and the bounds are the sign-off:
+
+| lever | ships at | what it bounds |
+|---|---|---|
+| `WALLET_FORGE.BONUS_MAX` | 3 | the boost-stat half of what a wallet buys — once, ever; 0 reverts the boost half |
+| `WALLET_FORGE.BUDGET_MAX` | 3 | **THE BUDGET PERK** (founder-directed 2026-08-21: "I want the wallet to decide the budget as well for an extra perk") — extra WHOLE-budget points a deep history forges, `max(0, ageTier + velTier − 1)` capped here, spread round-robin (never re-aimed at the boost stat); with BONUS_MAX the total ceiling is 15+3+3 = **21 (+40%)**, once, ever; 0 reverts to the boost-only depth B |
+| `WALLET_FORGE.FREE_LVL` | 5 | at/below: free (an onboarding identity moment); above: consumes a paid reroll credit (the fees.js 0.01-ETH rail) |
+| `WALLET_FORGE.AGE_TIERS_DAYS` | [365, 1095] | wallet-age bands (1y/3y) — age is unfakeable after the fact |
+| `WALLET_FORGE.VELOCITY_TIERS` | [20, 200, 1000] | lifetime tx-count bands — each unit cost real gas |
+| `WALLET_FORGE.ARCHETYPES` | 12 shapes | **THE TWELVE** (founder-directed 2026-08-21: "Can we create a total of 12 archetypes for variety") — four history FAMILIES (the bands' answer, `forgeShape` unchanged) × three VARIANTS each, the variant a stable FNV-1a hash of the lowercased wallet (deterministic per wallet forever, auditable, never a roll); each BASE shape load-guarded to sum exactly `CREATE_STAT_TOTAL` — only the two banded, capped grants sit on top; the original four ids lead their families so stored rows stay live keys (no migration) |
+| `FORGE_FAMILIES` | 4 × 3 | the family→variant map, load-guarded to cover every archetype exactly once |
+| `WALLET_FORGE.AFFINITY_XP_PER_BAND` | 40 | **THE AFFINITY** (the same directive's "add more stats") — each archetype schools its regimen DISCIPLINE with banded head-start XP through the regimen's own `addXp` rail: max 5 bands = 200 XP ≈ discipline level 4 against a cap of 25 — schooling, never mastery; XP is not a currency (zero §10.4); 0 disables the schooling |
+| `REGIMEN.HANDLING_ADD` | 0.5 | **White Knuckle** (handling, the 2026-08-21 trio — "add more stats to the characters"): + (lvl−1) × this to YOUR score at all three race sites (PvE + both PvP sides, each side its own handle) — the DUEL_ADD twin, variance-buried → the levers pin is its guard; at the cap that is +12 against VARIANCE 30 |
+| `REGIMEN.POISE_BPS` / `POISE_FLOOR` | 100 / 0.75 | **Cool Head** (poise): laylow ×(1 − bps·(lvl−1)/10⁴) floored — the Iron Chin shape on the laylow SINK; the DISCOUNTED figure is the one ledgered (till-tested to the dollar); a discount on a sink is §10.4-safe (less cash leaves) but trims the sink — flagged, petty at ≤25% of a $5k laylow |
+| `REGIMEN.VIGILANCE_DEF` | 0.5 | **Night Eyes** (vigilance): + (lvl−1) × this baked into the STORED convoy guard defense at depart (the rig-armor site) — defense-side only, and an ambush is a pure ownership transfer, so no faucet widens (the fortify argument) |
+
+**Why it is Sybil-neutral by construction:** the latch is ONCE PER WALLET, EVER (`wallet_rolls`,
+lowercased-wallet PK), so wallet-shopping needs a fresh AGED, WORKED wallet per attempt — the
+features are chosen by cost-to-fake (age cannot be manufactured after the announcement; tx count
+costs gas per unit; balances are deliberately never read, because a balance is borrowable the block
+before the call). A farmed fresh wallet maps to `unknown` and earns an ordinary random roll — zero
+bonus, zero edge. The gym out-trains the whole grant in a day (~40 pts/hr vs a once-ever +6 at the
+full ceiling), so the grant is an IDENTITY moment, not a power curve — but it IS power bought with
+an outside asset,
+which is why it is a founder-signed lever and not a status axis. §10.4: zero surface (no currency
+moves; the forge writes no `transactions` row — test-pinned in `test/walletforge.js`). Only the
+BANDS are stored, never the raw features (the anti-precise-kill-EV rule on a permanent table).

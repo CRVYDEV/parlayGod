@@ -832,3 +832,43 @@ The same directive is the build authorization for the NetNet-research recommenda
 | H — countercyclical formulaic dials | **Build the desk's upper leg** | BUILT same day — THE UPPER LEG (BALANCE.md § THE UPPER LEG): the lot's policy bounds scale by the euphoria premium (latest real print vs the 30d average), clip-sized at `DESK_SURGE.MAX_X`, float ceiling at `FLOAT_CAP_MAX_BPS`, asleep below `START_BPS` or under `MIN_PRINTS`. Human-in-the-loop stays everywhere else (THE DAILY OFFERING is untouched — the GM's hand on the only mint). All four `DESK_SURGE.*` are sign-off levers. |
 
 The NetNet set is now fully resolved: A–F built, G recorded as-is, H built.
+
+## THE 2026-08-21 PAIR (founder: "Gear joins the roundtrip & B Wallets also grant bonus points based on history/usage")
+
+1. **GEAR JOINS THE NFT ROUND TRIP — SIGNED + ✅ BUILT same day** (`omerta-nft-reimport-design.md`
+   §7). This is the §0 pay-for-power pivot extended from property to the stat layer: a
+   marketplace-bought gear NFT, burned, raises `effStat` at every contest — the founder signed that
+   explicitly. Built: the frozen `GEAR_TOKEN_IDS` map (append-only, load-guarded), `GearVault.redeem`
+   accepts gear one-at-a-time (audit batch — forge 306/306), the three-case rule in `applyReimport`
+   (account-level: linked wallet, no living character needed), `GET /v1/mod/items/stranded`.
+2. **THE WALLET FORGE at depth B — SIGNED + ✅ BUILT same day** (`omerta-wallet-forged-stats-design.md` §6): the
+   wallet decides the stat SHAPE (archetypes, all summing to `CREATE_STAT_TOTAL`) AND grants banded
+   BONUS POINTS from wallet history/usage (age/gas tiers, capped at `WALLET_FORGE.BONUS_MAX`). This
+   is an explicit, bounded retirement of "outside wealth must not buy power" on the stat layer — the
+   §4.3-retirement shape: a small CEILING (+3 vs the 15-point base, once per wallet EVER, dwarfed by
+   ordinary stat training), recorded in BALANCE.md § THE LEDGER-BORN. Built: `src/walletforge.js`
+   (the `wallet_rolls` once-per-wallet-EVER latch, banded storage only, fail-closed reader read
+   OUTSIDE the transaction), `POST /v1/character/forge` + `GET /v1/forge`, THE FORGE card on Going
+   Legit, the sheet's forged-archetype line, `WALLET_FORGE` levers pinned in `test/levers.js`,
+   `test/walletforge.js` (four mutations, each caught at its own named assertion).
+3. **THE BUDGET PERK — DIRECTED + ✅ BUILT same day** (founder, 2026-08-21: *"I want the wallet to
+   decide the budget as well for an extra perk"*). The forge's third grant: a banded BUDGET perk —
+   `forgeBudgetExtra = max(0, ageTier + velTier − 1)`, hard-capped at `WALLET_FORGE.BUDGET_MAX` (3)
+   — extra WHOLE-budget points spread deterministically round-robin across the three stats (the
+   wallet widens the build; the bonus is what re-aims it). Total ceiling 15+3+3 = **21 (+40%)**,
+   once per wallet ever; an unknown wallet still rolls exactly 15. Recorded in BALANCE.md § THE
+   LEDGER-BORN; two more named mutations (the cap dropped; the spread collapsed onto the boost stat).
+4. **THE TWELVE + THE TRIO — DIRECTED + ✅ BUILT same day** (founder, 2026-08-21: *"Can we create a
+   total of 12 archetypes for variety and add more stats to the characters"*). The archetype catalog
+   went 4 → 12 — four history FAMILIES (`forgeShape` unchanged) × three VARIANTS each, the variant a
+   stable FNV-1a hash of the lowercased wallet (`forgeArchetype` — deterministic per wallet forever,
+   never a roll; the original ids lead their families, so stored rows need no migration). "More
+   stats" shipped as the REGIMEN's established mechanism: three new disciplines (5 → 8) — White
+   Knuckle (handling → the race score, the DUEL_ADD twin), Cool Head (poise → the laylow sink, the
+   Iron Chin shape, discounted-figure-ledgered) and Night Eyes (vigilance → stored convoy guard
+   defense at depart, the rig-armor site) — each EXACTLY ONE new single-touchpoint modifier off the
+   audit-locked surfaces, plus each archetype carrying an AFFINITY the forge schools with banded
+   head-start XP (`WALLET_FORGE.AFFINITY_XP_PER_BAND` 40 × bands ≤ 200 XP ≈ level 4 of 25) through
+   the regimen's own `addXp` rail. All levers tabled in BALANCE.md § THE LEDGER-BORN; four more
+   named mutations (the affinity grant dropped; the variant collapsed; poise off the till;
+   vigilance off the stored guards).

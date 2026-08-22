@@ -107,10 +107,16 @@ assert.equal(tableCount, tables, `SPEC says ${tableCount} tables; schema.sql cre
 // audit report passed locally at 142 and failed CI at 143, in a file whose whole purpose is catching
 // claims that are true in one environment and false in another. The flags add untracked-but-not-
 // ignored files, so the count is what the NEXT COMMIT will contain rather than what the last one did.
+//
+// The DEDUPE is that lesson in a THIRD costume, and it cost a wrong figure on 2026-08-21. During an
+// unresolved merge `--cached` lists a CONFLICTED path once per stage (base/ours/theirs), so running
+// this guard mid-merge counted four conflicted .md files three times each and reported 218 where the
+// repository holds 210 — and the number looked authoritative enough that SPEC was restated to it.
+// A set is the fix: a file is one file in every state of the index, merge in progress or not.
 let mdFiles;
 try {
-  mdFiles = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' })
-    .split('\0').filter((f) => f.endsWith('.md'));
+  mdFiles = [...new Set(execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' })
+    .split('\0').filter((f) => f.endsWith('.md')))];
 } catch {
   mdFiles = [];
   (function md(dir) {
