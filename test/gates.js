@@ -1595,5 +1595,47 @@ const SCENERY_WAIVED = {
     console.log(`  ✓ no wire line renders a raw catalog id (${watched} rendered id fields across ${templates} templates)`);
   }
 
+
+// ═══ THE ANY-OF-ARRAY BAN — a query shape that arms itself when somebody adds an index ═══════════
+// `WHERE col = ANY($1)` with a JS array bound to $1 is CORRECT SQL and correct on production
+// Postgres. pg-mem returns ZERO ROWS for it — silently, no error — so the suites go green over a
+// query that found nothing. src/game.js states the rule in its own comments twice and src/growth.js
+// once, and nothing enforced it.
+//
+// WHY IT IS WORTH A GUARD rather than a comment: it is not merely wrong-under-pg-mem, it is LATENT.
+// Without an index on the filtered column pg-mem seq-scans and evaluates ANY correctly, so the site
+// reads fine for as long as the column stays unindexed — and then arms the day somebody indexes it
+// for a completely unrelated reason. That is exactly what happened: `ix_char_account` (a 120x cut on
+// the per-request character lookup — pgcheck §9c) made two referral sites in game.js return nothing,
+// so the spark and the qualification paid NOBODY, on a shape that had been sitting there for years.
+//
+// THE CORPUS IS THE `IN (…)` SITES, not the violations — a rule counted by its own violations floors
+// at zero the moment the tree is clean and then measures nothing forever (the ARTICLE LEDGER lesson).
+{
+  const bad = [], inForms = [];
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d)) {
+    const q = path.join(d, e);
+    if (fs.statSync(q).isDirectory()) walk(q); else if (q.endsWith('.js')) files.push(q);
+  } };
+  walk(SRC);
+  for (const f of files) {
+    // comments are STRIPPED first: the rule is cited by name in fifteen comments across src/ (that is
+    // how well known it is and how unenforced it was), and a scanner that reads prose reports every one
+    // of them as a violation — a mostly-wrong advisory is one people route around.
+    const txt = fs.readFileSync(f, 'utf8').split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+    txt.split('\n').forEach((line, i) => {
+      if (/=\s*ANY\(\$\d/.test(line)) bad.push(`${f}:${i + 1}  ${line.trim().slice(0, 90)}`);
+      if (/IN \(\$\d|IN \(\$\{/.test(line)) inForms.push(f);
+    });
+  }
+  assert(inForms.length >= 20, `THE ANY-OF-ARRAY BAN sees only ${inForms.length} IN(…) sites — the `
+    + 'extractor has stopped reading src/, and a sweep that reaches nothing reads exactly like a clean tree');
+  assert.deepEqual(bad, [], 'a query binds a JS array to ANY($n). pg-mem returns ZERO rows for that '
+    + 'shape, silently, so the suites pass over a query that found nothing — and it only shows up once '
+    + 'the filtered column gets an index. Use IN ($1,$2) (fixed arity) or a generated placeholder list:\n   - '
+    + bad.join('\n   - '));
+  console.log(`  ✓ no query binds an array to ANY($n) (${inForms.length} IN(…) sites govern the rule)`);
 }
 
+}

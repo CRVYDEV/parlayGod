@@ -468,9 +468,13 @@ export async function markClaimed(pool, nonce) {
   // /reserve/claimed route, and a deed nonce typed into that route would flip a signed deed voucher to
   // 'claimed' — after which sweepDeedVouchers (which selects status='signed') skips it and the street is
   // bricked exactly as the reclaim used to brick it. A deed claim has its own watcher (markDeedExtracted).
+  // a generated IN list, never ANY($n)-of-array: pg-mem returns ZERO rows for that shape the moment
+  // the filtered column is indexed, silently (THE ANY-OF-ARRAY BAN in test/gates.js). VOUCHER_CLAIM_KINDS
+  // is a module constant, so the placeholder list is fixed and there is nothing user-supplied in it.
+  const kindPh = VOUCHER_CLAIM_KINDS.map((_, i) => `$${i + 2}`).join(',');
   const r = await pool.query(
-    `UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND status='signed' AND kind = ANY($2) RETURNING id`,
-    [nonce, VOUCHER_CLAIM_KINDS]);
+    `UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND status='signed' AND kind IN (${kindPh}) RETURNING id`,
+    [nonce, ...VOUCHER_CLAIM_KINDS]);
   // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY refunded (expired or
   // cancelled) is the exact double-resolution the reserve model forbids (the player would hold the tokens
   // AND the refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever
@@ -507,9 +511,10 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
     const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
     // VoucherClaim's kinds only — `chain` below is VoucherClaim's reader, and a nonce from another
     // contract's space reads `false` there whatever really happened on-chain (see VOUCHER_CLAIM_KINDS).
+    const kindPh = VOUCHER_CLAIM_KINDS.map((_, i) => `$${i + 2}`).join(',');   // IN, never ANY — see above
     const expired = (await client.query(
       `SELECT id, account_id, kind, amount, gear_id, nonce FROM vouchers
-        WHERE status='signed' AND NOT claimed_onchain AND deadline < $1 AND kind = ANY($2)`, [cutoff, VOUCHER_CLAIM_KINDS])).rows;
+        WHERE status='signed' AND NOT claimed_onchain AND deadline < $1 AND kind IN (${kindPh})`, [cutoff, ...VOUCHER_CLAIM_KINDS])).rows;
     // AUDIT (full-system v3, chain lens F1): a `signed` voucher exists ONLY because the chain was
     // configured enough to sign it (chainConfig + signer) — signing does NOT require CHAIN_RPC_URL,
     // but the on-chain reader DOES. So "no reader" is NOT proof the chain is dormant: it can mean a

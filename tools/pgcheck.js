@@ -624,6 +624,44 @@ console.log('\n9b. A REQUEST IN FLIGHT WHEN THE STREET ENDS IS SERVED THE HEIR')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// THE ONE QUERY EVERY AUTHED REQUEST RUNS. `withCharacter`/`readCharacter` open with
+// `WHERE account_id = $1 AND alive` — §7.1 lazy accrual makes even a READ take it — and 78 further
+// sites in src/ look a character up by account. It was a SEQUENTIAL SCAN: measured on real Postgres,
+// 0.62ms and 144 buffers at 3,000 players, 16.9ms and 2,382 buffers at 50,000, paid PER REQUEST, so
+// the server-wide total is quadratic in the playerbase exactly like the standing scan was.
+//
+// THIS HAS TO BE BEHAVIOURAL AND IT HAS TO BE HERE. A text check that schema.sql contains the CREATE
+// INDEX line proves nothing about the planner, and pg-mem has a different one — the same reason
+// tools/boardcost.js refuses to run without real Postgres.
+//
+// AND IT HAS TO BE SEEDED, or it is vacuous in the worst way: on a small table a sequential scan is
+// the CORRECT plan, so on pgcheck's own handful of rows the check would fail with the index present
+// and "pass" for reasons that have nothing to do with the index existing. So it seeds past the point
+// where the planner would ever choose one, and ASSERTS that it did — a guard that cannot tell a
+// present index from an absent one reads exactly like a clean bill of health.
+console.log('\n9c. THE REQUEST WRAPPER DOES NOT SCAN');
+{
+  await pool.query(`INSERT INTO accounts (id, auth_provider, auth_subject)
+    SELECT gen_random_uuid(), 'guest', 'pgcheck-scan-' || g FROM generate_series(1, 5000) g`);
+  await pool.query(`INSERT INTO characters (id, account_id, name, respect, cash, loc, season)
+    SELECT gen_random_uuid(), id, 'ScanProbe ' || substr(id::text, 1, 12), 0, 0, 'docks', 1
+      FROM accounts WHERE auth_subject LIKE 'pgcheck-scan-%'`);
+  await pool.query('ANALYZE characters');
+
+  const n = Number((await pool.query('SELECT count(*) n FROM characters')).rows[0].n);
+  const one = (await pool.query('SELECT account_id FROM characters LIMIT 1')).rows[0].account_id;
+  const plan = (await pool.query(
+    'EXPLAIN SELECT * FROM characters WHERE account_id = $1 AND alive', [one]))
+    .rows.map((r) => r['QUERY PLAN']).join('\n');
+
+  // the non-vacuity half: with too few rows a seq scan is right and the check below means nothing.
+  check(n >= 5000, 'the table is big enough that a scan would be the WRONG plan', `only ${n} characters`);
+  check(!/Seq Scan on characters/.test(plan),
+    'the per-request character lookup uses an index, not a full scan',
+    `the planner chose a sequential scan:\n      ${plan.replace(/\n/g, '\n      ')}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n10. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land

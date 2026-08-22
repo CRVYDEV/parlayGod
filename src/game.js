@@ -2267,7 +2267,13 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     await client.query('BEGIN');
     // GLOBAL LOCK ORDER (§10.1): characters (sorted id) THEN accounts (sorted id),
     // matching withTwoCharacters so the two paths can never deadlock each other.
-    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, recruiterAccountId]])).rows;
+    // IN ($1,$2) not ANY($1)-of-array — the rule the same-IP flag below already states, and this pair
+    // is why it is a rule rather than a preference. Without an index on characters.account_id pg-mem
+    // seq-scans and evaluates ANY correctly, so both sites here read fine for as long as the column was
+    // unindexed; adding ix_char_account (a 120x cut on the hottest query in the game — pgcheck 9c) made
+    // pg-mem's planner take the ANY path and return ZERO rows, which silently paid no referral at all.
+    // A latent violation the index EXPOSED rather than one it created. IN is identical in production.
+    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id IN ($1,$2) AND alive', [recruitAccountId, recruiterAccountId])).rows;
     const recruitId = ids.find((r) => r.account_id === recruitAccountId)?.id;
     const recruiterId = ids.find((r) => r.account_id === recruiterAccountId)?.id;
     if (!recruitId || !recruiterId) { await client.query('ROLLBACK'); return null; }
@@ -2382,7 +2388,13 @@ export async function maybeSparkReferral(pool, recruitAccountId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, recruiterAccountId]])).rows;
+    // IN ($1,$2) not ANY($1)-of-array — the rule the same-IP flag below already states, and this pair
+    // is why it is a rule rather than a preference. Without an index on characters.account_id pg-mem
+    // seq-scans and evaluates ANY correctly, so both sites here read fine for as long as the column was
+    // unindexed; adding ix_char_account (a 120x cut on the hottest query in the game — pgcheck 9c) made
+    // pg-mem's planner take the ANY path and return ZERO rows, which silently paid no referral at all.
+    // A latent violation the index EXPOSED rather than one it created. IN is identical in production.
+    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id IN ($1,$2) AND alive', [recruitAccountId, recruiterAccountId])).rows;
     const recruitId = ids.find((r) => r.account_id === recruitAccountId)?.id;
     const recruiterId = ids.find((r) => r.account_id === recruiterAccountId)?.id;
     if (!recruitId || !recruiterId) { await client.query('ROLLBACK'); return null; }
