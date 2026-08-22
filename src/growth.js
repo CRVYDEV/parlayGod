@@ -604,8 +604,13 @@ export async function agentLeaderboard(pool, limit = 25) {
   // append-only ledger (the largest, forever-growing table) on every hit.
   const ext = {};
   const acctIds = rows.map((r) => r.account_id);
+  // IN (…) not ANY($1)-of-array, the codebase rule — and this one is not broken TODAY only because
+  // transactions.account_id happens to be unindexed, so pg-mem seq-scans and evaluates ANY correctly.
+  // That is precisely how the two referral sites read fine for years and then paid nobody the moment
+  // ix_char_account landed: the ANY form is a landmine that arms itself when somebody adds an index.
+  const ph = acctIds.map((_, i) => `$${i + 1}`).join(',');
   if (acctIds.length) for (const r of (await pool.query(
-    "SELECT account_id, amount FROM transactions WHERE currency='omr' AND reason='withdraw:omr' AND account_id = ANY($1)", [acctIds])).rows)
+    `SELECT account_id, amount FROM transactions WHERE currency='omr' AND reason='withdraw:omr' AND account_id IN (${ph})`, acctIds)).rows)
     ext[r.account_id] = (ext[r.account_id] || 0) + Math.abs(Number(r.amount));
   // audit: publish BANDS, not exact liquid — an exact net worth lets a hunter compute precise kill-EV
   // on a named agent (the convoy value-band precedent). Rank still uses the exact figure server-side.
