@@ -662,6 +662,51 @@ console.log('\n9c. THE REQUEST WRAPPER DOES NOT SCAN');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// The tick prunes nine growing tables on a wall-clock window, hourly, forever. Eight of the nine had no
+// index leading with the filtered column, so each sweep read the WHOLE table to delete a constant small
+// tail — 186ms against 1.1ms at a million telemetry rows, and the gap widens for the life of the server.
+// Behavioural on purpose, for §9c's reason: a text check that schema.sql contains the CREATE INDEX line
+// proves nothing about the planner, and pg-mem has a different one. Seeded first, because on a small
+// table a sequential scan is the CORRECT plan and the check would then pass for reasons having nothing
+// to do with the index. The three bounded-by-construction tables (oauth_states, vendettas, gala_guests)
+// are deliberately absent — see schema.sql at the indexes for why an index there would cost writes for
+// nothing.
+console.log('\n9d. THE RETENTION SWEEPS DO NOT SCAN');
+{
+  const RETENTION = [
+    ['telemetry', 'at', `INSERT INTO telemetry (id, event, props, at)
+       SELECT md5('pgr'||g::text), 'crime', '{}', now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+    ['chat_messages', 'at', `INSERT INTO chat_messages (id, channel, character_id, name, body, at)
+       SELECT md5('pgr'||g::text), 'city', (SELECT id FROM characters LIMIT 1), 'n', 'b',
+              now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+    ['dm_messages', 'at', `INSERT INTO dm_messages (id, from_account, to_account, from_name, to_name, body, at)
+       SELECT md5('pgr'||g::text), gen_random_uuid(), gen_random_uuid(), 'a', 'b', 'c',
+              now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+    ['duels', 'at', `INSERT INTO duels (id, account_a, account_b, winner_account, day, at)
+       SELECT md5('pgr'||g::text), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 1,
+              now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+    ['idempotency', 'created_at', `INSERT INTO idempotency (account_id, key, status, body_hash, response, created_at)
+       SELECT 'pgr', md5('pgr'||g::text), 1, 'h', '{}', now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+    ['event_results', 'resolved_at', `INSERT INTO event_results (id, kind, icon, headline, resolved_at)
+       SELECT md5('pgr'||g::text), 'k', 'i', 'h', now() - (random() * interval '3 days') FROM generate_series(1,5000) g`],
+  ];
+  for (const [table, col, seed] of RETENTION) {
+    await pool.query(seed);
+    await pool.query(`ANALYZE ${table}`);
+    const n = Number((await pool.query(`SELECT count(*) n FROM ${table}`)).rows[0].n);
+    // the cutoff is PAST every seeded row on purpose: a sweep in its steady state deletes a small tail,
+    // and a filter matching most of the table would make a seq scan the right plan again.
+    const plan = (await pool.query(
+      `EXPLAIN DELETE FROM ${table} WHERE ${col} < now() - interval '30 days'`))
+      .rows.map((r) => r['QUERY PLAN']).join('\n');
+    check(n >= 5000, `${table} is big enough that a scan would be the WRONG plan`, `only ${n} rows`);
+    check(!new RegExp(`Seq Scan on ${table}`).test(plan),
+      `the ${table} retention sweep uses an index on ${col}, not a full scan`,
+      `the planner chose a sequential scan:\n      ${plan.replace(/\n/g, '\n      ')}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n10. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land

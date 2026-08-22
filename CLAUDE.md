@@ -16756,3 +16756,70 @@ ARTICLE LEDGER lesson). Both halves mutation-verified by name.
 gate, it wants a big seeded database, and a threshold that failed the build would sit either so high it
 never fires or so low it fires on the flat boards and gets routed around. What it FINDS gets the real
 guard, and that guard does run.
+**THE TICK NOBODY HAD TIMED — `tools/workercost.js`, and eight retention sweeps reading the whole table
+(2026-08-22).** `tools/pollcost.js` sizes what an idle PLAYER costs and `tools/boardcost.js` what a polled
+BOARD costs; **neither can see the WORKER**, and it is the surface with the sharpest consequence. A slow
+board costs one player a slow screen; a slow worker costs everything at once and says nothing — the
+nightly §10.4 drift monitor, the backup watchdog, the oracle-keeper watchdog, every timed settlement and
+every expiry refund all live on the same tick, so a worker that falls behind is indistinguishable from a
+quiet night, which is exactly why `worker_heartbeat` had to be built (BLUE-TEAM C2). It fans out to
+**116 jobs** and not one of them had ever been timed. `tools/workercost.js` (`npm run workercost`, the
+13th harness) seeds a population AND the eight log tables that grow without a player doing anything
+special, then times every job **worst-first**. Real Postgres only, for boardcost's reason: pg-mem is a
+different planner and disagrees about exactly this shape.
+
+**THE METHOD IS THE FIRST RUN, NOT THE MEDIAN, and the two numbers together are the signal.** A retention
+DELETE run twice measures a DRAINED table the second time, so reporting the median alone would be
+measuring the wrong thing; the loop is **job-major** (first run, then the median of five more, back to
+back) and a large gap between them means the job's cost is proportional to the backlog it met — the shape
+that grows with the life of the server. Nine of the tick's jobs are inline `pool.query()` DELETEs rather
+than exported functions, so timing them means restating their SQL — and a restatement rots (preflight's
+own ledger exists for that class), so each is **CROSSED against `src/worker.js`**: a statement this file
+times must appear verbatim in the tick or the run fails rather than quietly measuring a query the game no
+longer runs. Catalogue-or-declare on top: every one of the 116 labels is timed (**85**) or **DECLARED**
+untimeable with the property that makes it so (**31** — the 13 alert jobs, whose cost is an outbound
+webhook rather than a query, and the 18 chain syncs, which are dormant without an RPC reader), with a
+stale-entry check both ways.
+
+**AND ITS FIRST RUN LIED — every log seed failed and it printed a confident table anyway.** The seeds were
+written against remembered column names (`notifications.at` is `created_at`, `chat_messages` takes
+`character_id`/`body` not `account_id`/`text`, the `id` columns are TEXT with no default), so the whole
+accumulation half inserted nothing and 85 jobs were sized against EMPTY tables — *a job with nothing to do
+reads exactly like a cheap job*, the vacuity class in its newest costume. It only surfaced because the
+seed failures were printed. A failed seed is **FATAL** now rather than a warning, for that reason.
+
+**THE FINDING: eight of the nine retention sweeps had no index leading with the column they filter.** The
+tick prunes nine growing tables on a wall-clock window, hourly, forever — and `event_results(resolved_at)`
+was the ONE that had an index, on the LOWEST-volume table of the set, which is the forgotten-sibling shape
+rather than a reason. At 36k rows a seq scan is cheap and the harness correctly showed nothing much; the
+measurement that decides it is at REAL scale, taken directly rather than argued: **1M telemetry rows with
+the ordinary steady-state tail past the window — 186 ms / 13,387 buffers seq-scanning, 1.1 ms / 2,028 with
+the index.** The scan grows with the table forever while the delete it performs stays a constant small
+tail. **Five indexes, not nine, and the split is the decision**: the ones indexed are those whose size is
+proportional to REQUEST or EVENT volume and unbounded between sweeps (`telemetry`, `idempotency`,
+`chat_messages`, `dm_messages`, `duels`); the three deliberately left are bounded BY CONSTRUCTION and an
+index there would cost writes for nothing — `oauth_states` holds at most **30 MINUTES** of sign-in
+attempts, `vendettas` only feuds still live, `gala_guests` only a 4h window's guests. The retention writes
+are append-at-the-right-edge (`at ≈ now()`), the cheapest btree maintenance there is.
+
+**The guard is `pgcheck` §9d, behavioural and SEEDED, for §9c's reason** — a text check that `schema.sql`
+contains the CREATE INDEX line proves nothing about the planner, and on a small table a sequential scan is
+the CORRECT plan, so a check that skipped the seeding would pass for reasons having nothing to do with the
+index. It EXPLAINs the real DELETE on each of the six indexed retention columns at 5,000 rows, with the
+cutoff set PAST every seeded row on purpose (a filter matching most of the table makes a seq scan right
+again). Mutation-verified both ways: drop the telemetry index and it fails by name printing the plan;
+shrink the seed to three rows and the non-vacuity assertion fires (*"only 48 rows"*) with the planner
+correctly choosing a seq scan beside a live index — the vacuity demonstrated rather than argued.
+
+**Flagged, measured, NOT changed:** the season rollover is **linear in the population and by far the
+largest job in the game** — ~800 ms at 300 players, **6,967 ms at 3,000**, i.e. ~2.3 ms per character, so a
+50,000-player server spends ~2 minutes in one job. It is once per 28 days and `safe()` isolates ERRORS but
+not LATENCY, so on rollover night every other job on that tick — the drift monitor included — is that late,
+once. Self-correcting and inside a signed design (batched per-character transactions), so it is recorded
+rather than restructured; it is timed LAST in the harness on purpose, since a rollover rewrites every
+character row and anything after it would be sized against a converted fixture. Everything else is flat:
+`§10.4 invariants` 47 → 87 ms (it grows with the ledger, which is what it reads), `population` 33 → 37,
+`resident behaviour` 13 → 13. **`workercost` is deliberately NOT in CI**, on `boardcost`'s own argument: it
+is a measurement rather than a gate, it wants a big seeded database, and a threshold would sit either so
+high it never fires or so low it fires on the flat jobs and gets routed around. What it FINDS gets the real
+guard, and that guard runs.

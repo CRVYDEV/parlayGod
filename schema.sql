@@ -2513,6 +2513,24 @@ CREATE TABLE IF NOT EXISTS duels (
 );
 CREATE INDEX IF NOT EXISTS ix_duels_pair_day ON duels (account_a, account_b, day);
 
+-- THE RETENTION COLUMNS (2026-08-22, workercost). The tick prunes nine tables on a wall-clock window,
+-- and eight of the nine filtered a column with no index that leads with it — event_results was the one
+-- exception, on the LOWEST-volume table of the set, which is the forgotten-sibling shape rather than a
+-- reason. Measured on real Postgres at 1M telemetry rows with the ordinary steady-state tail past the
+-- window: 186ms / 13,387 buffers seq-scanning, 1.1ms / 2,028 with the index. The sweep runs hourly and
+-- the scan grows with the table forever while the delete it performs stays a constant small tail.
+-- The five indexed here are the ones whose size is proportional to REQUEST or EVENT volume and which
+-- grow without bound between sweeps. The three deliberately NOT indexed are bounded by construction and
+-- an index on them would cost writes for nothing: oauth_states holds at most 30 MINUTES of sign-in
+-- attempts, vendettas holds only feuds that are still live, gala_guests only a 4h window's guests, and
+-- event_results already has one. The retention writes are append-at-the-right-edge (at ≈ now()), which
+-- is the cheapest btree maintenance there is.
+CREATE INDEX IF NOT EXISTS ix_telemetry_at ON telemetry (at);
+CREATE INDEX IF NOT EXISTS ix_chat_at ON chat_messages (at);
+CREATE INDEX IF NOT EXISTS ix_dm_at ON dm_messages (at);
+CREATE INDEX IF NOT EXISTS ix_duels_at ON duels (at);
+CREATE INDEX IF NOT EXISTS ix_idempotency_created ON idempotency (created_at);
+
 -- CLUE SCROLLS (slate #4 — the RuneScape treasure trail): a rare crime drop starts a multi-step
 -- riddle hunt derived from the §7.11 seed; the final dig opens a CASKET (a bounded cash faucet).
 -- One active scroll per street; it DIES with the street (DISPOSITION: wiped).
