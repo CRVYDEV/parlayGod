@@ -1405,3 +1405,195 @@ const SCENERY_WAIVED = {
   console.log(`✓ all ${names} refusal messages naming a catalog rung let the NAME supply its own article`);
 }
 
+// ═══ THE RAW-KEY LEDGER — a catalog id is not a name ══════════════════════════════════════════════
+// `describe()` has no catalog of its own, so a reply that sends a catalog `id` where a display NAME
+// belongs leaves the client nothing to print but the key: "the payroll came off HOT" on the biggest
+// co-op payout in the game, "the laundro is yours" on a racket purchase, "the Coast Guard took the
+// deeprun run" on the wire. The fix is always the same and always at the SOURCE — send the name with
+// the id — which is why this is a guard rather than a sweep: the class has been paid for six separate
+// times now (npcName, taskLabel, goodName, the cartels, drugs+goods, and the twelve fixed here), each
+// time in a system nobody had driven yet, and each time one verb of a loop already had it right while
+// its siblings did not. `heists.js` sent `job.name` on the PLAN and the id on all five terminal
+// replies; `races.js` still emits `race: tier.name` to the STREETS feed while the racer's own reply
+// carried the id. The town was told the name and the man who did it was told a key.
+//
+// The rule: inside a player-visible payload — a `return {…}` or a `notify(…, {…})`, never a `ledger`
+// or `track` row — a property `k: X.id` must be accompanied by a display name in the same literal
+// (`name`, `title`, `label`, or `<k>Name`), or be DECLARED below with the property that makes it safe.
+// Two things make it checkable rather than a matter of taste. A HANDLE is named by convention
+// (`carId`, `heistId`, `character_id`) and is skipped outright — that convention is the discriminator,
+// so a field named for the thing rather than for its id is asserting it IS the thing. And the waivers
+// are keyed on (file, key) rather than on a line: a line-keyed waiver rots on any edit above it, which
+// is what the connection ledger's viem waivers cost once already.
+//
+// Scope, stated because it is narrower than it looks: this proves a reply CAN be rendered without a
+// raw key, not that the client renders it. The client half is the ACTION LEDGER in test/client.js,
+// which drives the line and reads it back.
+{
+  // (file, key) → why this id needs no name beside it. A waiver is a claim about the FIELD, and each
+  // one has to stay true: the stale check below fails if a waived site stops existing.
+  const WAIVED = {
+    'casino.js:futurity':   'a DB row id — the open card the client posts back to, never rendered as prose',
+    'casino.js:tournament': 'a DB row id — the handle for the follow-up call',
+    'market.js:listing':    'a DB row id — the handle a bid/buy/cancel posts back to',
+    'market.js:cancelled':  'the DB row id of the listing just pulled — an acknowledgement, not a name',
+    'races.js:grandPrix':   'a DB row id — the open race the entry posts back to',
+    'stable.js:stakes':     'a DB row id — the open stakes race',
+    'port.js:boat':         'a boats row id — the vessel is named by its own catalog elsewhere',
+    'port.js:to':           'a CHARACTER id — the rendezvous partner, named by `name` on the board',
+    'defense.js:guard':     'a CHARACTER id — the bodyguard hired, not a catalog rung',
+    'population.js:band':   'an internal spawn return, never a player-facing reply',
+    'favors.js:good':       'the client resolves it through goodName off the published /v1/rules catalog',
+    'game.js:approach':     'published on /v1/rules; the client COMPARES it to pick a phrase, never renders it',
+    'combat.js:intent':     'published on /v1/rules; compared, never rendered (the approach precedent)',
+    'rules.tail.js:rarity': 'a catalog helper return — its callers attach the display name',
+  };
+  const seen = new Set();
+  const bad = [];
+  let corpus = 0;
+  const literals = (s) => {                                   // return-literals and notify payloads
+    const out = [];
+    for (const m of s.matchAll(/(return\s*\{|notify\([^;]{0,200}?,\s*\{)/g)) {
+      const i = s.indexOf('{', m.index);
+      let d = 0;
+      for (let j = i; j < Math.min(s.length, i + 4000); j++) {
+        if (s[j] === '{') d++;
+        else if (s[j] === '}' && --d === 0) { out.push(s.slice(i, j + 1)); break; }
+      }
+    }
+    return out;
+  };
+  for (const f of files) {
+    const s = fs.readFileSync(f, 'utf8');
+    const base = f.split('/').pop();
+    for (const lit of literals(s)) {
+      for (const m of lit.matchAll(/\b(\w+):\s*(\w+)\.id\b/g)) {
+        const [, k, src] = m;
+        // a HANDLE says so in its own name — `carId`, `heistId`, `character_id`, or the bare `id`
+        if (k === 'id' || /Id$/.test(k) || /_id$/.test(k)) continue;
+        corpus++;
+        const named = new RegExp(`\\b(name|title|label|${k}Name)\\s*:`).test(lit)
+          || new RegExp(`:\\s*${src}\\.(name|title|label)\\b`).test(lit);
+        if (named) continue;
+        const key = `${base}:${k}`;
+        if (WAIVED[key]) { seen.add(key); continue; }
+        bad.push(`${f} — ${k}: ${src}.id`);
+      }
+    }
+  }
+  // anti-vacuity: an extractor that has stopped finding payload literals reports zero problems and
+  // reads exactly like a clean bill of health — the shape that has cost this project five sessions.
+  assert(corpus > 50, `THE RAW-KEY LEDGER found only ${corpus} catalog-id payload fields — the `
+    + 'extractor is broken, not the tree. A scan that sees nothing passes for a clean sweep.');
+  const stale = Object.keys(WAIVED).filter((k) => !seen.has(k));
+  assert.deepEqual(stale, [], 'RAW-KEY waiver(s) that no longer match a site. A waiver is a decision '
+    + `about a field that exists; one pointing at nothing is a decision nobody is making:
+   - ${stale.join('\n   - ')}`);
+  assert.deepEqual(bad, [], 'player-visible payload(s) sending a catalog id with no display name. The '
+    + 'client has no catalog handle, so it can print nothing but the key — "the payroll came off HOT". '
+    + `Send the name with the id, or declare the field in WAIVED with the property that makes it safe:
+   - ${bad.join('\n   - ')}`);
+  console.log(`✓ all ${corpus} catalog ids in player-visible payloads carry a name (${Object.keys(WAIVED).length} declared handles)`);
+
+  // ── THE WIRE HALF ─────────────────────────────────────────────────────────────────────────────
+  // The rule above matches `k: X.id` — deliberately narrow and high-signal. The WIRE ships its ids
+  // under three other shapes (`X.good_id`, `boat.run_route`, a bare `trackId`), and widening the
+  // SERVER rule to catch them flags 40 sites of which most are the RIGHT architecture: an id the
+  // client resolves off a published catalog (goodName/discName/$d — the goodName precedent). A rule
+  // that is mostly wrong is one people route around.
+  //
+  // So the wire is checked at the INTERSECTION — a payload field a feedText template actually
+  // renders — which is narrow enough to be a hard rule. Three things are decidable there, and the
+  // FIRST cut of this check had only one of them and was very nearly vacuous: it looked for a bare
+  // `${d.x}`, so `${art(d.routeName || d.route)}` hid the raw fallback and four of five mutations
+  // survived. The `|| d.rawId` tail is CORRECT code (a queued notification predating the field must
+  // still render something), so the property is not "don't fall back" — it is "the server sends the
+  // name", which only a server-side rule can hold.
+  {
+    const payloads = {};
+    for (const f of files) {
+      const s2 = fs.readFileSync(f, 'utf8');
+      // BOTH feeds: a personal notify() and a streets bus.emit() are rendered by the same feedText,
+      // and the same type can arrive in two shapes from the two of them (the wire ledger's rule 2).
+      // Reading only notify() is how the first cut passed a streets emit shipping `run: run.runId`.
+      // Two loops rather than one alternation, because each ends at its own payload brace — a shared
+      // pattern whose tail is optional lands the brace index past it and reads the NEXT literal.
+      const feeds = [
+        [/notify\([^;]{0,200}?,\s*'(\w+)'\s*,\s*\{/g, 0],
+        [/bus\.emit\('streets',\s*\{\s*type:\s*'(\w+)'/g, 1],
+      ];
+      for (const [re, kind] of feeds) {
+        for (const m of s2.matchAll(re)) {
+          const i = kind ? s2.indexOf('{', m.index) : m.index + m[0].length - 1;
+          let d = 0, j = i;
+          for (; j < Math.min(s2.length, i + 2000); j++) {
+            if (s2[j] === '{') d++;
+            else if (s2[j] === '}' && --d === 0) break;
+          }
+          (payloads[m[1]] ||= []).push([f, s2.slice(i, j + 1)]);
+        }
+      }
+    }
+    // (c) field names whose value is a catalog id in EVERY payload that ships them — the client has
+    // a module-scope resolver for each, so a BARE render is the defect. Catalogue-or-declare: a new
+    // one is a decision, not a silent regression.
+    const RESOLVE = {
+      good:       'goodName() off the published /v1/rules goods catalog',
+      discipline: 'discName() off /v1/rules.regimen.disciplines',
+      district:   'the $d() resolver feedText declares at its own scope',
+    };
+    const cli = fs.readFileSync('public/index.html', 'utf8');
+    const a = cli.indexOf('function feedText('), b = cli.indexOf('\n  function ', a + 10);
+    assert(a > 0 && b > a, 'feedText not found — the wire extractor is reading nothing');
+    const ft = cli.slice(a, b);
+    const raw = new Set();
+    let templates = 0, watched = 0;
+    for (const m of ft.matchAll(/(\w+): \(\) =>[^\n]*/g)) {
+      templates++;
+      const [line, type] = [m[0], m[1]];
+      // (c) a bare interpolation of a known catalog-id field
+      for (const mm of line.matchAll(/\$\{d\.(\w+)\}/g)) {
+        if (RESOLVE[mm[1]]) raw.add(`${type}.${mm[1]} renders the raw id — resolve it with ${RESOLVE[mm[1]]}`);
+      }
+      for (const [f, lit] of payloads[type] || []) {
+        // (a) the template naming `d.<k>Name` is an assertion that the server sends it
+        for (const mm of line.matchAll(/\bd\.(\w+)Name\b/g)) {
+          watched++;
+          if (!new RegExp(`\\b${mm[1]}Name\\s*:`).test(lit)) {
+            raw.add(`${type}.${mm[1]}Name — the line reads it, ${f} does not send it (it falls back to the id)`);
+          }
+        }
+        // (b) a rendered field the payload ships as an id must come with a display name
+        for (const mm of line.matchAll(/\bd\.(\w+)\b/g)) {
+          const k = mm[1];
+          if (k === 'type' || /Name$/.test(k)) continue;
+          if (RESOLVE[k]) continue;                                // (c) governs these: the client resolves them
+          const v = new RegExp(`\\b${k}:\\s*([^,\\n}]+)`).exec(lit);
+          if (!v) continue;
+          const e = v[1].trim();
+          if (/\bname\b/.test(e)) continue;                        // resolved at the source
+          // a plain member access only — `shares[m.id]` and `x && winner.id === y` are not ids
+          if (!/^[\w.?]+$/.test(e) || !/\.(id|\w*_id)\b|\w+Id\b/.test(e)) continue;
+          watched++;
+          if (!new RegExp(`\\b(name|${k}Name)\\s*:`).test(lit)) {
+            raw.add(`${type}.${k} — ${f} sends ${e} with no display name beside it`);
+          }
+        }
+      }
+    }
+    // anti-vacuity, both halves: an extractor that has stopped reading the client, and a rule that
+    // has stopped GOVERNING anything — the first cut of this check policed nine sites and could not
+    // fail on any of the five it was written for.
+    assert(templates > 100, `the wire extractor read only ${templates} feedText templates — it has `
+      + 'stopped seeing the client, and a sweep that reaches nothing reads exactly like one that passes');
+    assert(watched >= 15, `the wire rule governs only ${watched} rendered payload fields — it has `
+      + 'stopped matching, which reads identically to a clean tree');
+    assert.deepEqual([...raw], [], 'a wire line renders a catalog id where a name belongs. feedText '
+      + 'has no catalog handle for most of these, so the fix is at the SOURCE (ship the name beside '
+      + `the id — the routeName precedent) or through a module-scope resolver:
+   - ${[...raw].join('\n   - ')}`);
+    console.log(`  ✓ no wire line renders a raw catalog id (${watched} rendered id fields across ${templates} templates)`);
+  }
+
+}
+

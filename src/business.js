@@ -463,14 +463,14 @@ async function extortFront(ch, victim, businessId, client, h, verb) {
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR); // the code respects settled scores
     if (!rob) await bumpMastery(client, h, ch, 'muscle', 'shakedown'); // THE TRADES — extortion is the protection craft
     bus.emit('streets', { type: verb, by: ch.name, on: victim.name, kind: r.kind });
-    return { ok: true, win: true, kind: r.kind, cut, revenge, ...(rob ? { robbed: true } : {}) };
+    return { ok: true, win: true, kind: r.kind, name: businessOf(r.kind)?.name || r.kind, cut, revenge, ...(rob ? { robbed: true } : {}) };
   }
   if (rob) {
     // pinched at the register — a failed robbery is a CRIME caught in the act
     ch.jail_until = new Date(Date.now() + RIVALS.ROB_JAIL_S * 1000);
     await h.notify(client, victim.id, 'rob_failed', { from: ch.name, kind: r.kind });
     await recordRival(client, victim.account_id, ch, verb, { kind: r.kind, failed: true });
-    return { ok: true, win: false, kind: r.kind, cut: 0, robbed: true, jailedS: RIVALS.ROB_JAIL_S };
+    return { ok: true, win: false, kind: r.kind, name: businessOf(r.kind)?.name || r.kind, cut: 0, robbed: true, jailedS: RIVALS.ROB_JAIL_S };
   }
   // the front's security saw you off
   ch.health = Math.max(1, Number(ch.health) - rand(10, 25));
@@ -502,7 +502,7 @@ export async function specializeBusiness(ch, businessId, spec, client, h) {
   await spendOmr(client, h, BUSINESS_EMPIRE.SPEC_OMR, 'business:spec'); // throws 'omr' if short
   await client.query('UPDATE businesses SET spec=$2, spec_at=now() WHERE id=$1', [businessId, spec]);
   h.owned.businesses = await businessesOf(client, ch.id);
-  return { ok: true, kind: r.kind, spec, name: BUSINESS_EMPIRE.SPECS[spec].name, spent: BUSINESS_EMPIRE.SPEC_OMR };
+  return { ok: true, kind: r.kind, kindName: businessOf(r.kind)?.name || r.kind, spec, name: BUSINESS_EMPIRE.SPECS[spec].name, spent: BUSINESS_EMPIRE.SPEC_OMR };
 }
 
 // reset ALL mutable front state on a change of hands — a seized/bought front is never born hot/cold/

@@ -109,7 +109,7 @@ export async function joinHeist(ch, heistId, wantRole, client, h) {
   const role = pickRole(job, wantRole, taken);
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [heistId, ch.id, role]);
   await h.track(client, ch.account_id, 'heist_join', { job: job.id });
-  return { ok: true, op: 'heist', id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
+  return { ok: true, op: 'heist', id: heistId, job: job.id, name: job.name, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
 }
 
 // FILL — the leader hires an NPC RESIDENT into an open seat (residents-in-crews). A hired hand is a
@@ -155,7 +155,7 @@ export async function fillHeist(ch, heistId, wantRole, client, h) {
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role, hired) VALUES ($1,$2,$3,true)', [heistId, free.id, role]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -HEIST_FILL_FEE, reason: 'heist:hire' });
   await h.track(client, ch.account_id, 'heist_fill', { job: job.id, role });
-  return { ok: true, id: heistId, job: job.id, role, hired: true, fee: HEIST_FILL_FEE,
+  return { ok: true, id: heistId, job: job.id, name: job.name, role, hired: true, fee: HEIST_FILL_FEE,
            crew: members.length + 1, crewNeeded: job.crew - members.length - 1 };
 }
 
@@ -312,7 +312,7 @@ export async function executeHeist(ch, heistId, client, h) {
     }
     await h.rngLog(client, ch.id, `heist:${job.id}`, 0, 'blown — somebody talked');
     bus.emit('streets', { type: 'heist_blown', job: job.name });
-    return { ok: true, blown: true, job: job.id, message: 'The law was waiting. Somebody talked.' };
+    return { ok: true, blown: true, job: job.id, name: job.name, message: 'The law was waiting. Somebody talked.' };
   }
 
   // the roll — the job sets the floor; step two reads each member's stat FOR THEIR ROLE (x3, so
@@ -394,7 +394,7 @@ export async function executeHeist(ch, heistId, client, h) {
     }
     await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, hot });
     bus.emit('streets', { type: 'heist_score', job: job.name, pot, crew: crewRows.length });
-    return { ok: true, score: true, job: job.id, pot, share: hot ? 0 : shares[ch.id], hot: hot ? shares[ch.id] : 0, rep: job.rep };
+    return { ok: true, score: true, job: job.id, name: job.name, pot, share: hot ? 0 : shares[ch.id], hot: hot ? shares[ch.id] : 0, rep: job.rep };
   }
 
   // the bust — the whole crew goes down together (an inside-job mark hears about the attempt)
@@ -405,7 +405,7 @@ export async function executeHeist(ch, heistId, client, h) {
   }
   if (biz) await h.notify(client, biz.character_id, 'inside_job_failed', { kind: biz.kind });
   bus.emit('streets', { type: 'heist_bust', job: job.name, crew: crewRows.length });
-  return { ok: true, score: false, job: job.id, jailSeconds: job.jailS };
+  return { ok: true, score: false, job: job.id, name: job.name, jailSeconds: job.jailS };
 }
 
 // The board: the catalog, open jobs looking for crew, and my active job (rat flags NEVER surface).

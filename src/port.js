@@ -217,7 +217,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
       await client.query('UPDATE characters SET contraband = contraband + $2 WHERE id=$1', [ch.id, sale]);
       await clearRun();
       await h.track(client, ch.account_id, 'port', { act: 'warehouse', route: route.id, value: sale });
-      return { ok: true, interdicted: false, warehoused: sale, cost: Number(boat.run_cost), route: route.id };
+      return { ok: true, interdicted: false, warehoused: sale, cost: Number(boat.run_cost), route: route.id, routeName: route.name };
     }
     // FENCE NOW (the default) — land it straight to cash at the route rate (a bounded faucet)
     ch.cash = Number(ch.cash) + sale;
@@ -225,9 +225,9 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
     await bumpSmuggled(client, ch.account_id, sale); // THE SMUGGLER'S LEGEND (status, survives death)
     const toll = await harborToll(client, h, ch, sale, rep.tollMult); // THE HARBORMASTER (step three): docks-holder toll (rep T2 halves it)
     await clearRun();
-    if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.name, value: sale });
+    if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.id, routeName: route.name, value: sale });
     await h.track(client, ch.account_id, 'port', { act: 'land', route: route.id, sale, toll });
-    return { ok: true, interdicted: false, landed: sale, cost: Number(boat.run_cost), net: sale - Number(boat.run_cost) - toll, toll, route: route.id };
+    return { ok: true, interdicted: false, landed: sale, cost: Number(boat.run_cost), net: sale - Number(boat.run_cost) - toll, toll, route: route.id, routeName: route.name };
   }
   // INTERDICTED — cargo seized, a fine (pocket then bank, the raid-fine precedent), heat, and maybe the boat sinks
   const fine = Math.min(Math.floor(Number(boat.run_cost) * PORT.FINE_RATE), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
@@ -245,9 +245,9 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   await clearIntercepts(client, boat.id);
   if (boatLost) await client.query('DELETE FROM boats WHERE id=$1', [boat.id]);
   else await client.query('UPDATE boats SET run_until=NULL, run_route=NULL, run_hold=0, run_cost=0, run_escort=false WHERE id=$1', [boat.id]);
-  await h.notify(client, ch.id, 'port_bust', { route: route.id, fine, sunk: boatLost });
+  await h.notify(client, ch.id, 'port_bust', { route: route.id, routeName: route.name, fine, sunk: boatLost });
   await h.track(client, ch.account_id, 'port', { act: 'bust', route: route.id, fine, sunk: boatLost });
-  return { ok: true, interdicted: true, seized: Number(boat.run_hold), fine, sunk: boatLost, route: route.id };
+  return { ok: true, interdicted: true, seized: Number(boat.run_hold), fine, sunk: boatLost, route: route.id, routeName: route.name };
 }
 
 // POST /v1/port/fence — sell ALL warehoused contraband at today's drifting fence rate (a bounded cash faucet).
@@ -339,8 +339,8 @@ export async function interceptRun(ch, targetBoatId, client, h) {
     if (take > 0) { await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'port:piracy' }); await bumpSmuggled(client, ch.account_id, take); }
     await client.query('UPDATE boats SET run_until=NULL, run_route=NULL, run_hold=0, run_cost=0, run_escort=false WHERE id=$1', [targetBoatId]);
     await clearIntercepts(client, targetBoatId);
-    await h.notify(client, boat.character_id, 'port_pirated', { route: boat.run_route, taken: take });
-    if (take >= 250000) bus.emit('streets', { type: 'port_piracy', by: ch.name, route: route?.name });
+    await h.notify(client, boat.character_id, 'port_pirated', { route: boat.run_route, routeName: route?.name, taken: take });
+    if (take >= 250000) bus.emit('streets', { type: 'port_piracy', by: ch.name, route: route?.id, routeName: route?.name });
     await bumpMastery(client, h, ch, 'seamanship', 'piracy'); // THE TRADES — a prize taken at sea
     await h.track(client, ch.account_id, 'port', { act: 'piracy', win: true, take });
     return { ok: true, win: true, take, route: boat.run_route };
@@ -348,7 +348,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
   // outrun — the run's escort/guns put the pirate in the water
   ch.health = Math.max(1, Number(ch.health) - (20 + rand(20)));
   ch.hosp_until = new Date(Date.now() + S.FAIL_HOSP_MS);
-  await h.notify(client, boat.character_id, 'port_defended', { route: boat.run_route });
+  await h.notify(client, boat.character_id, 'port_defended', { route: boat.run_route, routeName: route?.name });
   await h.track(client, ch.account_id, 'port', { act: 'piracy', win: false });
   return { ok: true, win: false, hospSeconds: Math.ceil(S.FAIL_HOSP_MS / 1000) };
 }
@@ -390,7 +390,7 @@ export async function rendezvous(ch, myBoatId, partnerBoatId, client, h) {
   await client.query('UPDATE boats SET run_until=NULL, run_route=NULL, run_hold=0, run_cost=0, run_escort=false WHERE id=$1', [mine.id]);
   await clearIntercepts(client, mine.id);
   await clearIntercepts(client, partner.id);
-  await h.notify(client, partner.character_id, 'port_handoff', { route: mine.run_route, hold: Number(mine.run_hold) });
+  await h.notify(client, partner.character_id, 'port_handoff', { route: mine.run_route, routeName: route?.name, hold: Number(mine.run_hold) });
   await h.track(client, ch.account_id, 'port', { act: 'rendezvous', route: mine.run_route });
   return { ok: true, to: partner.id, route: mine.run_route, hold: Number(mine.run_hold) };
 }

@@ -100,7 +100,7 @@ export async function boostCar(ch, client, h) {
     if (run) {
       await h.rngLog(client, ch.id, 'limited:run', runRoll, `${run.runId} ${run.serial}/${run.cap}`);
       await logCollect(client, ch.account_id, 'runs', run.runId);
-      bus.emit('streets', { type: 'limited_run', who: ch.name, run: run.name, serial: run.serial, cap: run.cap });
+      bus.emit('streets', { type: 'limited_run', who: ch.name, run: run.runId, name: run.name, serial: run.serial, cap: run.cap });
       await notify(client, ch.id, 'limited_run', { run: run.runId, name: run.name, serial: run.serial, cap: run.cap });
     }
     await logCollect(client, ch.account_id, 'cars', model.id); // THE COLLECTION
@@ -359,7 +359,7 @@ export async function buyRacket(ch, racketId, client, h) {
   h.owned.rackets.push(r.id);
   if (h.owned.racketLevels) h.owned.racketLevels[r.id] = 0;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -r.cost, reason: `racket:buy:${r.id}` });
-  return { ok: true, racket: r.id, income: r.income };
+  return { ok: true, racket: r.id, name: r.name, income: r.income };
 }
 
 // THE DOOR OUT (the OPERATION SLOTS' other half — the BUSINESS_SHUTTER_BPS precedent). A slot cap
@@ -379,7 +379,7 @@ export async function retireRacket(ch, racketId, client, h) {
     ch.cash = Number(ch.cash) + back;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: back, reason: `racket:retire:${r.id}` });
   }
-  return { ok: true, racket: r.id, back, slotsUsed: opsUsed(h), slots: opsSlots(ch, h) };
+  return { ok: true, racket: r.id, name: r.name, back, slotsUsed: opsUsed(h), slots: opsSlots(ch, h) };
 }
 
 // ASSETS & RACKETS → Tier 4 — RACKET UPGRADES: buy the next level of a racket you run; its accrual
@@ -397,7 +397,7 @@ export async function upgradeRacket(ch, racketId, client, h) {
   await client.query('UPDATE character_rackets SET level=$1 WHERE character_id=$2 AND racket_id=$3', [level + 1, ch.id, r.id]);
   if (h.owned.racketLevels) h.owned.racketLevels[r.id] = level + 1;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'racket:upgrade' });
-  return { ok: true, racket: r.id, level: level + 1, cost,
+  return { ok: true, racket: r.id, name: r.name, level: level + 1, cost,
     incomePerHr: Math.floor(racketIncomeLeveled(r.id, level + 1) * 60) };
 }
 
@@ -427,7 +427,7 @@ export async function buyAsset(ch, assetId, client, h) {
   h.owned.assets.push(a.id);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(a.price + fee + tax), reason: `asset:buy:${a.id}` });
   await takeHouse(client, tax);
-  return { ok: true, asset: a.id };
+  return { ok: true, asset: a.id, name: a.name };
 }
 
 export async function sellAsset(ch, assetId, client, h) {
@@ -442,7 +442,7 @@ export async function sellAsset(ch, assetId, client, h) {
   h.owned.assets = h.owned.assets.filter((id) => id !== a.id);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `asset:sell:${a.id}` });
   await takeHouse(client, tax);
-  return { ok: true, asset: a.id, earned: net };
+  return { ok: true, asset: a.id, name: a.name, earned: net };
 }
 
 // ═══════════════════ THE AMM — RETIRED (tokenomics v2 step 2) ═══════════════════
@@ -600,7 +600,7 @@ export async function buyVest(ch, vestId, client, h) {
   h.acct.omr = Number(h.acct.omr) - v.omr;
   ch.vest = vestId;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -v.omr, reason: `vest:${vestId}` });
-  return { ok: true, vest: vestId, mult: v.mult };
+  return { ok: true, vest: vestId, name: v.name, mult: v.mult };
 }
 
 export async function buyAmmo(ch, client, h) {

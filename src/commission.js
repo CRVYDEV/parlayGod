@@ -149,7 +149,7 @@ export async function proposeDecree(ch, decreeId, client, h) {
   } catch { throw new GameError('proposed', 'The family already has a motion on the table this week.'); }
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, deposit]);
   await h.ledger(client, { currency: 'cash', amount: -deposit, reason: 'commission:proposal', counterparty: h.owned.gangId });
-  bus.emit('streets', { type: 'commission_proposal', family: seats.find((s) => s.id === h.owned.gangId)?.name, decree: decreeId });
+  bus.emit('streets', { type: 'commission_proposal', family: seats.find((s) => s.id === h.owned.gangId)?.name, decree: decreeId, name: decreeOf(decreeId)?.name });
   await h.track(client, ch.account_id, 'commission_proposal', { decree: decreeId, week, deposit });
   return { ok: true, week, decree: decreeId, deposit, takesEffectWeek: week + 1 };
 }
@@ -231,7 +231,7 @@ export async function vetoDecree(ch, client, h) {
   await bumpStatecraft(client, ch.account_id, COMMISSION.STATECRAFT_VETO); // wielding the veto is political capital
   bus.emit('streets', { type: 'commission_veto', family: seats[0].name, decree: decree.id });
   await h.track(client, ch.account_id, 'commission_veto', { decree: decree.id, week });
-  return { ok: true, vetoed: decree.id, week };
+  return { ok: true, vetoed: decree.id, name: decree.name, week };
 }
 
 // THE OVERRIDE (Tier-4) — the parliamentary check on the head veto. A SEATED FLOOR family (any seat

@@ -16507,3 +16507,76 @@ STALE `origin/main` ref and the merge is a silent no-op that reads exactly like 
 reproduce". **The rule earned twice over: a guard that asserts a number about "the project" must ask
 git what the project is AND must not believe the index mid-operation — and a figure measured once
 independently should not be overwritten by a tool's reading without asking why they disagree.**
+
+**PLAY WAVE 60 — THE RAW-KEY LEDGER, AND THE HALF OF ITS OWN CLASS IT COULD NOT SEE (2026-08-22).**
+Waves 45–59 fixed the raw-key class one instance at a time (`npcName`/`taskLabel`/`goodName`/
+`routeName`/`outfit`/the drug and goods catalogs — six waves, six sites), so this wave converted it
+into a guard: **THE RAW-KEY LEDGER** in `test/gates.js`, the ninth catalogue-or-declare ledger. The
+rule is narrow on purpose — inside a player-visible payload (a `return {…}` or a `notify(…, {…})`,
+never a `ledger` or `track` row) a property `k: X.id` must carry a display name in the same literal
+(`name`/`title`/`label`/`<k>Name`) or be DECLARED with the property that makes it safe. Two things
+make it checkable rather than a matter of taste: **a HANDLE is named by convention** (`carId`,
+`heistId`, `character_id`) and is skipped outright, so a field named for the THING rather than for
+its id is asserting it IS the thing; and waivers are keyed on **(file, key), never on a line** — a
+line-keyed waiver rots on any edit above it, which the connection ledger's viem waivers cost once
+already. **85 sites, 14 declared handles**, and it found **fourteen live defects** across nine
+modules on its first run — five terminal `heists.js` replies (the PLAN three lines up had sent
+`job.name` all along), three racket and two asset replies, the lab bench, the path, the commissary,
+the veto, the rob lines and both race circuits. The fake resolver is worth recording: the client was
+doing `String(body.racket).replace(/_/g,' ')`, which looks like a resolver and resolves nothing —
+measured, **18 of 18 racket ids differ from their names** and most carry no underscore at all.
+
+**THE WIRE HALF IS WHERE THE INTERESTING PART IS, because the ledger could not see it and the first
+two attempts to make it could not either.** The wire ships its ids under three shapes the `k: X.id`
+rule does not match (`X.good_id`, `boat.run_route`, a bare `trackId`), and **widening the server rule
+flags 40 sites of which most are the RIGHT architecture** — an id the client resolves off a published
+catalog (`goodName`/`discName`/`$d`, the goodName precedent). *A rule that is mostly wrong is one
+people route around*, so widening was rejected and the wire is checked at the INTERSECTION: a payload
+field a `feedText` template actually renders. **The first cut of that check was very nearly vacuous
+and four of five mutations survived it** — it looked for a bare `${d.x}`, and my own fixes render
+`${art(d.routeName || d.route)}`, so the check could not police the sites it was written for. The
+`|| d.rawId` tail is CORRECT code (a queued notification predating the field must still render
+something), so the property is not "don't fall back", it is **"the server sends the name"** — which
+only a server-side rule can hold. Three decidable rules replaced it: **(a)** a template naming
+`d.<k>Name` is an assertion that the payload sends it; **(b)** a rendered field the payload ships as
+an id must carry a display name — excluding the fields rule (c) governs, and requiring a plain member
+access, or `shares[m.id]` and `beltWon && winner.id === opponent.id` read as ids; **(c)** a small
+declared set of catalog-id field names (`good`/`discipline`/`district`) that must never be
+interpolated bare, because the client has a module-scope resolver for each. **Keyed on the TYPE,
+never the field NAME** — `npc` is an id in one payload and a name in another, and a name-keyed rule
+reports the correctly-resolved sites as violations. **And it reads BOTH feeds**: `feedText` renders a
+personal `notify()` and a streets `bus.emit()` alike, and reading only the first is how the first
+version passed a streets emit shipping `run: run.runId`. Two separate loops rather than one
+alternation, because each must end at its own payload brace — a shared pattern with an optional tail
+lands the brace index past it and reads the NEXT literal, which produced two confident false
+positives about `port_landing` before it was fixed.
+
+**Eleven more live defects on the wire, fixed at the source or through a resolver**: four `${d.good}`
+renders (which is what makes the ledger's own `favors.js:good` waiver — *"the client resolves it
+through goodName"* — TRUE on both surfaces rather than only on `describe()`, and it was false when I
+wrote it); five port lanes (`port.js` sent `route` as a NAME on two emits and an ID on three, the
+same field meaning two things — now `route` is always the id and `routeName` always the display
+name); the two regimen disciplines; `stat_use`'s trade (mirroring `mastery_up`, which has shipped its
+own name all along); `car_stolen` and `race_pink` (both `car.model_id` — *"they took your sedan"*);
+`limited_run` (the streets emit overloading `run`); and the Commission's tabled motion (*"a motion
+before the Commission: open_season"*). The two private `dn` copies were collapsed onto a module-scope
+`discName` in the same pass (the sixty-nine-copies lesson), and **`txt()` was caught before running**
+— it lives inside `describe()`, not `feedText`, so three of my own fixes would have thrown
+(the `$dist` TDZ class, headed off by reading the scope rather than by a failing test); a sweep for
+any other unresolved free identifier in `feedText` came back clean.
+
+**Six mutations, six distinct named failures** (the car's name dropped; the line reading a `routeName`
+the server stopped sending; a resolver-governed field rendered bare; a STREETS emit shipping an id;
+the extractor blinded → *"read only 0 templates"*; the rule neutered → *"governs only 0 rendered
+payload fields"*) — **two anti-vacuity floors, because they fail differently**: one catches an
+extractor that has stopped reading the client, the other a rule that has stopped GOVERNING anything,
+which is exactly the state the first cut shipped in. Two process notes re-paid: my mutation harness's
+argument shifting was broken and **the anchor assertion caught it** (five clean "MUTATION DID NOT
+APPLY" lines rather than five false kills), and an M6 whose anchor missed after a rewrite **read as a
+survival** until the indentation was checked — *a mutation that does not apply reads exactly like a
+fix that holds*. Driven actions 253 → 259 (WAVE 60 in `test/client.js` pins six rendered lines with a
+precondition asserting each catalog id genuinely differs from its name, or the assertion is vacuous);
+the wave-44 join assertion was repaired in passing, since its `/in on the job/i` literal was a PROXY
+for the property (the join is not the plan's sentence and carries none of its terms) and the wave's
+own fix made the proxy false. Suite green + sim drift-0 + mobile + client wiring/mirror; no SQL moved
+(checked with a diff filter, not assumed), so the real-Postgres gates do not apply.
