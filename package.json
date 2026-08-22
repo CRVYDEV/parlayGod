@@ -23,6 +23,7 @@
     "mobile": "node tools/mobile.js",
     "pollcost": "node tools/pollcost.js",
     "boardcost": "node tools/boardcost.js",
+    "pageweight": "node tools/pageweight.js",
     "workercost": "node tools/workercost.js",
     "chaos": "node tools/chaos.js",
     "scale": "node tools/scale.js",

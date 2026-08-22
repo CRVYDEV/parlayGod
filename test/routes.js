@@ -15,6 +15,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
+import zlib from 'node:zlib';
 import { randomUUID } from 'node:crypto';
 import { buildServer } from '../src/server.js';
 
@@ -293,6 +294,77 @@ console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrati
   console.log(`✅ the envelope survives all ${checked} enveloped routes (${paramChecked} of them param routes; `
     + `${unfillable.length} params this cannot synthesise are named, not skipped) — none replaces \`character\`, and `
     + `\`events\` is the envelope's empty slot everywhere except ${EVENTS_OWNED_BY_BOARD.size} board that owns the name by declaration`);
+}
+
+// ── THE WIRE ────────────────────────────────────────────────────────────────────────────────────
+// What the player DOWNLOADS. tools/pageweight.js measured a cold load of the landing at 5.3 MB on a
+// phone, of which 757 KB was text shipped uncompressed: index.html is 1,047,078 bytes and gzips to
+// 319,499 (31%), and it carried no cache-control while every neighbouring static route already set
+// one — the forgotten-sibling shape, on the single most-fetched thing we serve.
+//
+// The fix is hand-rolled (server.js: one onSend hook + a precompressed servePage), on the sol.js
+// precedent, which means every condition in it is ours to keep true. These are those conditions,
+// stated as properties rather than as an implementation:
+//
+//   • text compresses when the client asks, and MATERIALLY (a hook that ran and saved nothing would
+//     read exactly like a hook that works)
+//   • identity is honoured, byte-for-byte against the file on disk — a client that cannot decode
+//     gzip must get the real thing, not a corrupted one
+//   • the gzip DECODES to the same bytes. A corrupt stream is the worst failure here: the page is
+//     blank and nothing 500s.
+//   • Vary: Accept-Encoding on BOTH branches, or a shared cache hands the compressed copy to a
+//     client that said it could not read it
+//   • the ETag answers 304, which is what makes a repeat visit free rather than merely smaller
+//   • BINARY IS NEVER TOUCHED. Gzipping a PNG spends CPU to make it slightly bigger, and the same
+//     exclusion is what keeps a byte-range response honest.
+//   • a small payload is left alone — under the threshold the framing can grow it.
+{
+  const raw = readFileSync(new URL('../public/index.html', import.meta.url));
+  const GZ = { 'accept-encoding': 'gzip' };
+  const ID = { 'accept-encoding': 'identity' };
+  const get = (url, headers) => app.inject({ method: 'GET', url, headers });
+
+  const gz = await get('/', GZ);
+  const id = await get('/', ID);
+  assert.equal(gz.headers['content-encoding'], 'gzip', 'GET / must compress when the client asks');
+  assert.equal(id.headers['content-encoding'], undefined, 'GET / must NOT compress for a client that asked for identity');
+  // non-vacuity: a 1 MB shell that gzipped to 999 KB would satisfy "it compressed" and save nothing
+  assert(raw.length > 200_000, `the shell is ${raw.length} bytes — this check is sized for the real one`);
+  assert(gz.rawPayload.length < raw.length * 0.6,
+    `GET / compressed to ${gz.rawPayload.length} of ${raw.length} — the hook ran but saved almost nothing`);
+  assert.equal(id.rawPayload.length, raw.length, 'the identity branch must be the file on disk, byte for byte');
+  assert.deepEqual(zlib.gunzipSync(gz.rawPayload), raw,
+    'the gzipped shell must DECODE to the file — a corrupt stream is a blank page and no 500');
+  for (const [name, r] of [['gzip', gz], ['identity', id]])
+    assert(/accept-encoding/i.test(String(r.headers.vary || '')),
+      `the ${name} branch must send Vary: Accept-Encoding, or a shared cache serves the wrong copy`);
+
+  // the ETag: a repeat visit pays ~0 for the shell rather than 319 KB. `no-cache` and not a max-age
+  // on purpose — the shell changes on every deploy, so it revalidates rather than going stale.
+  const etag = gz.headers.etag;
+  assert(etag, 'GET / must carry an ETag — without one a repeat visit re-downloads the whole shell');
+  assert.equal(gz.headers['cache-control'], 'no-cache', 'the shell must revalidate, never go stale');
+  const again = await get('/', { ...GZ, 'if-none-match': etag });
+  assert.equal(again.statusCode, 304, 'a matching ETag must answer 304');
+  assert.equal(again.rawPayload.length, 0, 'a 304 must carry no body');
+
+  // binary is never compressed, whatever the client offers
+  const png = await get('/icon-192.png', GZ);
+  assert.equal(png.statusCode, 200);
+  assert.equal(png.headers['content-encoding'], undefined,
+    'a PNG must never be gzipped — it is already compressed, and the same exclusion is what keeps a byte range honest');
+
+  // a big JSON board compresses; a small one does not
+  const rules = await get('/v1/rules', GZ);
+  assert.equal(rules.headers['content-encoding'], 'gzip', '/v1/rules is 69 KB of catalog — it must compress');
+  const tiny = await get('/v1/online', GZ);
+  assert.equal(tiny.statusCode, 200);
+  assert(Buffer.byteLength(tiny.body) < 1024, 'this check needs a genuinely small response to be about the threshold');
+  assert.equal(tiny.headers['content-encoding'], undefined,
+    'a sub-threshold payload must be left alone — gzip framing can make it bigger');
+
+  console.log(`✅ the wire: the ${(raw.length / 1024).toFixed(0)} KB shell ships as ${(gz.rawPayload.length / 1024).toFixed(0)} KB and `
+    + `revalidates to a 304; identity is byte-exact; binary and sub-threshold payloads are untouched`);
 }
 
 await app.close();
