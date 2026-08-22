@@ -16685,3 +16685,74 @@ immediately after writing them (`growth`, `population`) pin it to 0 — `growth`
 board, which is the pin being necessary rather than defensive. Six mutations, six distinct named kills
 (single-flight removed; the TTL ignored; `clear()` a no-op; the per-player payload cached — the leak; the
 standing memo removed; the recruiters memo removed).
+
+**THE SCAN UNDER EVERY REQUEST — `tools/boardcost.js`, and the index the table never had (2026-08-22).**
+The standing cache cut one board 1000×; the sweep that followed it was meant to finish the job on the
+boards nobody had costed. It found something bigger than a board. **The measurement had to be built
+first**, because `tools/pollcost.js` states its own blind spot out loud — *"this counts REQUESTS, not
+their cost. A board that runs one indexed lookup and a board that scans a table both count 1"* — and
+that blind spot is exactly what had hidden the 57 ms standing scan. `tools/boardcost.js` (`npm run
+boardcost`, the 12th harness) seeds a synthetic population, drives all 33 boards the three aggregates
+and the polled screens fetch, and prints them worst-first. **REAL POSTGRES ONLY, and that is
+load-bearing rather than fussy**: pg-mem is a different planner and disagrees about precisely this
+shape — measuring the standing scan there reported a SUPER-LINEAR curve where Postgres is linear, a
+wrong shape stated confidently, in the direction that would have made the write-up overstate.
+**THE HARNESS'S OWN FIRST RUN LIED, and catching it is the reason anything below is trustworthy.** It
+opened a `readCharacter` around EVERY board, so all 28 aggregate boards carried one character read
+apiece and the floor sat at ~6.6 ms — visible only because `streets.prices` is a **PURE function with
+no database access at all** and reported 6.63 ms. An aggregate pays its wrapper ONCE for its whole map,
+so the boards are now timed inside one shared context and the wrapper is sized separately as `/v1/me`.
+Corrected floor: `home.explore` **0.03 ms**, `streets.prices` **0.17 ms**. *A finding produced by a tool
+you wrote and did not check is not a finding* — for the eighth session running.
+**THE BOARDS CAME BACK ALMOST CLEAN, which is a result rather than a shortfall.** Run at 300 and again
+at 3,000 players, only ONE grows meaningfully with the population — `leaderboard.city`, 9.1 → 70.6 ms,
+and it is the one already cached. `home.discovery` is second at 10.6 ms and grows sub-linearly, and it
+is per-player by construction (a band around YOUR respect), so the shared memo is not available to it
+and its band predicates already ride `ix_char_respect`. Everything else is flat: `home.people` 3.42 →
+3.34, `bulletin` 2.84 → 2.77. So no board was cut, on the `/v1/landmarks` precedent — six districts,
+flat, deliberately left alone.
+**THE FINDING IS THE WRAPPER: `characters.account_id` HAD NO INDEX.** `withCharacter`/`readCharacter`
+open every authed request with `WHERE account_id = $1 AND alive` — §7.1 lazy accrual makes even a READ
+take it — and **78 further sites in `src/` look a character up by account**. The table carried indexes
+on `name`, `lower(name)`, `respect`, `lfg` and `seeking_mentor` — every SECONDARY lookup — and none on
+the join key the request wrapper itself uses, which is the shape you get when the wrapper is written
+first and the indexes are added later, one reported slow page at a time. Measured on real Postgres:
+**0.62 ms / 144 buffers at 3,000 players, 16.9 ms / 2,382 buffers at 50,000 → 0.14 ms with the index**,
+a 120× cut on the most-executed query in the game. It is paid PER REQUEST, so the server-wide total is
+quadratic in the playerbase exactly like the standing scan was — and the index does not merely make it
+faster, it stops it GROWING. **PLAIN, not `WHERE alive`**: the partial index measured marginally faster
+on the hot query (0.164 vs 0.193 ms, noise at that size) and serves only the subset carrying `AND
+alive`, while the plain one also serves the estate/chain reads of a bloodline's DEAD rows (`ORDER BY
+alive DESC`) and the `account_id IN (…)` batch reads — coverage across 78 sites beats 0.03 ms on one.
+The rest of the per-player tables were inventoried and are all correctly indexed; `contacts` looks like
+a gap and is not (every lookup leads with `owner_account`, the PK's leading column).
+**THE GUARD IS BEHAVIOURAL AND IT IS SEEDED, and both halves are the point** (`pgcheck` §9c, 49/49). A
+text check that `schema.sql` contains the CREATE INDEX line proves nothing about the planner, and pg-mem
+has a different one — so it EXPLAINs the real query on real Postgres. And it seeds 5,000 rows first,
+because **on a small table a sequential scan is the CORRECT plan**: without the seeding the check would
+fail with the index present and "pass" for reasons having nothing to do with it. Mutation-verified both
+ways — drop the index and it fails by name printing the plan; shrink the seed to 3 rows and the
+non-vacuity assertion fires (*"only 8 characters"*) with the planner correctly choosing a seq scan
+beside a live index, which is the vacuity demonstrated rather than argued.
+**AND THE INDEX BROKE THE REFERRAL PAYOUT, WHICH IS THE MORE INSTRUCTIVE HALF.** The suite went red on
+the spark (`actual: 500, expected: 3000` — the sponsor got nothing), and removing the index made it green
+again, so causation was PROVEN rather than assumed. Two sites in `game.js` bind a JS array to
+`account_id = ANY($1)` — **and the same file's own comments, twenty lines away, state the rule that
+forbids it**: pg-mem returns ZERO ROWS for ANY-of-array, silently. They read fine for years for one
+reason only — **without an index pg-mem seq-scans and evaluates ANY correctly**, so the shape is LATENT
+and arms itself the day somebody indexes the column for an unrelated reason. A violation the index
+EXPOSED, not one it created; both converted to the prescribed `IN ($1,$2)`, identical in production.
+Then the class was swept rather than the instance patched: two more (`growth.js`'s extraction sum,
+`chain.js`'s two `VOUCHER_CLAIM_KINDS` reads) were not broken TODAY only because their columns happen to
+be unindexed, and all are converted — **zero `= ANY($n)` left in `src/`**. **THE ANY-OF-ARRAY BAN**
+(`test/gates.js`) is the guard, and it needed the recorded discipline twice: comments are STRIPPED first
+(the rule is cited by name in **fifteen** comments across `src/` — that is how well known it was and how
+unenforced — and a scanner reading prose reported every one as a violation, which is the mostly-wrong
+advisory people route around), and the corpus is the **45 `IN (…)` sites the rule GOVERNS**, never the
+violations, which floor at zero the moment the tree is clean and then measure nothing forever (the
+ARTICLE LEDGER lesson). Both halves mutation-verified by name.
+
+`boardcost` is deliberately **not** in CI — like `pollcost` and `mobile` it is a measurement, not a
+gate, it wants a big seeded database, and a threshold that failed the build would sit either so high it
+never fires or so low it fires on the flat boards and gets routed around. What it FINDS gets the real
+guard, and that guard does run.
