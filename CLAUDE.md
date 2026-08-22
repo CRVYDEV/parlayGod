@@ -16823,3 +16823,58 @@ character row and anything after it would be sized against a converted fixture. 
 is a measurement rather than a gate, it wants a big seeded database, and a threshold would sit either so
 high it never fires or so low it fires on the flat jobs and gets routed around. What it FINDS gets the real
 guard, and that guard runs.
+
+**THE BYTES NOBODY HAD WEIGHED — `tools/pageweight.js`, and a megabyte served uncompressed
+(2026-08-22).** Three harnesses size the SERVER: `pollcost` counts a player's REQUESTS (and says out
+loud it cannot see their cost), `boardcost` sizes a polled BOARD against the database, `workercost`
+sizes the TICK. **None of them measures what the player DOWNLOADS**, which is the only cost the player
+feels directly and the one that is worst on the phone the PWA targets. `tools/pageweight.js`
+(`npm run pageweight`, the 14th harness) drives a real Chromium at 375×667 with a cold cache through
+three phases — the landing, entering the game, and one board tick — and prints the same worst-first
+table its siblings do, with a COMPRESSIBLE GAP column. Not in CI, on `boardcost`'s own argument: a
+measurement, not a gate.
+**THE FINDING: `public/index.html` is 1,047,078 bytes and every one of them went out uncompressed**,
+with no `cache-control`, while every neighbouring static route (icons, art, the manifest, portraits)
+sets one — the forgotten-sibling shape, on the single most-fetched asset in the game, paid by every
+player on every cold load. Measured: the landing cold load **5,274 KB decoded → 4,517 KB on the wire**,
+a **757 KB gap** across three responses (`/` 1,047,078→318,685, `/v1/rules` 69,008→23,863,
+`/v1/art/motion` 3,025→1,056); and **the recurring half, which is the one that compounds** — one board
+tick is 6 requests, **23.6 KB → 8.8 KB**, a 63% cut paid by every player every window, forever.
+**Hand-rolled over a plugin** (the `sol.js` ed25519 / `avatar.js` precedent): every condition is
+decidable and pinned in a test — never over an existing `content-encoding`, never on 204/304/206,
+never on HEAD, never once the head is on the wire, only over a `COMPRESSIBLE` content-type (so a PNG
+or a JPEG is untouched — already compressed, and the same exclusion is what keeps a byte range
+honest), only above `GZIP_MIN` (1024), and **`Vary: Accept-Encoding` on BOTH branches** or a shared
+cache hands the compressed copy to a client that said it could not read it. The five static pages get
+`servePage`: **precompressed at level 9 ONCE AT BOOT** (gzipping a megabyte per cold load is ~30 ms of
+CPU for a result that cannot have changed) with an ETag and **`cache-control: no-cache`, deliberately
+not `max-age`** — the app shell changes on every deploy, so it must REVALIDATE rather than go stale,
+and a 304 makes a repeat visit ~0 bytes. That mirrors what `public/sw.js` already does for navigations
+(network-first), so the two layers agree instead of fighting.
+**TWO VACUITY LESSONS, both caught by the harness rather than by reading it.** (1) **A URL-keyed Map
+loses a refetch** — the recurring half is BY DEFINITION a refetch of URLs the first phase already saw,
+so a `Map` keyed on URL created no new key and the tick measured **zero**; it is a phase-tagged LOG
+now, and the non-vacuity guard written one commit earlier is what caught it (*"the board tick fetched
+NOTHING — a zero here reads exactly like a free tick; it is not one"*, exit 1). It also needed the
+client's own handler to fire, which only refreshes on the way BACK — so the probe redefines
+`document.hidden` and dispatches a genuine hidden→visible pair rather than a bare `visibilitychange`.
+(2) **The harness UNDERSTATED its own fix**: Playwright's `res.body()` returns DECODED bytes, so the
+moment compression landed the table stopped describing the wire and read 5,274 KB where the wire was
+4,517. Wire sizes now come from the browser's own `performance` navigation/resource entries
+(`encodedBodySize`), with the decoded figure kept beside it and untimed entries counted at decoded
+size — an over-count, never under.
+**The guard is THE WIRE in `test/routes.js`**, and it pins the properties rather than the wording: the
+shell compresses **materially** (`< 0.6 ×` raw — *"it compressed"* is satisfied by 1 MB → 999 KB and
+saves nothing), the identity branch is byte-exact against the file on disk, `gunzipSync` deep-equals
+that file (a corrupt stream is a blank page and no 500), `Vary` on both branches, the ETag answers 304
+with a 0-byte body, a PNG is never gzipped, `/v1/rules` is, and a sub-1024-byte JSON is not. Five
+mutations, each caught at its own named assertion — **and the single-path one SURVIVED, correctly**:
+the shell is compressed by TWO independent paths (`servePage`'s precompressed copy and the generic
+hook), so removing either leaves the other, and the mutation that matters removes both, which fails by
+name at *"GET / must compress when the client asks"*. **Flagged, not fixed** (scope, stated rather than
+smoothed): the landing eagerly loads **~4.5 MB of imagery** (a 1.49 MB `hero-poster.mp4`, a 750 KB
+`landing-break.jpg`) — CSS backgrounds, so `loading="lazy"` does not reach them and the fix is either
+re-encoding assets through the art pipeline or deferring them behind an IntersectionObserver; and
+`/v1/rules` still carries no `cache-control` — it was verified time-invariant, but a generic JSON
+ETag/304 touches the response lifecycle **every money route passes through**, including the
+idempotency `onSend` store, which is not a page-weight drop's change to make.
