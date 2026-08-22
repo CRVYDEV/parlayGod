@@ -5217,6 +5217,107 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
   'a deposit must say the money rides IN TRANSIT and can be looted until it clears — that is a TERM, not flavour, ' +
   'and it is the reason this ledger exists');
 
+// ── WAVE 56: THE MISSION LADDER READ AS A TITLE BEING STRIPPED. Driving the undriven routes found
+// the byte-shape collision class at its widest yet. `doMission` answers `title: m.title || null`,
+// and 27 of the 36 missions carry NO title — so three claims in four fell into describe()'s vanity
+// title-CLEAR branch and read "title dropped — just your name from here": the OPPOSITE of what
+// happened, at the moment the game paid the biggest respect award it has, and discarding the cash,
+// the $OMR (one of only two ways to earn it) and — on the Dockside Heist — the mint credit that IS
+// the free path to getting made. The nine that DO carry a title reported the title alone and threw
+// the pay away. Fixed at the SOURCE: the reply names its own system (`mission: {id, name}`), which
+// is what a discriminator has to be — absence held only until this reply needed a marker.
+//
+// With it, the freight rail into a monument: the server CLAMPS the units it takes to what the wall
+// still needs, and the line read "1 units of freight" — the wrong plural, and naming neither which
+// line left the trunk nor which of several goods it was. Every other freight line in the game names
+// the good; this one now carries `good` and reads it through goodName.
+{
+  const mtok = (await inject('POST', '/v1/auth/guest')).body.token;
+  await inject('POST', '/v1/character', mtok, { name: 'Wave56 ' + Math.random().toString(36).slice(2, 6) });
+  const mid = (await inject('GET', '/v1/me', mtok)).body.character.id;
+  const cat56 = (await inject('GET', '/v1/rules', mtok)).body;
+  const gun56 = (cat56.guns || []).slice().sort((a, b) => b.fp - a.fp)[0];
+  assert(gun56, 'WAVE 56: no gun catalog — the fp-gated missions could not be reached');
+  await app.pool.query('INSERT INTO character_guns (character_id, gun_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [mid, gun56.id]);
+  await app.pool.query('UPDATE characters SET gun=$2, cash=900000000, respect=5000000, muscle=99, ' +
+    "cunning=99, speed=99, energy=300, health=100, loc='docks' WHERE id=$1", [mid, gun56.id]);
+  const claim56 = async (id) => {
+    await app.pool.query('UPDATE characters SET mission_at=NULL WHERE id=$1', [mid]);
+    const r = await inject('POST', `/v1/missions/${id}`, mtok, {});
+    assert.equal(r.code, 200, `WAVE 56 could not claim ${id} (${JSON.stringify(r.body)}) — fix the fixture ` +
+      'rather than letting it skip, because a skipped claim reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(`/v1/missions/${id}`, line);
+    return { r, line };
+  };
+
+  // THE PRECONDITION, asserted rather than assumed: this block is only about a collision that needs
+  // an UNTITLED mission, so if the catalog ever carries a title on every rung the check below would
+  // pass while proving nothing.
+  const cats = (cat56.missions || []);
+  const untitled = cats.find((m) => m.id === 'm1');
+  assert(untitled && !untitled.title, 'WAVE 56: m1 is expected to carry NO title — that is the case the collision needed');
+
+  const one = await claim56('m1');
+  assert(!/title dropped/i.test(one.line),
+    'WAVE 56: an untitled mission must not read as a title being STRIPPED — 27 of 36 rungs carry no ' +
+    `title, so this was three claims in four telling a player their name was taken as they were paid. Got: ${JSON.stringify(one.line)}`);
+  assert(one.r.body.mission && one.r.body.mission.name,
+    'WAVE 56: the mission reply must NAME its own system — absence is not a discriminator, and the ' +
+    'vanity title branch claimed this reply only because it had no marker of its own');
+  assert(one.line.includes(one.r.body.mission.name),
+    `WAVE 56: the line must name the job it just paid for. Got: ${JSON.stringify(one.line)}`);
+  // asserted against what the SERVER sent, never a literal — the pay is level-scaled and a lever moves it
+  assert(one.line.replace(/,/g, '').includes(String(one.r.body.reward.cash)),
+    `WAVE 56: the line must name what the mission PAID. Got: ${JSON.stringify(one.line)}`);
+
+  // THE DOCKSIDE HEIST — the rung the coach names as the free path to getting made. It pays $OMR
+  // AND a mint credit, and both were being discarded. The account is fresh, so the credit is live.
+  const dock = cats.find((m) => m.reward && m.reward.mintCredit);
+  assert(dock, 'WAVE 56: no mission grants a mint credit — the free-path assertion would be vacuous');
+  const four = await claim56(dock.id);
+  assert(four.r.body.reward.mintCredit > 0,
+    'WAVE 56 fixture: the account is already minted, so the mint-credit half of this line proves nothing');
+  assert(four.r.body.reward.omr > 0, 'WAVE 56 fixture: this rung paid no $OMR, so that half proves nothing');
+  assert(/mint credit/i.test(four.line) && /\$OMR/.test(four.line),
+    'WAVE 56: the Dockside Heist pays $OMR and the mint credit that is the free path to getting made — ' +
+    `both have to reach the player. Got: ${JSON.stringify(four.line)}`);
+
+  // A TITLED rung: the title was the ONE thing the old branch got right, so it must survive the fix,
+  // and the pay it used to throw away must arrive with it.
+  // `/v1/rules.missions` deliberately does not publish `title` (it is the reward, not the brief), so
+  // the precondition comes from the SERVER'S OWN REPLY rather than the catalog: claim the rung and
+  // assert it really carried one, or this half would prove nothing about a titled claim.
+  const five = await claim56('m5');
+  assert(five.r.body.title,
+    'WAVE 56 fixture: m5 was expected to award a title — without one, the titled half of this ' +
+    'collision is untested and would pass in silence');
+  assert(five.line.includes(five.r.body.title),
+    `WAVE 56: a titled rung must still name the title. Got: ${JSON.stringify(five.line)}`);
+  assert(/respect/i.test(five.line),
+    'WAVE 56: the nine titled rungs reported the title ALONE and discarded the pay — the biggest ' +
+    `respect award in the game went unmentioned. Got: ${JSON.stringify(five.line)}`);
+
+  // THE FREIGHT RAIL into a monument.
+  const good56 = (cat56.goods || [])[0];
+  assert(good56, 'WAVE 56: no goods catalog — the freight line could not be driven');
+  await app.pool.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,50) ' +
+    'ON CONFLICT (character_id, good_id) DO UPDATE SET qty=50', [mid, good56.id]);
+  const mega = await inject('POST', '/v1/megaproject/goods', mtok, { goodId: good56.id, qty: 3 });
+  assert.equal(mega.code, 200, `WAVE 56 could not lay freight into the wall (${JSON.stringify(mega.body)})`);
+  described++;
+  const megaLine = String(describeFn(mega.body, 200));
+  said.set('/v1/megaproject/goods', megaLine);
+  assert(mega.body.good === good56.id,
+    'WAVE 56: the freight reply must carry the good — the server clamps the units it takes, so the ' +
+    'player needs to know WHICH line left the trunk as well as how many');
+  assert(megaLine.includes(good56.name),
+    `WAVE 56: the freight line must name the good rather than "units of freight". Got: ${JSON.stringify(megaLine)}`);
+  assert(!/\bunits of freight\b/.test(megaLine),
+    `WAVE 56: "1 units of freight" was the wrong plural and named nothing. Got: ${JSON.stringify(megaLine)}`);
+}
+
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
 // every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
 // upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED

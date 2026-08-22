@@ -2705,6 +2705,22 @@
       return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
     if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
     if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${txt(body.name)} now — your referral link changed with the name`;
+    // THE MISSION LADDER read as a TITLE BEING STRIPPED. doMission sends `title: m.title || null`
+    // and 27 of the 36 missions carry no title, so three claims in four fell into the vanity
+    // title-CLEAR line one branch down — "title dropped — just your name from here" — telling a
+    // player their name was taken at the instant the game paid them, and discarding the whole
+    // reward: the biggest respect award in the game, one of only two ways to earn $OMR, and on the
+    // Dockside Heist the mint credit that IS the free path to being made. Keyed on the server's own
+    // `mission` marker and placed ABOVE the title branch, because that branch is right about vanity
+    // and only ever claimed this by accident.
+    if (body && body.mission && body.reward) {
+      const r = body.reward;
+      const paid = [r.cash ? `$${fmt(r.cash)}` : null, r.respect ? `+${fmt(r.respect)} respect` : null,
+        r.omr ? `${fmt(r.omr)} $OMR` : null,
+        r.mintCredit ? 'a MINT CREDIT — that is the free path to getting made' : null,
+        body.title ? `they call you ${txt(body.title)} now` : null].filter(Boolean).join(' · ');
+      return `\u{1F396} ${txt(body.mission.name)} — ${paid || 'done'}${body.nextMissionSeconds ? ` · next job in ${minsTxt(body.nextMissionSeconds)}` : ''}`;
+    }
     if (body && body.ok && 'title' in body && body.tier === undefined)
       return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
@@ -2940,7 +2956,7 @@
     // system over.
     if (body.credited !== undefined && body.monument) {
       const paid = body.omr !== undefined ? `${fmt(body.omr)} $OMR`
-        : body.qty !== undefined ? `${fmt(body.qty)} units of freight`
+        : body.qty !== undefined ? `${fmt(body.qty)} \u{00D7} ${goodName(body.good)}`
         : `$${fmt(body.credited)}`;
       const worth = (body.omr !== undefined || body.qty !== undefined) ? ` — worth $${fmt(body.credited)} to the wall` : '';
       bits.push(body.completed

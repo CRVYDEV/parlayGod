@@ -16068,6 +16068,62 @@ alone, so both assertions are load-bearing), the wing price dropped, `model` rea
 plate branch deleted. Driven actions 232 → 238. Suite green + sim drift-0 + mobile + pgquery + pgcheck
 47/47 on a FRESH real Postgres.
 
+**PLAY WAVE 56 — THREE MISSION CLAIMS IN FOUR TOLD THE PLAYER THEIR NAME HAD BEEN TAKEN
+(2026-08-22).** Wave 55 ended by naming the sweep's own root cause — *a route nobody has driven has
+a line nobody has read* — so this wave measured the surface honestly before driving anything, and
+**the measurement had to be INSTRUMENTED rather than regexed**: a static scan of the ledger reports
+49 driven rows against a real 204, because dynamic rows resolve their URL at drive time and are
+invisible to a regex. Against the **323 mutating routes the console can press: 174 driven, 149
+NOT.** Driven in four batches, each reply read back through the client's REAL `describe()`.
+
+**THE HEADLINE IS THE COLLISION CLASS AT ITS WIDEST YET, and it is not a silence.** `doMission`
+answers `title: m.title || null`, and **27 of the 36 missions carry no title** — so three claims in
+four fell into `describe()`'s VANITY TITLE-CLEAR branch and read **"title dropped — just your name
+from here"**: the OPPOSITE of what happened, at the moment the game paid the biggest respect award
+it has, with the cash, the respect and the $OMR all discarded. **On the Dockside Heist that
+included the MINT CREDIT** — the rung the coach names as *"you can get made for free"*, the free
+path past the extraction gate — reported as a title being stripped. The nine rungs that DO award a
+title were only half right: they printed the title alone and threw the pay away. Fixed at the
+SOURCE — the reply names its own system (`mission: {id, name}`, an object so nothing can collide
+with it) and the branch sits ABOVE the vanity one, because that branch is right about vanity and
+only ever claimed this by accident. **Absence is not a discriminator: this reply had no marker only
+until it needed one**, which is the whole shape (the deed unlist paid for it twice, the five income
+verbs of wave 55 once more).
+
+**With it, the freight rail into a monument.** The server CLAMPS the units it takes to what the
+wall still needs, and the line read **"1 units of freight"** — the wrong plural, naming neither
+which of several goods left the trunk nor that the quantity may not be the one offered. Every other
+freight line in the game names the good; the reply now carries `good` and the line reads it through
+the client's existing `goodName`, using the `×` idiom the market cards already use, which disposes
+of the plural entirely rather than patching it.
+
+**The pay figures were already honest and that is worth recording**, because it is the wave-47
+nominal-vs-actual class handled correctly by code nobody had to fix: both contribution rails clamp
+(`give = min(amt, ceil(need))`) and `doMission` overwrites `respect: missionRep` with the
+`MISSION_RESPECT_MULT`-scaled figure, so what the reply states is what landed. The defect was the
+line, never the number.
+
+**The regression drives all of it for real on its own token** (an UNMINTED fresh account, or the
+mint-credit half proves nothing — `doMission` grants it only `if (!h.acct.minted)`), and its
+preconditions are asserted rather than assumed in a way that matters twice: the untitled case pins
+that m1 really carries no title, and — because **`/v1/rules.missions` deliberately does not publish
+`title`** (it is the reward, not the brief) — the TITLED case takes its precondition from **the
+server's own reply** rather than the catalog, which is the only ground truth available. The first
+cut looked in the catalog and failed by name at *"no reachable titled mission"*, which is the guard
+being right about itself. Six mutations, six distinct named failures (the server marker dropped;
+the client branch deleted, restoring the original line verbatim; the mint credit dropped from the
+line; the respect dropped from it; the freight `good` dropped; the line reverting to "units of
+freight"). Driven actions 238 → 243.
+
+**Three batches came back CLEAN and are recorded, because a sweep that publishes only its hits
+cannot be audited:** the Port end to end (boat, hull upgrade, cast off, a real BUSTED-AT-SEA with
+its fine, the berth), the whole Pen inside (cards, the yard character, the iron pile, working the
+stretch), the family/commission/law clusters (every refusal reading as a sentence, `not_indicted`
+/`rank`/`free` each naming what is missing), and the estate/bonds/vanity/wire/track/loans set. The
+`district` refusals all carried their machine-readable payload, so the console can still offer
+"go there →".
+
+
 **THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
 (2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
 outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived
