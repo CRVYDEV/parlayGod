@@ -9,7 +9,7 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, masteryFx } from './game.js';
-import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity , jailed, hospitalized, safeHoused, usd } from './rules.js';
+import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity, jailed, hospitalized, safeHoused, usd, art } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
@@ -77,7 +77,7 @@ export async function buyBoat(ch, kind, client, h) {
   if (!spec) throw new GameError('bad_boat', 'No such vessel at the yard.');
   const n = Number((await client.query('SELECT COUNT(*) c FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].c);
   if (n >= fleetCapOf(ch)) throw new GameError('fleet', `Your berths are full (${fleetCapOf(ch)}). Sell a boat or rent a slip.`);
-  if (Number(ch.cash) < spec.cost) throw new GameError('cash', `The ${spec.name} runs ${usd(spec.cost)}.`);
+  if (Number(ch.cash) < spec.cost) throw new GameError('cash', `${art(spec.name, 'The')} runs ${usd(spec.cost)}.`);
   ch.cash = Number(ch.cash) - spec.cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -spec.cost, reason: 'port:boat' });
   const id = crypto.randomUUID();
@@ -146,7 +146,7 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   if (levelOf(Number(ch.respect)) < route.minLvl) throw new GameError('route_level', `${route.name} runs at level ${route.minLvl}.`);
   const spec = boatOf(boat.kind);
   const hold = effHold(boat, spec), speed = effSpeed(boat, spec);
-  if (speed < route.minSpeed) throw new GameError('too_slow', `The ${route.name} needs a boat that makes ${route.minSpeed}+ knots.`);
+  if (speed < route.minSpeed) throw new GameError('too_slow', `${art(route.name, 'The')} needs a boat that makes ${route.minSpeed}+ knots.`);
   const cost = hold * route.buy;
   const escortCost = escort ? PORT.ESCORT_COST : 0;
   const { used, left } = supplyState(ch);
@@ -383,7 +383,7 @@ export async function rendezvous(ch, myBoatId, partnerBoatId, client, h) {
   if (!partner.rendezvous) throw new GameError('closed', "That captain isn't waiting for a handoff.");
   if (atSea(partner)) throw new GameError('partner_busy', 'The receiving boat is already out.');
   const route = portRouteOf(mine.run_route), spec = boatOf(partner.kind);
-  if (effSpeed(partner, spec) < (route?.minSpeed || 0)) throw new GameError('partner_slow', `Their boat can't make the ${route?.name} (needs ${route?.minSpeed}+ knots).`);
+  if (effSpeed(partner, spec) < (route?.minSpeed || 0)) throw new GameError('partner_slow', `Their boat can't make ${art(route?.name)} (needs ${route?.minSpeed}+ knots).`);
   // move the run mine → partner; free mine; consume the partner's rendezvous flag; reset both intercept slates
   await client.query('UPDATE boats SET run_until=$2, run_route=$3, run_hold=$4, run_cost=$5, run_escort=$6, rendezvous=false WHERE id=$1',
     [partner.id, mine.run_until, mine.run_route, mine.run_hold, mine.run_cost, mine.run_escort]);

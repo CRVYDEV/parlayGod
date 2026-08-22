@@ -146,7 +146,11 @@ export async function giveGoods(ch, goodId, qty, client, h) {
   await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [ch.id, goodId]);
   if (left > 0) await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [ch.id, goodId, left]);
   await h.track(client, ch.account_id, 'megaproject_give', { kind: 'goods', good: goodId, qty: n, value });
-  return { ...(await credit(client, ch, p, value, h.owned.gang?.id)), qty: n, unit: g.base };
+  // (play wave 56) the good's own id rides back: the server CLAMPS `n` to what the wall still
+  // needs, so the units taken are not always the units offered, and "1 units of freight" named
+  // neither which line left the trunk nor how many are plural. Every other freight line in the
+  // game names the good.
+  return { ...(await credit(client, ch, p, value, h.owned.gang?.id)), qty: n, unit: g.base, good: goodId };
 }
 
 export async function giveOmr(ch, amount, client, h) {

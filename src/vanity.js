@@ -10,7 +10,7 @@
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
 import { GameError, cleanText } from './game.js';
-import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf } from './rules.js';
+import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf, carOf, art } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
@@ -66,7 +66,12 @@ export async function setPlate(ch, carId, plate, client, h) {
   await spendOmr(client, h, VANITY.PLATE_OMR, 'vanity:plate');
   await client.query('UPDATE cars SET plate=$2 WHERE id=$1', [carId, p]);
   car.plate = p; // keep this transaction's view fresh
-  return { ok: true, carId, plate: p };
+  // The CAR's name ships with the reply because describe() has no handle on the garage: it sees a
+  // carId and nothing that can turn one into iron. The price ships for the same reason every other
+  // $OMR burn in this file ships one. NOTE `model_id`, not `model`: h.owned.cars holds RAW `cars`
+  // rows, and it is the character VIEW that renames that column — reading `model` here is silently
+  // undefined and degrades the line to a bare plate, which is the class this reply exists to close.
+  return { ok: true, carId, plate: p, car: carOf(car.model_id)?.name || null, omr: VANITY.PLATE_OMR };
 }
 
 // The family crest color — the boss's call alone (an underboss commands soldiers, not the flag).
@@ -93,7 +98,7 @@ export async function buySeal(ch, client, h) {
   const next = GANG_SEALS.find((s) => s.tier === Number(g.seal || 0) + 1);
   if (!next) throw new GameError('maxed', 'The family already bears the highest seal there is.');
   if (Number(g.omr_reserve) < next.omr)
-    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+    throw new GameError('reserve', `${art(next.name, 'The')} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, seal = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
   await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'vanity:gang:seal', counterparty: g.id });
   if (h.owned.gang) { h.owned.gang.seal = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }
@@ -115,7 +120,7 @@ export async function buyFoundation(ch, client, h) {
   const next = FOUNDATION.TIERS.find((t) => t.tier === Number(g.foundation || 0) + 1);
   if (!next) throw new GameError('maxed', 'The family is already the highest pillar of the community there is.');
   if (Number(g.omr_reserve) < next.omr)
-    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+    throw new GameError('reserve', `${art(next.name, 'The')} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, foundation = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
   await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'foundation:tier', counterparty: g.id });
   if (h.owned.gang) { h.owned.gang.foundation = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }

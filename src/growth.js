@@ -184,7 +184,14 @@ export async function doMission(ch, missionId, client, h) {
       }
     }
   }
-  return { ok: true, reward: { ...m.reward, respect: missionRep, omr: omrPaid, mintCredit: creditPaid }, title: m.title || null,
+  // (play wave 56) NAME THE SYSTEM. This reply carries `title: m.title || null`, and 27 of the 36
+  // missions carry no title — so three claims in four fell into describe()'s vanity title-CLEAR
+  // branch and read "title dropped — just your name from here": the opposite of what happened, at
+  // the moment the game paid the biggest respect award it has. `mission` is the discriminator, and
+  // it is an object rather than a bare id so nothing else can collide with it. Absence is not a
+  // discriminator — this reply had no marker only until it needed one.
+  return { ok: true, mission: { id: m.id, name: m.name },
+    reward: { ...m.reward, respect: missionRep, omr: omrPaid, mintCredit: creditPaid }, title: m.title || null,
     nextMissionSeconds: missionCd > 0 ? Math.ceil(missionCd / 1000) : 0 };
 }
 

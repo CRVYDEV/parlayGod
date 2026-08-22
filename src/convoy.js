@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { postPower } from './roster.js';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused, usd,
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused, usd, art,
   REGIMEN, disciplineLvlOf } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
@@ -430,10 +430,10 @@ export async function buyRig(ch, kind, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No shopping for trucks from lockup.');
   const cfg = rigOf(kind);
   if (!cfg) throw new GameError('bad_rig', 'No such rig — Panel Van, Box Truck, Armored Hauler, The Semi.');
-  if (levelOf(Number(ch.respect)) < cfg.minLvl) throw new GameError('level', `The ${cfg.name} is for level ${cfg.minLvl}+.`);
+  if (levelOf(Number(ch.respect)) < cfg.minLvl) throw new GameError('level', `${art(cfg.name, 'The')} is for level ${cfg.minLvl}+.`);
   if ((await client.query('SELECT 1 FROM rigs WHERE character_id=$1', [ch.id])).rows[0])
     throw new GameError('already', 'You run one rig — sell the old one first (well, you would if we let you; trade up later).');
-  if (Number(ch.cash) < cfg.cost) throw new GameError('cash', `The ${cfg.name} runs ${usd(cfg.cost)}.`);
+  if (Number(ch.cash) < cfg.cost) throw new GameError('cash', `${art(cfg.name, 'The')} runs ${usd(cfg.cost)}.`);
   ch.cash = Number(ch.cash) - cfg.cost;
   await client.query('INSERT INTO rigs (character_id, kind) VALUES ($1,$2)', [ch.id, cfg.id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cfg.cost, reason: 'convoy:rig' });

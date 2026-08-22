@@ -9,8 +9,7 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
-import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier,
-  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade , jailed, hospitalized, safeHoused, usd } from './rules.js';
+import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier, businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade, jailed, hospitalized, safeHoused, usd, art } from './rules.js';
 import { recordRival, revengeOwed } from './rivals.js';
 import { bumpHonor } from './honor.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -162,11 +161,11 @@ async function addIncomeScrutiny(row, banked, client) {
 export async function buyBusiness(ch, kind, client, h) {
   const cat = businessOf(kind);
   if (!cat) throw new GameError('bad_business', 'No such business.');
-  if (levelOf(Number(ch.respect)) < cat.lvl) throw new GameError('level', `The ${cat.name} opens up at level ${cat.lvl}.`);
+  if (levelOf(Number(ch.respect)) < cat.lvl) throw new GameError('level', `${art(cat.name, 'The')} opens up at level ${cat.lvl}.`);
   const existing = (await client.query('SELECT id FROM businesses WHERE character_id=$1 AND kind=$2', [ch.id, kind])).rows[0];
-  if (existing) throw new GameError('exists', `You already run a ${cat.name} — upgrade it instead.`);
+  if (existing) throw new GameError('exists', `You already run ${art(cat.name, 'a')} — upgrade it instead.`);
   const tier = cat.tiers[0];
-  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `The ${cat.name} costs ${usd(tier.cost)} to set up.`);
+  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `${art(cat.name, 'The')} costs ${usd(tier.cost)} to set up.`);
   ch.cash = Number(ch.cash) - tier.cost;
   const id = uid();
   await client.query('INSERT INTO businesses (id, character_id, kind, tier) VALUES ($1,$2,$3,1)', [id, ch.id, kind]);
@@ -245,9 +244,14 @@ export async function collectBusiness(ch, client, h) {
     ch.cash = Number(ch.cash) + rakeback;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: rakeback, reason: 'casino:rakeback' });
   }
-  if (total <= 0 && rakeback <= 0 && !raids.length && !cold && !padPaid) return { ok: true, collected: 0 };
+  // `collect` NAMES the system, and it is not decoration: five income verbs answer with `collected`
+  // and only two of them pay a POCKET, so describe()'s flat field-name chain gave the three FAMILY
+  // ones (territory / frontier / vassals) this line — a boss was told he had "collected" money he
+  // cannot spend a dollar of. Scoping on which fields each happens to OMIT was the shape that
+  // collided in the first place, so every one of the five says which it is.
+  if (total <= 0 && rakeback <= 0 && !raids.length && !cold && !padPaid) return { ok: true, collect: 'business', collected: 0 };
   h.owned.businesses = await businessesOf(client, ch.id);
-  return { ok: true, collected: total, businesses: rows.length,
+  return { ok: true, collect: 'business', collected: total, businesses: rows.length,
     ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}),
     ...(cold ? { cold } : {}), ...(padPaid > 0 ? { padPaid } : {}) };
 }
@@ -332,10 +336,10 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   const cat = businessOf(r.kind);
   const next = businessTierOf(r.kind, Number(r.tier) + 1);
   if (!next) throw new GameError('maxed', `Your ${cat.name} already runs at full strength.`);
-  if (isCold(r)) throw new GameError('cold', `The ${cat.name} is dark — pay the pad before you pour money into it.`);
+  if (isCold(r)) throw new GameError('cold', `${art(cat.name, 'The')} is dark — pay the pad before you pour money into it.`);
   const raid = await resolveScrutiny(ch, r, client, h); // a raid seizes the pending before it banks
   const pending = raid.raided ? 0 : accrued(r);
-  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `Upgrading the ${cat.name} costs ${usd(next.cost)}.`);
+  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `Upgrading ${art(cat.name)} costs ${usd(next.cost)}.`);
   // bank the pending at the old rate, then debit the upgrade — net in one cash figure. The upgrade
   // also squares the pad (upkeep_at=now): a fresh clock at the new rate, no retroactive rate bump.
   ch.cash = Number(ch.cash) + pending - next.cost;
@@ -533,7 +537,7 @@ export async function takeoverBusiness(ch, owner, businessId, client, h) {
   if (!r || r.character_id !== owner.id) throw new GameError('bad_business', 'No such front on them.');
   // you can't run two of one kind — a UNIQUE(character_id,kind) collision would 500; gate before the roll
   if ((await client.query('SELECT 1 FROM businesses WHERE character_id=$1 AND kind=$2', [ch.id, r.kind])).rows[0])
-    throw new GameError('have_kind', `You already run a ${businessOf(r.kind).name} — you can only hold one.`);
+    throw new GameError('have_kind', `You already run ${art(businessOf(r.kind).name, 'a')} — you can only hold one.`);
   if (r.takeover_cd_until && new Date(r.takeover_cd_until) > new Date())
     throw new GameError('cooldown', 'That front just fought off a move — let it settle.');
   const fee = BUSINESS_EMPIRE.TAKEOVER.FEE;

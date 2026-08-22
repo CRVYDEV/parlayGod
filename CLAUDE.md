@@ -16017,6 +16017,206 @@ mutation-verified: floor→round in the response fails by name at 1234561-vs-123
 cross-surface half takes the wave-36 shape (exact lower edge, an upper bound computed from the LIVE
 `BANK_RATE`/`BANK_PERIOD_MS` levers over a 30s gap, never a hardcoded tolerance).
 
+**PLAY WAVE 55 — FIVE VERBS, ONE FIELD, AND THE WRONG POCKET (2026-08-21).** Wave 54 ended by naming
+the sweep's own root cause — *a route nobody has driven has a line nobody has read* — and measured the
+surface honestly for the first time by **INSTRUMENTING the ledger's drive loop rather than regexing
+it** (a static scan reports 49 driven rows against a real 204, because dynamic rows resolve their URL
+at drive time and are invisible to a regex). Against the **410 mutating routes the console can press,
+204 are driven and 209 are not**. Driving the income cluster out of that list found one collision
+across FIVE verbs, one echo, one wrong-system line and two silences.
+
+**`collected` IS SENT BY FIVE INCOME VERBS AND ONLY TWO OF THEM PAY A POCKET.** `describe()` is a flat
+chain over field NAMES, so the three FAMILY collects — territory operations, frontier outposts and
+vassal tribute, **every dollar of which lands in the TREASURY** — all fell into the personal-business
+line: a boss banking $40,000 of operations income was told he had *"collected $40,000"*, when he cannot
+spend a dollar of it himself, and the one place he would learn that is the line that just told him
+otherwise. Two of the three were worse than mis-scoped. Frontier and vassals ALSO shared a `tributes`
+line further down which fired **alongside** the pocket one — *"collected $2,000 … · collected $2,000 in
+vassal tribute → the treasury"*, **the same figure twice in one sentence** (the wave-36 echo) — and
+that shared line calls a cartel OUTPOST's tribute *"vassal tribute"*, which is a different system
+entirely (a conquered NPC family). Fixed at the SOURCE on all five: each reply names its own system
+(`collect: 'business' | 'club' | 'territory' | 'frontier' | 'vassals'`) and each branch keys on that,
+with the shared line deleted. **The speakeasy needed the marker as much as the treasury three did** —
+scoping the pocket branch on the ABSENCE of a family field would have been the very rule being fixed:
+*absence is not a discriminator, it holds exactly until a sibling grows the field you were relying on
+being missing*, which is how these five came to collide in the first place.
+
+**TWO SILENCES WITH IT, both $OMR burns.** An **estate wing** — up to 1,500 $OMR — read *"built the
+Trophy Room"* and named no price, three lines from the TIER above it which names three numbers (the
+forgotten-sibling shape); it now mirrors its sibling with the burn and the lifetime figure the board
+calls the compound's value. And the **vanity plate** read **`"done."`** outright over 12 $OMR — and
+could not have read otherwise, because `describe()` has no handle on the garage: it sees a `carId` and
+nothing that can turn one into iron, so the CAR's name had to ship with the reply.
+
+**AND FIXING IT REPRODUCED THE EXACT CLASS BEING FIXED, which is the more useful half.** The first cut
+read `carOf(car.model)` — but `h.owned.cars` holds RAW `cars` rows and it is the character VIEW that
+renames that column, so it was `carOf(undefined)` → `null` → a line that silently degraded back to a
+bare plate. Caught only by READING the driven output (*"the plate reads SIX GUN — 12 $OMR"*, no iron in
+it) rather than re-reading the diff. The site now says `model_id` and says WHY, because the failure is
+silent in both directions.
+
+**Guarded** by a WAVE 55 block in `test/client.js` that drives all five collects for real — the pocket
+front, an established territory operation, a held frontier outpost and a conquered vassal family — and
+asserts the PROPERTY rather than the wording: a pocket collect must not claim a treasury, a treasury
+collect must SAY treasury, and **no line may print its own figure twice** (a COUNT, because the failure
+a player saw was the number stated twice, not a phrase). Frontier and vassals are seeded rather than
+conquered, because routing an apex outfit is a whole co-op raid and what is under test is the LINE.
+**Six mutations, each caught at its own named assertion** — the pocket branch un-scoped (*"family
+operations pay the TREASURY, not the man"* against `"collected $40,000"`), the shared line restored
+(caught by the wrong-system word), the shared line restored WITHOUT that word (caught by the echo count
+alone, so both assertions are load-bearing), the wing price dropped, `model` read off a raw row, and the
+plate branch deleted. Driven actions 232 → 238. Suite green + sim drift-0 + mobile + pgquery + pgcheck
+47/47 on a FRESH real Postgres.
+
+**PLAY WAVE 56 — THREE MISSION CLAIMS IN FOUR TOLD THE PLAYER THEIR NAME HAD BEEN TAKEN
+(2026-08-22).** Wave 55 ended by naming the sweep's own root cause — *a route nobody has driven has
+a line nobody has read* — so this wave measured the surface honestly before driving anything, and
+**the measurement had to be INSTRUMENTED rather than regexed**: a static scan of the ledger reports
+49 driven rows against a real 204, because dynamic rows resolve their URL at drive time and are
+invisible to a regex. Against the **323 mutating routes the console can press: 174 driven, 149
+NOT.** Driven in four batches, each reply read back through the client's REAL `describe()`.
+
+**THE HEADLINE IS THE COLLISION CLASS AT ITS WIDEST YET, and it is not a silence.** `doMission`
+answers `title: m.title || null`, and **27 of the 36 missions carry no title** — so three claims in
+four fell into `describe()`'s VANITY TITLE-CLEAR branch and read **"title dropped — just your name
+from here"**: the OPPOSITE of what happened, at the moment the game paid the biggest respect award
+it has, with the cash, the respect and the $OMR all discarded. **On the Dockside Heist that
+included the MINT CREDIT** — the rung the coach names as *"you can get made for free"*, the free
+path past the extraction gate — reported as a title being stripped. The nine rungs that DO award a
+title were only half right: they printed the title alone and threw the pay away. Fixed at the
+SOURCE — the reply names its own system (`mission: {id, name}`, an object so nothing can collide
+with it) and the branch sits ABOVE the vanity one, because that branch is right about vanity and
+only ever claimed this by accident. **Absence is not a discriminator: this reply had no marker only
+until it needed one**, which is the whole shape (the deed unlist paid for it twice, the five income
+verbs of wave 55 once more).
+
+**With it, the freight rail into a monument.** The server CLAMPS the units it takes to what the
+wall still needs, and the line read **"1 units of freight"** — the wrong plural, naming neither
+which of several goods left the trunk nor that the quantity may not be the one offered. Every other
+freight line in the game names the good; the reply now carries `good` and the line reads it through
+the client's existing `goodName`, using the `×` idiom the market cards already use, which disposes
+of the plural entirely rather than patching it.
+
+**The pay figures were already honest and that is worth recording**, because it is the wave-47
+nominal-vs-actual class handled correctly by code nobody had to fix: both contribution rails clamp
+(`give = min(amt, ceil(need))`) and `doMission` overwrites `respect: missionRep` with the
+`MISSION_RESPECT_MULT`-scaled figure, so what the reply states is what landed. The defect was the
+line, never the number.
+
+**The regression drives all of it for real on its own token** (an UNMINTED fresh account, or the
+mint-credit half proves nothing — `doMission` grants it only `if (!h.acct.minted)`), and its
+preconditions are asserted rather than assumed in a way that matters twice: the untitled case pins
+that m1 really carries no title, and — because **`/v1/rules.missions` deliberately does not publish
+`title`** (it is the reward, not the brief) — the TITLED case takes its precondition from **the
+server's own reply** rather than the catalog, which is the only ground truth available. The first
+cut looked in the catalog and failed by name at *"no reachable titled mission"*, which is the guard
+being right about itself. Six mutations, six distinct named failures (the server marker dropped;
+the client branch deleted, restoring the original line verbatim; the mint credit dropped from the
+line; the respect dropped from it; the freight `good` dropped; the line reverting to "units of
+freight"). Driven actions 238 → 243.
+
+**Three batches came back CLEAN and are recorded, because a sweep that publishes only its hits
+cannot be audited:** the Port end to end (boat, hull upgrade, cast off, a real BUSTED-AT-SEA with
+its fine, the berth), the whole Pen inside (cards, the yard character, the iron pile, working the
+stretch), the family/commission/law clusters (every refusal reading as a sentence, `not_indicted`
+/`rank`/`free` each naming what is missing), and the estate/bonds/vanity/wire/track/loans set. The
+`district` refusals all carried their machine-readable payload, so the console can still offer
+"go there →".
+
+
+**PLAY WAVE 57 — "THE THE SEMI IS IN THE YARD", ON A $2,000,000 PURCHASE AND ITS OWN REFUSAL
+(2026-08-22).** Wave 56 ended by naming the sweep's own root cause — *a route nobody has driven has a
+line nobody has read* — and this wave found the sharper version: **a route the ledger DOES drive, with
+the one rung that cannot show the bug.** The convoy rig has been in the ACTION ledger since wave 45,
+driven with the **Panel Van**; the catalog's apex rung is **The Semi**, and every line naming it
+doubled the article — the $2,000,000 receipt read *"the The Semi is in the yard"*, and the server's own
+refusals read *"The The Semi is for level 42+"* and *"The The Semi runs $2,000,000"*, which is what a
+player actually sees, since `describe()` shows `body.message` FIRST. A driven route is not a read route
+when the fixture picks the case that reads fine either way.
+**IT IS A CLASS, AND THE MEASUREMENT IS WHAT MADE THAT OBVIOUS: 105 of this game's catalogs hold at
+least one rung whose name begins with "The"** — The Compound, The Deep Run, The Syndicate, The Legacy,
+The Gatekeeper, The Gold Cup, The Volkov Bratva. So the question is never "does this catalog have one
+today" but "what happens the day it grows one", and **the public Discord wire was already saying
+"The The Volkov Bratva was routed on the frontier"** on the game's own organic-reach surface. Swept
+both halves: **12 server refusal templates** (convoy ×2, boxing, economy ×2, estate ×3, kitchen ×3,
+port ×2, speakeasy ×2, stable, territory, business ×3, vanity ×2, sov ×2, citywire ×2) and **17 client
+lines**.
+**THE FIX IS ONE HELPER ON EACH SIDE, and dropping the article is the WRONG fix — which is known
+because it was tried.** Wave 10 hit this on the speakeasy tiers and dropped the article there; that
+does not generalise, because most rungs do NOT begin with "The" and *"Panel Van is in the yard"* reads
+clipped. So `art(name)` supplies one only when the name does not (`art(x, 'A')` where the sentence
+wants a different one) — `src/rules.tail.js` beside `usd()`, and MODULE scope on the client, not inside
+`describe()`, because a dozen screens render the same names and a second private copy is how three gate
+predicates ended up with sixty-nine of them.
+**THE GUARD IS THE DURABLE HALF — THE ARTICLE LEDGER** (`test/gates.js`, beside the money ledger and on
+the same corpus): inside a `GameError` message, a hardcoded article before an interpolated
+`.name`/`.title` must go through `art()`. **Narrow on purpose** — a district id, a track word (*"The
+engine is as built as it gets"*), a role id and a money figure all read as an article followed by an
+interpolation and none of them is a name, so a rule wide enough to catch them is a rule people route
+around. **Its anti-vacuity floor had to be rewritten and that is the lesson**: counting VIOLATIONS
+floors at zero the moment the tree is clean, so the check would be measuring nothing forever — the
+corpus is the sentences the rule GOVERNS, i.e. the `art()` calls plus the violations (34 today).
+**Regression: the rig driven for real at BOTH ends**, because the second half is what stops the wave-10
+fix — the article must still APPEAR on a plain name — plus both refusals, with a precondition asserting
+the catalog really carries an article-bearing rung AND a plain one, or the whole block passes over a
+tree where the bug is fully present. Four mutations, each caught at its own named assertion (the client
+helper removed → *"the The Semi is in the yard"*; the server refusal un-arted → caught BOTH by the
+regression and by the ledger, naming the file and line; `art()` reduced to dropping the article → the
+plain-rung assertion; the ledger's narrowing broken → the anti-vacuity floor). One trap re-paid: the
+`next is the ${...}` substitution ate a closing brace and the client stopped PARSING — `node --check`
+on the extracted script after every template-literal edit, for the third time. Driven actions 238 →
+240. Suite green + sim drift-0 + mobile 81/81.
+
+**THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
+(2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
+outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived
+nowhere: `CHAIN-DEPLOY.md` is the operational runbook (deploy order, arm order, env, kill switches) and
+was carrying the audit scope as a side note. Two things came out of assembling it. **THE HEADLINE IS A
+STALE FACT THAT ERRED IN THE UNDERSTATING DIRECTION**, which is the worst direction for a security
+review: §0's *"what is live TODAY"* paragraph said **`StockVault` is unwritten and there is no claim
+route to find** — it shipped 2026-08-14 with a delivery keeper, a prover and a `delivered ≤ allocated`
+wall — **and the SAME document's batch table forty lines above listed it in scope with its attack
+surface described.** The document contradicted itself and the stale half made the operative claim. *An
+auditor told a contract does not exist does not attack it.* Corrected to the real fact, which is a
+different shape entirely: the rail is BUILT end to end and **chain-DORMANT** (unset env, not unwritten
+code), and **there is no claim route BY DESIGN** — the founder's §3.3 gateless push, which is precisely
+why the ADDRESS is the only thing between the treasury and a permanent loss and why it should be
+attacked. Second: `forge test **288/288**` measured **305/305** (the red-team regressions since — RT#5's
+constructor daily caps, RT#8's two-step ownership, the four-way sell tax), so the line now says
+re-measure rather than quote, and that if the two disagree the TREE is right.
+**THE GUARD IS THE DURABLE HALF** (`test/docs.js`): no launch-gating doc may call a contract unwritten
+while its `.sol` exists, plus the batch enumeration must match the tree (`17 contracts + 1 interface`
+against 18 files — so the audit SCOPE cannot drift, which is what "batch, not dribble" means). Three
+decisions in it, each a property rather than a preference: **scope is CHAIN-DEPLOY + DEPLOY only** —
+CLAUDE.md is excluded because it is a chronological log where "not built" is TRUE about the day it was
+written; **present tense only**, because *"this paragraph SAID X WAS unwritten"* is a correction naming
+its own fix and a guard that fires on the correction is one people route around; and a **word-boundary
+on both ends**, or `OMR` matches inside `OMRStaking`. Anti-vacuity floor at 20 mentions (it sees 150).
+Three mutations, three named failures — the original stale sentence restored, the batch count wrong, and
+the extractor blinded (which reports as a FAILURE rather than a clean sweep).
+**`CHAIN-AUDIT-PACKET.md` is the packet**: the 18 files enumerated with what each is and which suite
+covers it; what each wall CLAIMS rather than what it does (the four mint walls and the recorded
+deviation — *the literal "accretive-only" reading forbids every discounted bond, so wall 3 is a hard
+Safe-set rate ceiling: weaker as economics, stronger as a wall*; the oracle's both-sides window bound;
+the hook's three claims — the `beforeInitialize` pool gate that makes `SellTaxTaken` unforgeable, the
+accrue-don't-forward sweep, the deliberate absence of a pause; the NFT entitlement split; the pause
+matrix's "no contract can be paused into a state where value is unreachable"); **what the four provers
+actually prove versus what stays config-only** — and the residual is the same for all three e2e ones and
+is stated rather than smoothed: *each prover CONFIGURES the thing it then checks against*, so a wrong
+pool fee or ERC-6551 salt is a config error no prover can see; the backend PARITY surface (five values
+the chain holds authoritatively that the backend restates, where *every downstream check sums correctly
+because they all descend from the same restated number*); the signer's own scope; and a ten-item
+starting list of properties to attack. **Every claim in it was verified against the tree before it was
+written** (the four EIP-712 domains distinct, all four signer-bearers taking their cap as a CONSTRUCTOR
+argument, `OMR.mint` minter-gated with no owner path, `StockVault` containing no mint at all,
+`DynastyNFT`'s only `balanceOf` mention being the comment that says it gates nothing, the hook carrying
+no Pausable) — not because the summary would be wrong otherwise, but because a packet that overstates
+its own rigour is worse than one that says less.
+**And the recorded trap was hit again, by me:** `git checkout test/docs.js` to undo a mutation **wiped
+the uncommitted guard** — the exact thing ground rule #9 exists for, three sessions after it was
+written. Recovered from the heredoc in context; the rule stands and the savepoint now runs after every
+edit.
+
 **THE ROUND TRIP TOLD TRUE + EXTRACTED GEAR LEAVES PLAY + two founder designs (founder-directed
 2026-08-21: NFT marketplace round-trip + wallet-rolled stats).** The founder asked for two changes,
 and the survey found the first MOSTLY BUILT and mis-described: cars, boats and Street Deeds already

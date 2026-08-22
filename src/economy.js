@@ -6,13 +6,7 @@ import { logCollect } from './collection.js';
 // (tokenomics v2 step 2) the early-exit surcharge + toll split now live only on the WITHDRAWAL
 // boundary in chain.js — the AMM sell that used to carry them here is retired with the pool.
 import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding, bumpMastery, bus, notify } from './game.js';
-import {
-  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
-  LIMITED_RUNS, runOf, limitedRunP,
-  levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
-  effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
-  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult, STAKE_LOCKS, stakeLockActive, effectiveStake,
-  OPERATIONS, opSlotsOf, nextOpSlotLevel , jailed, usd } from './rules.js';
+import { CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD, LIMITED_RUNS, runOf, limitedRunP, levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim, effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf, seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult, STAKE_LOCKS, stakeLockActive, effectiveStake, OPERATIONS, opSlotsOf, nextOpSlotLevel, jailed, usd, art } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
@@ -393,9 +387,9 @@ export async function upgradeRacket(ch, racketId, client, h) {
   if (!r) throw new GameError('bad_racket', 'No such racket.');
   if (!h.owned.rackets.includes(r.id)) throw new GameError('none', "You don't run that racket.");
   const level = Number(h.owned.racketLevels?.[r.id] || 0);
-  if (level >= RACKET_EMPIRE.UP_MAX) throw new GameError('maxed', `The ${r.name} is running as hard as it can.`);
+  if (level >= RACKET_EMPIRE.UP_MAX) throw new GameError('maxed', `${art(r.name, 'The')} is running as hard as it can.`);
   const cost = racketUpgradeCost(r.id, level);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Muscling the ${r.name} up a level runs ${usd(cost)}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Muscling ${art(r.name)} up a level runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   await client.query('UPDATE character_rackets SET level=$1 WHERE character_id=$2 AND racket_id=$3', [level + 1, ch.id, r.id]);
   if (h.owned.racketLevels) h.owned.racketLevels[r.id] = level + 1;
@@ -599,7 +593,7 @@ export async function buyVest(ch, vestId, client, h) {
   const v = VESTS.find((x) => x.id === vestId);
   if (!v) throw new GameError('bad_vest', 'No such vest.');
   if (ch.vest === vestId) throw new GameError('worn', "You're already wearing it.");
-  if (Number(h.acct.omr) < v.omr) throw new GameError('omr', `The ${v.name} runs ${v.omr} $OMR.`);
+  if (Number(h.acct.omr) < v.omr) throw new GameError('omr', `${art(v.name, 'The')} runs ${v.omr} $OMR.`);
   h.acct.omr = Number(h.acct.omr) - v.omr;
   ch.vest = vestId;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -v.omr, reason: `vest:${vestId}` });

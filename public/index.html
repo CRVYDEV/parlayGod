@@ -2007,6 +2007,17 @@
     offline: "couldn't reach the city — check your connection, or it's restarting. Nothing you did was lost.",
     internal: "something broke on our end — that's a bug, not you. Try again; if it keeps happening, say so.",
   };
+  // A CATALOG NAME MAY CARRY ITS OWN ARTICLE. "The Semi", "The Compound", "The Institute", "The Deep
+  // Run", "The Tsarina's Ghost" — a line that prepends one reads "the The Semi", which is what the apex
+  // rig ($2,000,000, the biggest purchase on that screen) actually said, and what the server's own
+  // refusals said back. 105 of this game's catalogs hold at least one rung beginning with "The", so any
+  // catalog that grows one tomorrow breaks every line naming it. Wave 10 hit this on the speakeasy tiers
+  // and DROPPED the article there; that does not generalise, because most rungs do NOT begin with "The"
+  // and "Panel Van is in the yard" reads clipped. One article-aware helper instead of a judgement call
+  // per site. MODULE scope, not inside describe(): the same names are rendered by a dozen screens, and a
+  // second private copy is how three gate predicates ended up with sixty-nine of them. Mirrors the
+  // server's own `art()` in rules.tail.js — the two surfaces must not disagree about the same name.
+  const art = (n, a = 'the') => { const v = String(n == null ? '' : n); return /^the\s/i.test(v) ? v : `${a} ${v}`; };
   function describe(body, code) {
     // PLAIN TEXT, not HTML. Every consumer of describe() is toast(), which assigns to textContent —
     // injection-proof by construction — so HTML-escaping here protects nothing and CORRUPTS the very
@@ -2215,11 +2226,11 @@
         // the price AND the consequence. The pad is a percentage of income, so a tier raises the
         // recurring bill for good — the buy line one branch down says "mind the pad" and this, the
         // six-figure move that MAKES the pad bigger, used to say only which tier it reached.
-        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.cost ? ` — $${fmt(body.cost)}` : ''}`
+        ? `${art(body.name)} moves up to tier ${body.tier}${body.cost ? ` — $${fmt(body.cost)}` : ''}`
           + `${body.collected ? `, $${fmt(body.collected)} banked at the old rate first` : ''}`
           + `${body.incomePerHr ? `. It earns $${fmt(body.incomePerHr)}/hr now`
             + `${body.upkeepPerHr ? `, and the pad rises with it: $${fmt(body.upkeepPerHr)}/hr` : ''}.` : ''}`
-        : `the ${txt(body.name)} is yours — collect the till, and mind the pad`;
+        : `${art(body.name)} is yours — collect the till, and mind the pad`;
     if (body && body.ok && body.berths !== undefined && body.fleetMax !== undefined)
       return `slip rented — $${fmt(body.spent)}, ${body.berths} berth${body.berths > 1 ? 's' : ''} held, room for ${body.fleetMax} boats`;
     if (body && body.ok && body.traitName && body.desc)
@@ -2416,14 +2427,14 @@
     // which is the highest-stakes consent in the game: agree to it and a loss hands over the car.
     if (body && body.ok && body.pinkSlip !== undefined)
       return body.pinkSlip
-        ? `\u{1F380} the ${txt(body.car || 'car')} is up for PINKS — a challenger can race you for the title, and if you lose it's THEIRS`
-        : `the ${txt(body.car || 'car')} is off pinks — no more racing for the title`;
+        ? `\u{1F380} ${art(body.car || 'car')} is up for PINKS — a challenger can race you for the title, and if you lose it's THEIRS`
+        : `${art(body.car || 'car')} is off pinks — no more racing for the title`;
     if (body && body.ok && body.nos !== undefined && body.carId)
-      return `\u{1F4A8} nitrous loaded in the ${txt(body.car || 'car')} — ${body.nos}/${body.max} charges, $${fmt(body.spent)}. One burns per race, win or lose.`;
+      return `\u{1F4A8} nitrous loaded in ${art(body.car || 'car')} — ${body.nos}/${body.max} charges, $${fmt(body.spent)}. One burns per race, win or lose.`;
     if (body && body.ok && body.carId && body.limit !== undefined)
       return body.limit
-        ? `\u{1F4CB} the ${txt(body.car || 'car')} is on the strip — any driver can wager you up to $${fmt(body.limit)}${body.asked > body.limit ? ` (you asked $${fmt(body.asked)}; the table caps there)` : ''}`
-        : `\u{1F4CB} the ${txt(body.car || 'car')} is off the strip — no new wager races`;
+        ? `\u{1F4CB} ${art(body.car || 'car')} is on the strip — any driver can wager you up to $${fmt(body.limit)}${body.asked > body.limit ? ` (you asked $${fmt(body.asked)}; the table caps there)` : ''}`
+        : `\u{1F4CB} ${art(body.car || 'car')} is off the strip — no new wager races`;
     if (body && body.ok && body.boutLimit !== undefined)
       return body.boutLimit
         ? `\u{1F4CB} ${txt(body.fighter)} is on the card — anyone can make a match up to $${fmt(body.boutLimit)}, and the loser gets laid up`
@@ -2505,7 +2516,7 @@
     // one matters most — armor and engine are a CHOICE, and anything not exactly 'engine' falls to
     // armor, so a mistyped track spends the money on the other half and reads identical.
     if (body && body.ok && body.op === 'rig')
-      return `\u{1F69A} the ${txt(body.name)} is in the yard — $${fmt(body.cost)}, ${body.armor} armour`;
+      return `\u{1F69A} ${art(body.name)} is in the yard — $${fmt(body.cost)}, ${body.armor} armour`;
     if (body && body.ok && body.op === 'rig:up')
       return `\u{1F527} ${txt(body.track)} up to ${body.level}${body.max ? `/${body.max}` : ''} — $${fmt(body.cost)}`;
     // CALLED IT OFF — the manifest comes back off the truck into the trunk and nothing is on the
@@ -2532,7 +2543,7 @@
     // business type); `district` keeps a personal FRONT's upgrade — {id,kind,name,tier,collected},
     // no district — on its own line two hundred lines up.
     if (body && body.ok && body.district && body.kind && body.tier !== undefined && body.name)
-      return `\u{1F3D9} ${body.tier > 1 ? `the ${txt(body.name)} moves up to tier ${body.tier}` : `the ${txt(body.name)} is running in ${txt($dist(body.district))}`}${body.spent !== undefined ? ` — $${fmt(body.spent)} out of the treasury` : ''}${body.collected > 0 ? `, $${fmt(body.collected)} banked at the old rate first` : ''}${body.incomePerHr ? `. It earns $${fmt(body.incomePerHr)}/hr into the treasury, and owes a pad against it.` : '.'}`;
+      return `\u{1F3D9} ${body.tier > 1 ? `${art(body.name)} moves up to tier ${body.tier}` : `${art(body.name)} is running in ${txt($dist(body.district))}`}${body.spent !== undefined ? ` — $${fmt(body.spent)} out of the treasury` : ''}${body.collected > 0 ? `, $${fmt(body.collected)} banked at the old rate first` : ''}${body.incomePerHr ? `. It earns $${fmt(body.incomePerHr)}/hr into the treasury, and owes a pad against it.` : '.'}`;
     // …and the club's own line is made MUTUALLY EXCLUSIVE with it rather than merely later. Giving
     // the racket the `spent` it was missing fixes the "$undefined" but NOT the collision — the club's
     // guard still matches a racket, and the two would then be separated only by which line happens to
@@ -2543,7 +2554,9 @@
     if (body && body.ok && body.district && body.name && body.currency === 'omr' && body.spent !== undefined)
       return `\u{1F37E} the house goes by ${txt(body.name)} now — ${fmt(body.spent)} $OMR`;
     if (body && body.ok && body.collected === 0 && body.total === undefined)
-      return 'nothing in the till yet — come back when the day has run';
+      return body.collect === 'territory' ? 'the operations have nothing banked yet — come back when the day has run'
+        : body.collect === 'frontier' || body.collect === 'vassals' ? 'no tribute owed yet — come back when the day has run'
+        : 'nothing in the till yet — come back when the day has run';
     if (body && body.banked !== undefined && body.clearSeconds !== undefined)
       return `banked $${fmt(body.banked)} — it rides IN TRANSIT for ${minsTxt(body.clearSeconds)}, and a killer can loot it off you until it clears${body.intransit > body.banked ? ` (${'$' + fmt(body.intransit)} in transit now — deposits stack and reset the clock)` : ''}`;
     if (body && body.withdrew !== undefined) return `drew $${fmt(body.withdrew)} out — $${fmt(body.bank)} still banked`;
@@ -2642,7 +2655,7 @@
     }
     if (body && body.ok && body.used) {
       const c = (rules?.consumables || []).find((x) => x.id === body.used);
-      return `\u{1F48A} used the ${txt(c?.name || body.used)}${body.effect ? ` — ${txt(body.effect)}` : ''}`;
+      return `\u{1F48A} used ${art(c?.name || body.used)}${body.effect ? ` — ${txt(body.effect)}` : ''}`;
     }
     if (body && body.ok && 'gun' in body && body.gun === null) return 'piece put away — you\'re carrying nothing';
     // THE ARMORY. Its four buttons sit on one card and only two of them spoke: the vest and the ammo
@@ -2703,6 +2716,22 @@
       return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
     if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
     if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${txt(body.name)} now — your referral link changed with the name`;
+    // THE MISSION LADDER read as a TITLE BEING STRIPPED. doMission sends `title: m.title || null`
+    // and 27 of the 36 missions carry no title, so three claims in four fell into the vanity
+    // title-CLEAR line one branch down — "title dropped — just your name from here" — telling a
+    // player their name was taken at the instant the game paid them, and discarding the whole
+    // reward: the biggest respect award in the game, one of only two ways to earn $OMR, and on the
+    // Dockside Heist the mint credit that IS the free path to being made. Keyed on the server's own
+    // `mission` marker and placed ABOVE the title branch, because that branch is right about vanity
+    // and only ever claimed this by accident.
+    if (body && body.mission && body.reward) {
+      const r = body.reward;
+      const paid = [r.cash ? `$${fmt(r.cash)}` : null, r.respect ? `+${fmt(r.respect)} respect` : null,
+        r.omr ? `${fmt(r.omr)} $OMR` : null,
+        r.mintCredit ? 'a MINT CREDIT — that is the free path to getting made' : null,
+        body.title ? `they call you ${txt(body.title)} now` : null].filter(Boolean).join(' · ');
+      return `\u{1F396} ${txt(body.mission.name)} — ${paid || 'done'}${body.nextMissionSeconds ? ` · next job in ${minsTxt(body.nextMissionSeconds)}` : ''}`;
+    }
     if (body && body.ok && 'title' in body && body.tier === undefined)
       return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
@@ -2907,7 +2936,7 @@
     if (body.spec !== undefined && body.name && body.spent !== undefined) bits.push(`✦ your ${body.kind} is now ${body.name} (−${body.spent} $OMR)`);
     if (body.won !== undefined && body.feeBurned !== undefined) bits.push(body.won ? `TOOK IT OVER — the ${body.kind} is yours (they got $${fmt(body.net)})` : `the takeover was fought off — the $${fmt(body.feeBurned)} fee is gone`);
     if (body.pledged !== undefined && body.standing) bits.push(`pledged ${fmt(body.pledged)} $OMR to the treasury — ${body.standing.tier} (score ${fmt(body.standing.score)})`);
-    if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
+    if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned ${art(body.name)} (−${body.spent} $OMR)`);
     if (body.restored !== undefined && body.need !== undefined) bits.push(body.restored ? `the floor OVERRODE the head veto — the decree is RESTORED (${body.weight}/${body.need})` : `moved to override — the floor musters ${body.weight}/${body.need}`);
     if (body.vetoed && body.week !== undefined) bits.push(`VETOED ${body.vetoed} at the table`);
     // THE CHAMBER'S THREE SILENT VERBS. The veto and the override above read; the three acts that
@@ -2940,7 +2969,7 @@
     // system over.
     if (body.credited !== undefined && body.monument) {
       const paid = body.omr !== undefined ? `${fmt(body.omr)} $OMR`
-        : body.qty !== undefined ? `${fmt(body.qty)} units of freight`
+        : body.qty !== undefined ? `${fmt(body.qty)} \u{00D7} ${goodName(body.good)}`
         : `$${fmt(body.credited)}`;
       const worth = (body.omr !== undefined || body.qty !== undefined) ? ` — worth $${fmt(body.credited)} to the wall` : '';
       bits.push(body.completed
@@ -2977,20 +3006,27 @@
       if (body.toll) bits.push(`the docks took $${fmt(body.toll)}`);
       if (body.insurance) bits.push(`insurance paid $${fmt(body.insurance)}`);
     // THE BAR TAKE IS NET OF A CUT THE PLAYER WAS NEVER TOLD ABOUT. The club owes protection and
-    // wages at SPEAKEASY.UPKEEP_BPS — a fifth of every take, off the top, so a $80,000 night pays
-    // $64,000 — and the reply has carried `gross` and `upkeep` since the day the cut shipped while
-    // the line printed the net alone. That is the pad and the nut exactly: the game knowing a
-    // standing charge against the player's money and not saying it, on the button an owner presses
-    // every day. Only the club's reply carries these two fields, so the clause is scoped by them
-    // and nothing else's collect line moves.
-    // THE BAR TAKE IS NET OF A CUT THE PLAYER WAS NEVER TOLD ABOUT. The club owes protection and
     // wages at SPEAKEASY.UPKEEP_BPS — a fifth of every take, off the top, so an $80,000 night pays
     // $64,000 — and the reply has carried `gross` and `upkeep` since the day that cut shipped while
     // the line printed the net alone. That is the pad and the nut exactly: the game knowing a
     // standing charge against the player's money and not saying it, on the button an owner presses
     // every day. Only the club's reply carries these two fields, so the clause is scoped by them
     // and no other collect line moves.
-    } else if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.upkeep > 0 ? ` — $${fmt(body.gross)} over the bar, $${fmt(body.upkeep)} of it to protection and wages` : ''}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    } else if (body.collected && (body.collect === 'business' || body.collect === 'club')) bits.push(`collected $${fmt(body.collected)}${body.upkeep > 0 ? ` — $${fmt(body.gross)} over the bar, $${fmt(body.upkeep)} of it to protection and wages` : ''}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    // ── THE FAMILY'S THREE COLLECTS, each naming ITS OWN SYSTEM. `collected` is sent by five verbs
+    // and only two of them pay a POCKET, so the three family ones read the personal-business line
+    // above: a boss banking $40,000 of operations income was told he had collected it, when he
+    // cannot spend a dollar of it himself. Saying WHERE the money went is the whole point.
+    //
+    // Frontier and vassals additionally shared one `tributes` line further down, which fired
+    // ALONGSIDE the pocket one — the same figure twice in one sentence, the wave-36 echo — and
+    // called a cartel OUTPOST'S tribute "vassal tribute", which is a different system. One branch
+    // each, keyed on the system the server now names, and the shared line is gone. Absence is not a
+    // discriminator: these five were told apart by which fields they happened to omit until one of
+    // them grew a field, which is exactly how they came to collide.
+    else if (body.collected && body.collect === 'territory') bits.push(`\u{1F3E6} banked $${fmt(body.collected)} off ${body.rackets} operation${body.rackets === 1 ? '' : 's'} — into the FAMILY TREASURY, not your pocket`);
+    else if (body.collected && body.collect === 'vassals') bits.push(`\u{1F3E6} collected $${fmt(body.collected)} in vassal tribute — into the FAMILY TREASURY, not your pocket`);
+    else if (body.collected && body.collect === 'frontier') bits.push(`\u{1F3E6} collected $${fmt(body.collected)} in frontier tribute off ${body.tributes ? body.tributes.length : 0} outpost${body.tributes && body.tributes.length === 1 ? '' : 's'} — into the FAMILY TREASURY, not your pocket`);
     // A NO-OP MUST NOT READ AS A SUCCESS. The server has always answered honestly here — a COLD
     // front is skipped and reported as `cold`, an unaffordable pad pays nothing and reports
     // `stillOwed` — but describe() read neither, so both landed as a bare "ok". A tester hit exactly
@@ -3191,8 +3227,8 @@
     // which is why the rung's own `omr` is a separate field. `nextTier` is the discriminator (no
     // other action REPLY carries the key) and it survives the top rung, where it is null.
     if ('nextTier' in body && body.tier && body.name && !body.district)
-      bits.push(`\u{1F3DB} the place is a ${body.name} now — ${fmt(body.omr)} $OMR${body.spent ? `, ${fmt(body.spent)} sunk into it all told` : ''}${body.nextTier ? `. Next up: the ${body.nextTier.name}, ${fmt(body.nextTier.omr)} $OMR` : '. Nothing above it — that is the top of the ladder'}`);
-    else if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
+      bits.push(`\u{1F3DB} the place is ${art(body.name, 'a')} now — ${fmt(body.omr)} $OMR${body.spent ? `, ${fmt(body.spent)} sunk into it all told` : ''}${body.nextTier ? `. Next up: ${art(body.nextTier.name)}, ${fmt(body.nextTier.omr)} $OMR` : '. Nothing above it — that is the top of the ladder'}`);
+    else if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to ${art(body.name)}`);
     // THE GALA — a $OMR burn that fell to the bare catch-all and read "paid $360", which names a
     // price, leaves the purchase off, and gets the CURRENCY wrong on top (the catch-all assumes cash;
     // the gala is billed in tokens). What the money buys is the open-doors WINDOW: for the next few
@@ -3201,7 +3237,8 @@
     // `hoursOpen` is unique to this reply across the whole of src/.
     if (body.hoursOpen !== undefined && body.cost !== undefined)
       bits.push(`\u{1F942} the doors are open — ${fmt(body.cost)} $OMR, and the city has ${body.hoursOpen}h to come be seen. Every guest signs the book.`);
-    if (body.feature && body.name) bits.push(`built the ${body.name}`);
+    if (body.plate && body.carId) bits.push(`\u{1F516} the plate reads ${txt(body.plate)}${body.car ? ` on ${art(body.car)}` : ''}${body.omr ? ` — ${fmt(body.omr)} $OMR` : ''}`);
+    if (body.feature && body.name) bits.push(`built ${art(body.name)}` + (body.omr ? ` — ${fmt(body.omr)} $OMR, ${fmt(body.spent)} sunk into the place all told` : ''));
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     // The price leads, because it is what LEFT YOUR POCKET — this line used to state only the
@@ -3258,14 +3295,14 @@
     if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
     if (body.interdicted === true) bits.push(`⚓ BUSTED AT SEA — the Coast Guard seized the cargo, fined $${fmt(body.fine)}${body.sunk ? ' and SANK her' : ''}`);
     if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on the ${body.route} run — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
-    if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought the ${body.boat.name} — $${fmt(body.spent)}`);
+    if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought ${art(body.boat.name)} — $${fmt(body.spent)}`);
     if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
     // THE SEAL, and its own sibling on the same card got it right. Both are bought from the family's
     // POOLED $OMR reserve — money every member tributed in — and `foundation` one line down names
     // the institution while the seal read "done.": no seal, no reserve left, no next rung, after 150
     // $OMR of the family's money. The reserve balance is the half a boss actually needs, because the
     // next rung is what they are saving toward and nothing else on the screen has re-rendered yet.
-    if (body.seal && body.seal.name) bits.push(`\u{1F4DC} the family bears the ${body.seal.name} now — ${fmt(body.reserve)} $OMR left in the reserve${body.nextSeal ? `, next is the ${body.nextSeal.name} at ${fmt(body.nextSeal.omr)}` : ' — the finest seal in the city'}`);
+    if (body.seal && body.seal.name) bits.push(`\u{1F4DC} the family bears ${art(body.seal.name)} now — ${fmt(body.reserve)} $OMR left in the reserve${body.nextSeal ? `, next is ${art(body.nextSeal.name)} at ${fmt(body.nextSeal.omr)}` : ' — the finest seal in the city'}`);
     // ONE LINE APART from the seal above, out of the SAME pooled family reserve, and it named
     // neither what was left nor what comes next — though the reply carries both. It also stated
     // half its effect: the tier softens a filed case AND bleeds the meter faster, which is the
@@ -3274,8 +3311,8 @@
       const ft = (rules?.foundation || []).find((t) => t.tier === body.foundation.tier) || {};
       const soft = Math.round((1 - (body.foundation.bustMult ?? 1)) * 100);
       const bleed = ft.bleedMult ? `${Math.round((ft.bleedMult - 1) * 100)}% faster` : null;
-      bits.push(`\u{1F3DB} the family endowed the ${body.foundation.name} — ${fmt(body.reserve)} $OMR left in the reserve`
-        + (body.nextFoundation ? `, next is the ${body.nextFoundation.name} at ${fmt(body.nextFoundation.omr)}` : ' — the highest pillar there is')
+      bits.push(`\u{1F3DB} the family endowed ${art(body.foundation.name)} — ${fmt(body.reserve)} $OMR left in the reserve`
+        + (body.nextFoundation ? `, next is ${art(body.nextFoundation.name)} at ${fmt(body.nextFoundation.omr)}` : ' — the highest pillar there is')
         + `. Every made man's trials run ${soft}% softer${bleed ? `, and the family's heat cools ${bleed}` : ''}`);
     }
     // THE ENVELOPE named neither its price nor its clock, in a block where five siblings around it
@@ -3336,8 +3373,6 @@
       else bits.push(`${body.family} repelled the raid — their guns put you in the hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}.`);
     }
     if (body.winScore !== undefined && body.endsSeconds !== undefined) bits.push(`\u{2694}\u{FE0F} war declared on ${body.family} — land ${body.winScore} raids inside ${minsTxt(body.endsSeconds)} to win the campaign`);
-    if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
-    }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
     // THE BLACK MARKET — five of its six verbs said nothing, and the sixth said something else.
     // Every one of these carries TERMS: a listing fee, an expiry after which it lapses, and — the
@@ -5293,7 +5328,7 @@
         <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}${op.specialist ? ` <span class="chip good">specialist +${op.specFortBonus}🛡️</span>` : ''}${op.ghostSeconds > 0 ? ' <span class="chip">👻 ghosted</span>' : ''}
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)} · <span style="color:var(--warn)">the pad $${fmt(op.upkeepPerHr || 0)}/hr</span>${op.upkeepOwed ? `, owed $${fmt(op.upkeepOwed)}` : ''}${op.cold ? ' · COLD (pay the upkeep)' : ''}</div>
           ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}
-          ${boss && op.nextTier ? `<button class="act" data-do="POST /v1/territory/${op.district}/upgrade">move up to the ${esc(op.nextTier.name)} ($${fmt(op.nextTier.cost)} → $${fmt(op.nextTier.incomePerHr)}/hr)</button>` : (boss && op.tier ? '<span class="d" style="color:var(--dim)">running at full strength</span>' : '')}
+          ${boss && op.nextTier ? `<button class="act" data-do="POST /v1/territory/${op.district}/upgrade">move up to ${esc(art(op.nextTier.name))} ($${fmt(op.nextTier.cost)} → $${fmt(op.nextTier.incomePerHr)}/hr)</button>` : (boss && op.tier ? '<span class="d" style="color:var(--dim)">running at full strength</span>' : '')}
           ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}
           ${boss ? `<div style="margin-top:4px">
             ${op.specialist
@@ -5429,7 +5464,7 @@
 
       ${sect('fam-regalia', 'Family Regalia', 'status badges bought from the $OMR reserve — the boss\'s call', `
       <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>
-        ${g.nextSeal ? (boss ? `<button class="act" data-do="POST /v1/gangs/vanity/seal">commission the ${g.nextSeal.name} (${g.nextSeal.omr} $OMR)</button>` : '<span class="d" style="color:var(--dim)"> — the boss commissions seals</span>') : '<span class="chip good"> Obsidian — the finest seal in the city</span>'}</div>
+        ${g.nextSeal ? (boss ? `<button class="act" data-do="POST /v1/gangs/vanity/seal">commission ${art(g.nextSeal.name)} (${g.nextSeal.omr} $OMR)</button>` : '<span class="d" style="color:var(--dim)"> — the boss commissions seals</span>') : '<span class="chip good"> Obsidian — the finest seal in the city</span>'}</div>
       ${boss ? `<div class="card" style="margin-top:6px"><span class="t">Crest &amp; Name</span>
         <div style="margin-top:4px"><input id="crest-color" placeholder="#rrggbb" size="9"> <button class="act" id="crest-go">recolor the crest (${rules?.seals?.colorOmr ?? ''} $OMR)</button></div>
         <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (${rules?.seals?.renameOmr ?? ''} $OMR)</button></div></div>` : ''}`)}
@@ -8464,7 +8499,7 @@
     // confirm the other one-way doors get (FIRE, the shank, the loan collect).
     t.querySelectorAll('[data-bizshut]').forEach((b) => b.onclick = async () => {
       const [id, name, back] = b.dataset.bizshut.split(':');
-      const ok = await ask(`Close up the ${name}?`, `It's gone for good — the tier, the specialization and every dollar sunk in.
+      const ok = await ask(`Close up ${art(name)}?`, `It's gone for good — the tier, the specialization and every dollar sunk in.
         You get $${fmt(Number(back) || 0)} back${Number(back) ? '' : ' — nothing'}, and the pad on it stops. You'd be free to buy that
         kind of front again later, at t1 prices.`, { yes: 'close it up', no: 'keep it', danger: true });
       if (ok) act('DELETE', `/v1/business/${id}`, {}).then(() => renderEmpire());
@@ -8479,7 +8514,7 @@
     t.querySelectorAll('[data-rkout]').forEach((b) => b.onclick = async () => {
       const [id, name] = b.dataset.rkout.split(':');
       const back = Math.floor((rules?.rackets || []).find((r) => r.id === id)?.cost * ((rules?.operations?.retireBps || 0) / 10000)) || 0;
-      const ok = await ask(`Walk away from the ${name}?`, `The seat frees up and you can take on something else.
+      const ok = await ask(`Walk away from ${art(name)}?`, `The seat frees up and you can take on something else.
         You get $${fmt(back)} back${back ? '' : ' — nothing'}, and every level you muscled into it goes with it.`,
         { yes: 'walk away', no: 'keep it', danger: true });
       if (ok) act('DELETE', `/v1/rackets/${id}`, {}).then(() => renderEmpire());
@@ -8830,7 +8865,7 @@
       <h2>The Port ${b.atDocks ? '' : '<span class="chip" style="color:var(--bad)">travel to the docks to trade</span>'}</h2>
       ${b.legend ? `<div class="card" style="border-color:var(--gold)"><span class="t">The Smuggler's Legend</span><div class="d"><b style="color:var(--gold)">${b.legend.rank}</b> — $${fmt(b.legend.smuggled)} landed for life <span class="chip">survives death</span> · <a href="#" id="pt-lb">the leaderboard →</a></div></div>` : ''}
       <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.
-        ${(b.harbormaster && b.harbormaster.tolled) ? `<br><span class="chip" style="color:var(--bad)">the ${b.harbormaster.holder.name} [${b.harbormaster.holder.tag}] hold the docks — a ${(b.harbormaster.tollBps/100)}% toll on every clean landing</span>` : ''}</div></div>
+        ${(b.harbormaster && b.harbormaster.tolled) ? `<br><span class="chip" style="color:var(--bad)">${art(b.harbormaster.holder.name)} [${b.harbormaster.holder.tag}] hold the docks — a ${(b.harbormaster.tollBps/100)}% toll on every clean landing</span>` : ''}</div></div>
       ${routes.length ? `<div class="card"><span class="t">Sea Lanes <span class="chip">route notoriety</span></span><div class="d">Run the same lane and the Coast Guard learns it — interdiction climbs. Vary your lanes to stay cool (they cool on their own).<br>
         ${routes.map((r) => `${r.name}: ~${r.interdictPct}% caught ${r.notoriety > 0 ? `<span class="chip ${r.hot ? 'bad' : ''}">heat ${r.notoriety}/${r.notorietyMax}${r.hot ? ' 🔥' : ''}</span>` : '<span class="chip good">cold</span>'}`).join(' · ')}<br>${repLine}</div></div>` : ''}
       ${b.contraband ? `<div class="card"><span class="t">The Warehouse & Fence</span><div class="d">Warehoused contraband: <b>$${fmt(b.contraband.book)}</b> book value · today's fence rate <b>${b.contraband.fenceRate}×</b> → ~$${fmt(b.contraband.estimate)} <span class="chip">time the market — warehouse a landing, fence high</span>${b.contraband.book > 0 ? ' <span class="chip bad">at risk — a killer loots half your stash, so don\'t sit on it marked</span>' : ''}
@@ -9401,7 +9436,7 @@
           ${bd.yourStanding.charterName ? `<span class="chip good">✦ ${bd.yourStanding.charterName}</span>` : ''}</div>
         <div class="d">${fmt(bd.yourStanding.pledgedOmr)} $OMR pledged${bd.yourStanding.bondedEth ? ` · ${bd.yourStanding.bondedEth} ETH bonded (×${fmt(bd.catalogs.ethScoreOmr)})` : ''}${bd.yourStanding.nextTier ? ` · ${fmt(bd.yourStanding.nextTier.delta)} to ${bd.yourStanding.nextTier.name}` : ' · top tier'} <span style="color:var(--dim)">(survives death)</span></div>
         <div style="margin-top:6px"><input id="uw-pledge" placeholder="$OMR (min ${bd.catalogs.pledgeMin})" size="14"> <button class="act" id="uw-pledge-go">pledge to the treasury</button></div>
-        ${bd.yourStanding.nextCharter ? `<div style="margin-top:6px"><button class="act" id="uw-charter-go">commission the ${bd.yourStanding.nextCharter.name} (${bd.yourStanding.nextCharter.omr} $OMR)</button>
+        ${bd.yourStanding.nextCharter ? `<div style="margin-top:6px"><button class="act" id="uw-charter-go">commission ${art(bd.yourStanding.nextCharter.name)} (${bd.yourStanding.nextCharter.omr} $OMR)</button>
           <span class="d" style="font-size:11px;color:var(--dim)">a permanent treasury seal — pure display</span></div>`
           : (bd.yourStanding.charter ? '<div class="d" style="color:var(--dim)">you hold The Founding Charter — the top seal</div>' : '<div class="d" style="color:var(--dim)">back the treasury to commission a Charter</div>')}
         <div class="d" style="margin-top:6px"><a href="#" id="uw-lb">🏛 the Underwriters →</a></div>
@@ -10201,7 +10236,7 @@
       order_filled: () => `somebody filled ${d.qty} ${d.good} against your order`,
       order_expired: () => `your buy order lapsed — ${$c(d.refunded)} back${d.awaiting ? `, ${d.awaiting} still waiting in the warehouse` : ''}`,
       // ── the auction block
-      outbid: () => `${$c(d.by)} on the ${d.name} — you're no longer top bid`,
+      outbid: () => `${$c(d.by)} on ${art(d.name)} — you're no longer top bid`,
       auction_won: () => `${d.name} (${d.serial}) is yours — ${$c(d.price)} burned`,
       consign_won: () => `you took ${d.name} (${d.serial}) off the block — ${$c(d.price)}`,
       consign_sold: () => `your ${d.name} sold at the block — ${$c(d.net)} after the house`,

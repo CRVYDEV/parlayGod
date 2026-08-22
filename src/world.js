@@ -670,11 +670,12 @@ export async function collectFrontier(ch, client, h) {
       await client.query('UPDATE world_npcs SET tribute_at=$2 WHERE npc_id=$1', [r.npc_id, now]);
     }
   }
-  if (total <= 0) return { ok: true, collected: 0, outposts: held.length };
+  // `collect` names the system — see collectBusiness: five verbs send `collected`, only two pay a pocket.
+  if (total <= 0) return { ok: true, collect: 'frontier', collected: 0, outposts: held.length };
   await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, total]);
   await h.ledger(client, { currency: 'cash', amount: total, reason: 'world:tribute', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
-  return { ok: true, collected: total, tributes: collected };
+  return { ok: true, collect: 'frontier', collected: total, tributes: collected };
 }
 
 // POST /v1/world/:npcId/invade — a boss/underboss takes a RIVAL-held outpost by outbidding its garrison

@@ -1360,3 +1360,48 @@ const SCENERY_WAIVED = {
   console.log(`✓ every money figure in all ${messages} refusal messages is formatted for a player`);
 }
 
+// ═══ THE ARTICLE LEDGER — a name that already carries its own article ═════════════════════════════
+// Same corpus, same reason: a refusal is the most-read line in the game, and a player reads the whole
+// sentence rather than the figure alone. `The ${cfg.name} runs …` reads "The The Semi runs $2,000,000"
+// on the apex rig, "The The Deep Run needs a boat that makes 24+ knots" on the deepest lane, and the
+// PUBLIC Discord wire said "The The Volkov Bratva was routed on the frontier". It is not one typo:
+// 105 of this game's catalogs hold at least one rung whose name begins with "The", so any catalog
+// that grows one tomorrow breaks every sentence that names it — which is why the rule is a guard
+// rather than a sweep of the instances that happened to surface.
+//
+// Narrow on purpose. Only an interpolated `.name`/`.title` counts — a catalog NAME is the thing that
+// can supply its own article. A district id, a track word ("The engine is as built as it gets"), a
+// role id and a money figure all read as an article followed by an interpolation and are none of them
+// names, so a rule wide enough to catch them would be a rule people route around. The fix is
+// `art(x)` / `art(x, 'A')` — ONE helper mirroring the client's own, because a judgement call per site
+// is how the wave-10 attempt (drop the article on speakeasy tiers) failed to generalise: most rungs
+// do NOT begin with "The", and "Panel Van runs $40,000" reads clipped.
+{
+  const bad = [];
+  let names = 0;
+  for (const f of files) {
+    const s = fs.readFileSync(f, 'utf8');
+    for (const m of s.matchAll(/GameError\('[a-z_]+',\s*`([^`]*)`/g)) {
+      const line = () => s.slice(0, m.index).split('\n').length;
+      // The corpus is the SENTENCES this rule governs — the ones already routed through the helper
+      // PLUS the ones still hardcoding an article. Counting violations alone would floor at zero the
+      // moment the tree is clean, so the anti-vacuity check below would be measuring nothing.
+      for (const _ of m[1].matchAll(/\bart\(/g)) names++;
+      for (const d of m[1].matchAll(/(^|[^\w])(the|a|an)\s+\$\{([^}]*)\}/gi)) {
+        if (!/\.(name|title)\b/.test(d[3])) continue;           // not a catalog name — see above
+        names++;
+        bad.push(`${f}:${line()} — ${d[2]} $\{${d[3]}}`);
+      }
+    }
+  }
+  // anti-vacuity, and it fails differently from the money ledger's: that one catches an extractor
+  // that has stopped seeing GameError at all, this one catches a NARROWING that has stopped seeing
+  // interpolated names — after which every article in the tree passes and it reads as a clean sweep.
+  assert(names > 20, `THE ARTICLE LEDGER found only ${names} article+name interpolations — the ` +
+    'narrowing is broken, not the tree. A scan that matches nothing passes for a clean bill of health.');
+  assert.deepEqual(bad, [], 'refusal message(s) hardcoding an article before a catalog NAME. 105 ' +
+    'catalogs carry a rung that begins with "The", so this reads "The The Semi runs $2,000,000" the ' +
+    'day that rung is the one refused. Use `art(x)` / `art(x, \'A\')`:\n   - ' + bad.join('\n   - '));
+  console.log(`✓ all ${names} refusal messages naming a catalog rung let the NAME supply its own article`);
+}
+

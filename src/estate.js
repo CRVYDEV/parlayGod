@@ -4,8 +4,7 @@
 // the vanity `spendOmr` till (account bucket) so the burn discipline lives in one place. Account-level
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
 import { GameError, cleanText, bus } from './game.js';
-import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, hitmanRankOf, sealOf,
-  collectorRankOf, collectionSetsOf, jailed } from './rules.js';
+import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, hitmanRankOf, sealOf, collectorRankOf, collectionSetsOf, jailed, art } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const featureSet = (features) => new Set(String(features || '').split(',').filter(Boolean));
@@ -172,7 +171,7 @@ export async function upgradeEstate(ch, client, h) {
   // THE MADE MAN (v3 §11.2): the UPPER compound wants standing. Status gating status — the estate is
   // display-only, so this gates no earning loop; the lower tiers stay open to everyone.
   if (next.tier >= MADE.ESTATE_TIER && !isMade(h.acct))
-    throw new GameError('made', `The ${next.name} is for made men. Pay your dues first.`);
+    throw new GameError('made', `${art(next.name, 'The')} is for made men. Pay your dues first.`);
   await spendOmr(client, h, next.omr, 'estate:tier');
   await bumpPrestige(client, ch.account_id, next.omr); // THE COLLECTOR legend
   const spent = Number(cur.spent_omr || 0) + next.omr;
@@ -193,13 +192,16 @@ export async function unlockFeature(ch, featureId, client, h) {
   const cur = await loadEstate(client, ch.account_id);
   const set = featureSet(cur.features);
   if (set.has(f.id)) throw new GameError('owned', 'That wing is already built.');
-  if (Number(cur.tier || 0) < f.minTier) throw new GameError('tier', `The ${f.name} needs a ${estateTierOf(f.minTier).name} first.`);
+  if (Number(cur.tier || 0) < f.minTier) throw new GameError('tier', `${art(f.name, 'The')} needs ${art(estateTierOf(f.minTier).name, 'a')} first.`);
   await spendOmr(client, h, f.omr, 'estate:feature');
   await bumpPrestige(client, ch.account_id, f.omr);
   set.add(f.id);
   await upsertEstate(client, ch.account_id, { features: [...set].join(','), spent_omr: Number(cur.spent_omr || 0) + f.omr });
   await h.track(client, ch.account_id, 'estate_feature', { feature: f.id, omr: f.omr });
-  return { ok: true, feature: f.id, name: f.name };
+  // `omr` and `spent` mirror upgradeEstate deliberately: both are $OMR burns against the same
+  // compound, and a wing that names neither while the tier above it names three numbers is the
+  // forgotten-sibling shape. `spent` is the lifetime figure the board calls the estate's value.
+  return { ok: true, feature: f.id, name: f.name, omr: f.omr, spent: Number(cur.spent_omr || 0) + f.omr };
 }
 
 // Name / rename the compound (you can only name a place you own — tier ≥ 1). Burn `estate:name`.
@@ -250,7 +252,7 @@ export async function hireStaff(ch, staffId, client, h) {
   const cur = await loadEstate(client, ch.account_id);
   const r = await resolveWalk(client, ch.account_id, cur, await staffRows(client, ch.account_id));
   if (Number(cur.tier || 0) < s.minTier)
-    throw new GameError('tier', `A ${estateTierOf(s.minTier).name} before a ${s.name} — the help needs somewhere to work.`);
+    throw new GameError('tier', `${art(estateTierOf(s.minTier).name, 'A')} before ${art(s.name, 'a')} — the help needs somewhere to work.`);
   if (r.staff.some((x) => x.staff_id === s.id)) throw new GameError('hired', 'They already run your house.');
   const w = wageState(r.estate, r.staff);
   if (w.owed > 0) throw new GameError('wages', 'Settle the household wages before hiring anyone new.');
@@ -310,7 +312,7 @@ export async function throwGala(ch, client, h) {
   const r = await resolveWalk(client, ch.account_id, cur, await staffRows(client, ch.account_id));
   const tier = Number(r.estate.tier || 0);
   if (tier < ESTATE.GALA_MIN_TIER)
-    throw new GameError('tier', `A ${estateTierOf(ESTATE.GALA_MIN_TIER).name} before you host the city.`);
+    throw new GameError('tier', `${art(estateTierOf(ESTATE.GALA_MIN_TIER).name, 'A')} before you host the city.`);
   if (!r.staff.some((x) => x.staff_id === 'butler'))
     throw new GameError('butler', 'Nobody throws a gala without a Butler running the door.');
   if (wageState(r.estate, r.staff).owed > 0)

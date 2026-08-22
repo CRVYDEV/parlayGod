@@ -46,7 +46,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
   COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, RACKETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS,
-  PEN, HONOR, MARRIAGE, CAMPAIGNS, LIMITED_RUNS } from '../src/rules.js';
+  PEN, HONOR, MARRIAGE, CAMPAIGNS, LIMITED_RUNS, VANITY } from '../src/rules.js';
 import { bumpHonor } from '../src/honor.js';
 import { mintLimitedRun } from '../src/economy.js';
 
@@ -5034,6 +5034,147 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
   }
 }
 
+// ── WAVE 55 — FIVE VERBS, ONE FIELD, AND THE WRONG POCKET.
+// `collected` is sent by five income verbs and only TWO of them pay a POCKET. describe() is a flat
+// chain over field NAMES, so the three FAMILY collects — territory operations, frontier outposts and
+// vassal tribute, every dollar of which lands in the TREASURY — all fell into the personal-business
+// line: a boss banking $40,000 of operations income was told he had "collected" it, when he cannot
+// spend a dollar of it himself. Frontier and vassals additionally shared one `tributes` line further
+// down, so the same figure printed TWICE in one sentence (the wave-36 echo) and a cartel outpost's
+// tribute was called "vassal tribute", which is a different system entirely.
+//
+// The fix is at the SOURCE, on all five: each reply names its own system (`collect: 'business' |
+// 'club' | 'territory' | 'frontier' | 'vassals'`) and each branch keys on that. Absence is not a
+// discriminator — these five were told apart by which fields they happened to omit, which holds
+// exactly until one of them grows a field, and that is how they came to collide.
+//
+// This block drives all five for real and asserts the PROPERTY rather than the wording: a pocket
+// collect must not claim a treasury, a treasury collect must SAY treasury, and no line may print its
+// own figure twice. It also carries wave 55's two silences — an estate wing (up to 1,500 $OMR, and
+// the line named no price) and the vanity plate (12 $OMR, which read "done." outright).
+{
+  const mk55 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=900000000, respect=5000000, energy=300, ' +
+      "health=100, loc='docks' WHERE id=$1", [id]);
+    await app.pool.query('UPDATE account_persistent SET omr=90000 WHERE account_id=' +
+      '(SELECT account_id FROM characters WHERE id=$1)', [id]);
+    return { t, id }; };
+  const drive55 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 55 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return { r, line }; };
+  // the echo test, and the reason it is a COUNT rather than a wording match: the two shapes that
+  // collided both carried the figure, so the failure a player saw was the number stated twice.
+  const times = (line, n) => (String(line).match(new RegExp('\\$' + asMoney(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+
+  // ── THE POCKET. A personal front pays the man, and its line must not have picked up a treasury.
+  const owner55 = await mk55('Wave55 Owner ');
+  const front55 = BUSINESSES[0];
+  const bought55 = await inject('POST', `/v1/business/${front55.kind}/buy`, owner55.t, {});
+  assert.equal(bought55.code, 200, `WAVE 55 could not buy a ${front55.kind} (${JSON.stringify(bought55.body)})`);
+  await app.pool.query("UPDATE businesses SET last_collect_at = now() - interval '6 hours', " +
+    "upkeep_at = now() WHERE character_id=$1", [owner55.id]);
+  const { r: pocketR, line: pocketLine } = await drive55(owner55.t, 'POST', '/v1/business/collect', null, 'collect a personal front');
+  assert(pocketR.body.collected > 0, 'WAVE 55 fixture: the front banked nothing, so the pocket line proves nothing');
+  assert.equal(pocketR.body.collect, 'business', 'the personal front must NAME its system — the five collects are told apart by it');
+  assert(/collected \$/.test(pocketLine) && !/TREASURY/i.test(pocketLine),
+    `a personal front pays the MAN. Got: ${JSON.stringify(pocketLine)}`);
+
+  // ── THE TREASURY, three times. Each must SAY where the money went, and say its figure ONCE.
+  const boss55 = await mk55('Wave55 Boss ');
+  const founded55 = await inject('POST', '/v1/gangs', boss55.t, { name: 'Wave55 Family ' + Math.random().toString(36).slice(2, 6), tag: 'W' + Math.random().toString(36).slice(2, 5).toUpperCase() });
+  assert.equal(founded55.code, 200, `WAVE 55 could not found a family (${JSON.stringify(founded55.body)})`);
+  const gang55 = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [boss55.id])).rows[0].gang_id;
+  await app.pool.query('UPDATE gangs SET treasury=90000000 WHERE id=$1', [gang55]);
+
+  // territory: hold the turf, stand up an operation, let a day run.
+  const dist55 = DISTRICTS[0].id;
+  await app.pool.query('UPDATE districts SET holder_gang=$2 WHERE id=$1', [dist55, gang55]);
+  const est55 = await inject('POST', `/v1/territory/${dist55}/establish`, boss55.t, { kind: 'numbers' });
+  assert.equal(est55.code, 200, `WAVE 55 could not establish an operation (${JSON.stringify(est55.body)})`);
+  await app.pool.query("UPDATE territory_rackets SET last_income_at = now() - interval '10 hours', " +
+    'upkeep_at = now(), scrutiny = 0 WHERE district_id=$1', [dist55]);
+  const { r: terrR, line: terrLine } = await drive55(boss55.t, 'POST', '/v1/territory/collect', null, 'collect the family operations');
+  assert(terrR.body.collected > 0, 'WAVE 55 fixture: the operation banked nothing, so the treasury line proves nothing');
+  assert.equal(terrR.body.collect, 'territory', 'the operations collect must NAME its system');
+  assert(/TREASURY/i.test(terrLine),
+    `family operations pay the TREASURY, not the man — a boss can bank it and still not spend a dollar ` +
+    `of it himself, and the line is where he learns that. Got: ${JSON.stringify(terrLine)}`);
+  assert.equal(times(terrLine, terrR.body.collected), 1,
+    `one collect, one figure. Got: ${JSON.stringify(terrLine)}`);
+
+  // frontier: a held cartel outpost, tribute accrued. Seeded, because routing an apex outfit is a
+  // whole co-op raid and what is under test is the LINE, not the rout.
+  const outfit55 = WORLD_NPCS[0].id;
+  await app.pool.query('INSERT INTO world_npcs (npc_id, strength, held_by_gang, tribute_at) ' +
+    "VALUES ($1, 0, $2, now() - interval '20 hours') ON CONFLICT (npc_id) DO UPDATE SET " +
+    "held_by_gang=$2, tribute_at = now() - interval '20 hours'", [outfit55, gang55]);
+  const { r: frontR, line: frontLine } = await drive55(boss55.t, 'POST', '/v1/world/collect', null, 'collect frontier tribute');
+  assert(frontR.body.collected > 0, 'WAVE 55 fixture: no tribute owed, so the frontier line proves nothing');
+  assert.equal(frontR.body.collect, 'frontier', 'the frontier collect must NAME its system');
+  assert(/TREASURY/i.test(frontLine) && /frontier/i.test(frontLine) && !/vassal/i.test(frontLine),
+    `a cartel OUTPOST's tribute is not "vassal tribute" — that is a different system, and the two ` +
+    `shared one line. Got: ${JSON.stringify(frontLine)}`);
+  assert.equal(times(frontLine, frontR.body.collected), 1,
+    `THE ECHO: frontier used to hit the pocket line AND a shared tributes line, printing its figure ` +
+    `twice in one sentence. Got: ${JSON.stringify(frontLine)}`);
+
+  // vassals: a conquered NPC family. Seeded for the same reason.
+  const vassalId = 'w55vassal' + Math.random().toString(36).slice(2, 6);
+  await app.pool.query('INSERT INTO gangs (id, name, tag, npc_flag, held_by_gang, tribute_at, treasury) ' +
+    "VALUES ($1, $2, $3, true, $4, now() - interval '20 hours', 0)",
+    [vassalId, 'W55 Vassals ' + vassalId.slice(-4), 'V' + vassalId.slice(-3).toUpperCase(), gang55]);
+  const { r: vasR, line: vasLine } = await drive55(boss55.t, 'POST', '/v1/npcfamily/collect', null, 'collect vassal tribute');
+  assert(vasR.body.collected > 0, 'WAVE 55 fixture: no vassal tribute owed, so this line proves nothing');
+  assert.equal(vasR.body.collect, 'vassals', 'the vassal collect must NAME its system');
+  assert(/TREASURY/i.test(vasLine),
+    `vassal tribute lands in the TREASURY. Got: ${JSON.stringify(vasLine)}`);
+  assert.equal(times(vasLine, vasR.body.collected), 1,
+    `THE ECHO: vassals hit BOTH the new treasury line and the old shared one. Got: ${JSON.stringify(vasLine)}`);
+
+  // ── THE ESTATE WING. A $OMR burn that named its wing and no price, three lines from a tier line
+  // that names three numbers — the forgotten-sibling shape.
+  const heir55 = await mk55('Wave55 Heir ');
+  const wing55 = ESTATE.FEATURES.slice().sort((a, b) => (a.minTier || 1) - (b.minTier || 1) || a.omr - b.omr)[0];
+  assert(wing55, 'WAVE 55: no estate wing in the catalog — this assertion would skip in silence');
+  // wings are gated on the compound's TIER, so climb to the cheapest one's floor first. The ladder
+  // is sequential, so this is one call per rung — and it must SUCCEED, or the wing below skips and
+  // reads on the summary line as covered.
+  for (let tier = 1; tier <= (wing55.minTier || 1); tier++) {
+    const up = await inject('POST', '/v1/estate/upgrade', heir55.t, {});
+    assert.equal(up.code, 200, `WAVE 55 could not climb to estate tier ${tier} (${JSON.stringify(up.body)})`);
+  }
+  const { r: wingR, line: wingLine } = await drive55(heir55.t, 'POST', `/v1/estate/feature/${wing55.id}`, null, 'build an estate wing');
+  assert(wingR.body.omr > 0, `WAVE 55: the server sent no price for the ${wing55.name} — the line cannot ` +
+    'name what was never returned, and an assertion built off an absent figure matches anything');
+  assert(new RegExp(asMoney(wingR.body.omr).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' \\$OMR').test(wingLine),
+    `a wing is a $OMR burn and the line must say what it cost. Got: ${JSON.stringify(wingLine)}`);
+
+  // ── THE VANITY PLATE. It read "done." — 12 $OMR, and describe() has no handle on the garage, so
+  // the CAR's name has to ride with the reply (h.owned.cars holds RAW rows, so it is `model_id`).
+  const driver55 = await mk55('Wave55 Driver ');
+  const carModel = CARS[0].id;
+  const carId55 = 'w55car' + Math.random().toString(36).slice(2, 8);
+  await app.pool.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ($1,$2,$3,$4,0)',
+    [carId55, driver55.id, carModel, TRIMS[0].id]);
+  const { r: plateR, line: plateLine } = await drive55(driver55.t, 'POST', `/v1/vanity/plate/${carId55}`, { plate: 'SIX GUN' }, 'engrave a vanity plate');
+  assert.equal(plateR.body.car, CARS[0].name,
+    `WAVE 55: the plate reply must name the CAR — describe() sees a carId and nothing that can turn ` +
+    `one into iron, and reading the VIEW's \`model\` instead of the raw \`model_id\` degrades this to ` +
+    `null silently, which is the class this reply exists to close. Got: ${JSON.stringify(plateR.body.car)}`);
+  assert(plateLine.includes('SIX GUN') && plateLine.includes(CARS[0].name) &&
+    new RegExp(asMoney(VANITY.PLATE_OMR) + ' \\$OMR').test(plateLine),
+    `the plate line must name the plate, the iron it went on, and what it cost. Got: ${JSON.stringify(plateLine)}`);
+}
+
 const describedCount = described;
 assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
@@ -5075,6 +5216,177 @@ assert.equal(dep.code, 200, `the terms check could not bank $100 on a fresh char
 assert.match(String(describeFn(dep.body, 200)), /transit/i,
   'a deposit must say the money rides IN TRANSIT and can be looted until it clears — that is a TERM, not flavour, ' +
   'and it is the reason this ledger exists');
+
+// ── WAVE 56: THE MISSION LADDER READ AS A TITLE BEING STRIPPED. Driving the undriven routes found
+// the byte-shape collision class at its widest yet. `doMission` answers `title: m.title || null`,
+// and 27 of the 36 missions carry NO title — so three claims in four fell into describe()'s vanity
+// title-CLEAR branch and read "title dropped — just your name from here": the OPPOSITE of what
+// happened, at the moment the game paid the biggest respect award it has, and discarding the cash,
+// the $OMR (one of only two ways to earn it) and — on the Dockside Heist — the mint credit that IS
+// the free path to getting made. The nine that DO carry a title reported the title alone and threw
+// the pay away. Fixed at the SOURCE: the reply names its own system (`mission: {id, name}`), which
+// is what a discriminator has to be — absence held only until this reply needed a marker.
+//
+// With it, the freight rail into a monument: the server CLAMPS the units it takes to what the wall
+// still needs, and the line read "1 units of freight" — the wrong plural, and naming neither which
+// line left the trunk nor which of several goods it was. Every other freight line in the game names
+// the good; this one now carries `good` and reads it through goodName.
+{
+  const mtok = (await inject('POST', '/v1/auth/guest')).body.token;
+  await inject('POST', '/v1/character', mtok, { name: 'Wave56 ' + Math.random().toString(36).slice(2, 6) });
+  const mid = (await inject('GET', '/v1/me', mtok)).body.character.id;
+  const cat56 = (await inject('GET', '/v1/rules', mtok)).body;
+  const gun56 = (cat56.guns || []).slice().sort((a, b) => b.fp - a.fp)[0];
+  assert(gun56, 'WAVE 56: no gun catalog — the fp-gated missions could not be reached');
+  await app.pool.query('INSERT INTO character_guns (character_id, gun_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [mid, gun56.id]);
+  await app.pool.query('UPDATE characters SET gun=$2, cash=900000000, respect=5000000, muscle=99, ' +
+    "cunning=99, speed=99, energy=300, health=100, loc='docks' WHERE id=$1", [mid, gun56.id]);
+  const claim56 = async (id) => {
+    await app.pool.query('UPDATE characters SET mission_at=NULL WHERE id=$1', [mid]);
+    const r = await inject('POST', `/v1/missions/${id}`, mtok, {});
+    assert.equal(r.code, 200, `WAVE 56 could not claim ${id} (${JSON.stringify(r.body)}) — fix the fixture ` +
+      'rather than letting it skip, because a skipped claim reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(`/v1/missions/${id}`, line);
+    return { r, line };
+  };
+
+  // THE PRECONDITION, asserted rather than assumed: this block is only about a collision that needs
+  // an UNTITLED mission, so if the catalog ever carries a title on every rung the check below would
+  // pass while proving nothing.
+  const cats = (cat56.missions || []);
+  const untitled = cats.find((m) => m.id === 'm1');
+  assert(untitled && !untitled.title, 'WAVE 56: m1 is expected to carry NO title — that is the case the collision needed');
+
+  const one = await claim56('m1');
+  assert(!/title dropped/i.test(one.line),
+    'WAVE 56: an untitled mission must not read as a title being STRIPPED — 27 of 36 rungs carry no ' +
+    `title, so this was three claims in four telling a player their name was taken as they were paid. Got: ${JSON.stringify(one.line)}`);
+  assert(one.r.body.mission && one.r.body.mission.name,
+    'WAVE 56: the mission reply must NAME its own system — absence is not a discriminator, and the ' +
+    'vanity title branch claimed this reply only because it had no marker of its own');
+  assert(one.line.includes(one.r.body.mission.name),
+    `WAVE 56: the line must name the job it just paid for. Got: ${JSON.stringify(one.line)}`);
+  // asserted against what the SERVER sent, never a literal — the pay is level-scaled and a lever moves it
+  assert(one.line.replace(/,/g, '').includes(String(one.r.body.reward.cash)),
+    `WAVE 56: the line must name what the mission PAID. Got: ${JSON.stringify(one.line)}`);
+
+  // THE DOCKSIDE HEIST — the rung the coach names as the free path to getting made. It pays $OMR
+  // AND a mint credit, and both were being discarded. The account is fresh, so the credit is live.
+  const dock = cats.find((m) => m.reward && m.reward.mintCredit);
+  assert(dock, 'WAVE 56: no mission grants a mint credit — the free-path assertion would be vacuous');
+  const four = await claim56(dock.id);
+  assert(four.r.body.reward.mintCredit > 0,
+    'WAVE 56 fixture: the account is already minted, so the mint-credit half of this line proves nothing');
+  assert(four.r.body.reward.omr > 0, 'WAVE 56 fixture: this rung paid no $OMR, so that half proves nothing');
+  assert(/mint credit/i.test(four.line) && /\$OMR/.test(four.line),
+    'WAVE 56: the Dockside Heist pays $OMR and the mint credit that is the free path to getting made — ' +
+    `both have to reach the player. Got: ${JSON.stringify(four.line)}`);
+
+  // A TITLED rung: the title was the ONE thing the old branch got right, so it must survive the fix,
+  // and the pay it used to throw away must arrive with it.
+  // `/v1/rules.missions` deliberately does not publish `title` (it is the reward, not the brief), so
+  // the precondition comes from the SERVER'S OWN REPLY rather than the catalog: claim the rung and
+  // assert it really carried one, or this half would prove nothing about a titled claim.
+  const five = await claim56('m5');
+  assert(five.r.body.title,
+    'WAVE 56 fixture: m5 was expected to award a title — without one, the titled half of this ' +
+    'collision is untested and would pass in silence');
+  assert(five.line.includes(five.r.body.title),
+    `WAVE 56: a titled rung must still name the title. Got: ${JSON.stringify(five.line)}`);
+  assert(/respect/i.test(five.line),
+    'WAVE 56: the nine titled rungs reported the title ALONE and discarded the pay — the biggest ' +
+    `respect award in the game went unmentioned. Got: ${JSON.stringify(five.line)}`);
+
+  // THE FREIGHT RAIL into a monument.
+  const good56 = (cat56.goods || [])[0];
+  assert(good56, 'WAVE 56: no goods catalog — the freight line could not be driven');
+  await app.pool.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,50) ' +
+    'ON CONFLICT (character_id, good_id) DO UPDATE SET qty=50', [mid, good56.id]);
+  const mega = await inject('POST', '/v1/megaproject/goods', mtok, { goodId: good56.id, qty: 3 });
+  assert.equal(mega.code, 200, `WAVE 56 could not lay freight into the wall (${JSON.stringify(mega.body)})`);
+  described++;
+  const megaLine = String(describeFn(mega.body, 200));
+  said.set('/v1/megaproject/goods', megaLine);
+  assert(mega.body.good === good56.id,
+    'WAVE 56: the freight reply must carry the good — the server clamps the units it takes, so the ' +
+    'player needs to know WHICH line left the trunk as well as how many');
+  assert(megaLine.includes(good56.name),
+    `WAVE 56: the freight line must name the good rather than "units of freight". Got: ${JSON.stringify(megaLine)}`);
+  assert(!/\bunits of freight\b/.test(megaLine),
+    `WAVE 56: "1 units of freight" was the wrong plural and named nothing. Got: ${JSON.stringify(megaLine)}`);
+}
+
+// ── WAVE 57: "THE THE SEMI IS IN THE YARD." A catalog name may carry its own article — 105 of this
+// game's catalogs hold at least one rung that begins with "The" — so a line written as `the ${name}`
+// doubles it, and it does so on exactly the APEX rung, which is the priciest thing on its screen. The
+// $2,000,000 rig read "the The Semi is in the yard"; the server's own refusals read "The The Semi is
+// for level 42+" and "The The Semi runs $2,000,000".
+//
+// It survived every earlier wave for the recorded reason: the ledger DOES drive the rig — with the
+// Panel Van, the one rung that cannot show the bug. A driven route is not a read route if the fixture
+// picks the case that reads fine either way. So this drives BOTH ends, and the second half is the one
+// that matters: the article must still APPEAR on a name that does not supply its own, or the fix is
+// wave 10's (drop the article outright) which reads clipped everywhere else.
+{
+  const apex = CONVOY.RIGS.filter((r) => /^the\s/i.test(r.name)).slice(-1)[0];
+  const plain = CONVOY.RIGS.filter((r) => !/^the\s/i.test(r.name))[0];
+  // A precondition, not a decoration: with no article-bearing rung in the catalog this whole block
+  // passes over a tree where the bug is fully present, which reads exactly like a clean bill of health.
+  assert(apex && plain, 'WAVE 57: the rig catalog must carry BOTH an article-bearing rung and a plain ' +
+    'one, or neither half of the doubled-article rule is under test');
+
+  const mk57 = async (n) => {
+    const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=900000000, respect=5000000, loc='docks' WHERE id=$1", [id]);
+    return { t, id };
+  };
+  const drive57 = async (t, url, label) => {
+    const r = await inject('POST', url, t, null);
+    assert.equal(r.code, 200, `WAVE 57 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    const line = String(describeFn(r.body, 200));
+    said.set(`${url}#${label}`, line);
+    return { r, line };
+  };
+
+  // ONE rig per character, so the two rungs need two fixtures.
+  const rich = await mk57('Ledger Apex ');
+  const apexDrive = await drive57(rich.t, `/v1/convoy/rig/${apex.id}`, 'buy the apex rig');
+  assert.equal(apexDrive.r.body.name, apex.name,
+    'WAVE 57 fixture: the server did not sell the article-bearing rung, so the doubled article is untested');
+  assert(!/\bthe\s+the\s/i.test(apexDrive.line),
+    `WAVE 57: a name that already carries "The" must not be given a second one — the apex rig read ` +
+    `"the The Semi is in the yard". Got: ${JSON.stringify(apexDrive.line)}`);
+  assert(apexDrive.line.includes(apex.name),
+    `WAVE 57: the line must still NAME the rig. Got: ${JSON.stringify(apexDrive.line)}`);
+
+  const poor = await mk57('Ledger Plain ');
+  const plainDrive = await drive57(poor.t, `/v1/convoy/rig/${plain.id}`, 'buy the plain rig');
+  assert(new RegExp(`\\bthe ${plain.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(plainDrive.line),
+    `WAVE 57: the article must still appear on a name that does NOT supply one — dropping it outright ` +
+    `is the wave-10 fix and reads clipped ("Panel Van is in the yard"). Got: ${JSON.stringify(plainDrive.line)}`);
+
+  // THE SERVER'S OWN REFUSALS, which a player reads far more often than the receipt: describe() shows
+  // body.message first, so these ARE the line. Driven from a fixture that can afford neither.
+  const broke = await mk57('Ledger Broke ');
+  await app.pool.query('UPDATE characters SET cash=100, respect=100 WHERE id=$1', [broke.id]);
+  const lvl = await inject('POST', `/v1/convoy/rig/${apex.id}`, broke.t, null);
+  assert.equal(lvl.body.error, 'level', `WAVE 57 fixture: expected the level refusal (${JSON.stringify(lvl.body)})`);
+  assert(!/\bthe\s+the\s/i.test(lvl.body.message),
+    `WAVE 57: the level refusal doubled the article. Got: ${JSON.stringify(lvl.body.message)}`);
+  await app.pool.query('UPDATE characters SET respect=5000000 WHERE id=$1', [broke.id]);
+  const cash = await inject('POST', `/v1/convoy/rig/${apex.id}`, broke.t, null);
+  assert.equal(cash.body.error, 'cash', `WAVE 57 fixture: expected the cash refusal (${JSON.stringify(cash.body)})`);
+  assert(!/\bthe\s+the\s/i.test(cash.body.message),
+    `WAVE 57: the cash refusal doubled the article. Got: ${JSON.stringify(cash.body.message)}`);
+  assert(cash.body.message.includes(apex.name),
+    `WAVE 57: the refusal must name the rung it refused. Got: ${JSON.stringify(cash.body.message)}`);
+}
 
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
 // every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS

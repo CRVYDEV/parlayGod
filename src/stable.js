@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
-import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized, usd } from './rules.js';
+import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf, jailed, hospitalized, usd, art } from './rules.js';
 
 const stakesMs = () => Number(process.env.STAKES_MS) || STABLE.STAKES.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
 
@@ -46,7 +46,7 @@ export async function buyRacer(ch, kind, name, client, h) {
   if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
   const count = Number((await client.query('SELECT COUNT(*) n FROM racers WHERE character_id=$1', [ch.id])).rows[0].n);
   if (count >= STABLE.STABLE_MAX) throw new GameError('stable_full', `Your stable is full (${STABLE.STABLE_MAX} racers).`);
-  if (Number(ch.cash) < k.cost) throw new GameError('cash', `A ${k.name} runs ${usd(k.cost)}.`);
+  if (Number(ch.cash) < k.cost) throw new GameError('cash', `${art(k.name, 'A')} runs ${usd(k.cost)}.`);
   ch.cash = Number(ch.cash) - k.cost;
   const id = crypto.randomUUID();
   const speed = rand(k.statMin, k.statMax), stamina = rand(k.statMin, k.statMax), heart = rand(k.statMin, k.statMax);
@@ -113,7 +113,7 @@ export async function raceCircuit(ch, racerId, meetId, client, h) {
   if (!meet) throw new GameError('bad_meet', 'No such meet on that card.');
   if (injured(r)) throw new GameError('injured', 'That racer is laid up — let them heal.');
   if (onCooldown(r)) throw new GameError('cooldown', `${r.name} needs to rest before another race.`);
-  if (Number(ch.cash) < meet.fee) throw new GameError('cash', `The ${meet.name} entry runs ${usd(meet.fee)}.`);
+  if (Number(ch.cash) < meet.fee) throw new GameError('cash', `${art(meet.name, 'The')} entry runs ${usd(meet.fee)}.`);
   // the entry fee burns win or lose
   ch.cash = Number(ch.cash) - meet.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -meet.fee, reason: 'stable:fee' });

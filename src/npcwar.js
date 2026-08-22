@@ -359,11 +359,12 @@ export async function collectFamilyTribute(ch, client, h) {
       await client.query('UPDATE gangs SET tribute_at=$2 WHERE id=$1', [r.id, now]);
     }
   }
-  if (total <= 0) return { ok: true, collected: 0, vassals: held.length };
+  // `collect` names the system — see collectBusiness: five verbs send `collected`, only two pay a pocket.
+  if (total <= 0) return { ok: true, collect: 'vassals', collected: 0, vassals: held.length };
   await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, total]);
   await h.ledger(client, { currency: 'cash', amount: total, reason: 'family:tribute', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
-  return { ok: true, collected: total, tributes: collected };
+  return { ok: true, collect: 'vassals', collected: total, tributes: collected };
 }
 
 // a dissolved family drops its conquests — the NPC vassals go unheld (the releaseFrontierHolds twin).
