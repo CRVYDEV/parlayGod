@@ -2243,7 +2243,7 @@ const shieldStats = { routes: 0, markup: 0, wired: 0 };
 // SUPPLIED because describe()'s regimen branch legitimately reads it (hosting it standalone without
 // it reads as a page bug and is a probe bug — that mistake cost a false finding while writing this).
 const rulesBody = (await inject('GET', '/v1/rules', token)).body;
-const describeFn = (() => {
+const DESCRIBE = (() => {
   const L = html.split('\n');
   // Take each helper as a WHOLE DECLARATION rather than a line, or a fixed count of them. All the
   // shapes it must handle are live in the client right now: `esc`/`nth` are one line, `minsTxt` is a
@@ -2302,8 +2302,12 @@ const describeFn = (() => {
   for (const [name, tok] of [['fmt', 'toLocaleString'], ['nth', 'th'], ['minsTxt', 'Math.ceil']])
     assert(helpers[needed.indexOf(name)].includes(tok), `describe() helper ${name} came out truncated (no ${tok})`);
   const src = `((rules) => { ${helpers.join('\n')}\n${L.slice(dStart, dEnd + 1).join('\n')}\n return describe; })`;
-  return vm.runInNewContext(src)(rulesBody);
+  // check 13 needs the SAME describe with its branches instrumented, so the pieces are returned
+  // rather than only the function — a second extraction here would be a second copy of the trap
+  // list above, which is how a copied dependency list goes stale (this file records that happening).
+  return { fn: vm.runInNewContext(src)(rulesBody), helpers, lines: L.slice(dStart, dEnd + 1), dStart, rulesBody };
 })();
+const describeFn = DESCRIBE.fn;
 
 // each entry is a route a player PRESSES (act()/data-do) whose success shape must read as something.
 // Bodies are whatever makes the call succeed for a fresh character; a 4xx is skipped, not asserted —
@@ -5653,6 +5657,209 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
   assert(checked >= 5, `WAVE 60 checked only ${checked} raw-key lines — the fixture stopped driving `
     + 'them, and an undriven row reads on the summary line exactly like a covered one.');
   console.log(`  ✓ wave 60: ${checked} catalog lines name the rung instead of its key`);
+}
+
+// ── check 13: THE COLLISION LEDGER ─────────────────────────────────────────────────────────────
+// The eleventh catalogue-or-declare ledger, over the class this file has fixed BY HAND fifteen times
+// and never swept: describe() is a flat chain over field NAMES, so a reply whose field-set happens to
+// satisfy another system's branch gets that system's line. The failures are FLUENT AND FALSE — a
+// booked title fight read "they call you true now", buying a loan claim read "took over the club —
+// $undefined paid", a rival racket raid read "$undefined out of the war chest" for a bill it never
+// charges — so no silence sweep can see them, and every one was found by a person driving that one
+// route. The rule: run every act()-reachable reply shape through the REAL describe() and record which
+// branch claimed it. A branch claimed by replies from more than one MODULE is either a line the game
+// deliberately shares (declared here, with the property that makes it safe) or a collision.
+//
+// THE CORPUS BOUND IS LOAD-BEARING, and the first cut had none: sweeping every `return {` in src/
+// drags in board rows, mod reads and internal helpers — replies that can never reach describe() at
+// all — and ~40% of the candidates were that noise, which is the state that makes a guard people
+// route around. The bound is decidable: a reply describe() renders is the reply of a route the
+// console POSTs or DELETEs, so the corpus is literals returned by a function CALLED inside a
+// mutating route registration. 508 of 1218 literals; the 710 dropped are exactly the boards.
+//
+// Shapes come from the REAL PARSER (a Proxy global + sentinel values), never a hand-rolled key
+// scanner — the one written first invented keys that no module sends, because it walked template
+// literals naively. Waivers are keyed on the branch's own SOURCE TEXT, never its line number: a
+// line-keyed waiver rots on any edit above it, which this repo has paid for once already.
+{
+  const routeSrc = [...readdirSync('src/routes').map((f) => `src/routes/${f}`), 'src/server.js'];
+  const MUT = new Set();
+  for (const f of routeSrc) {
+    const t = readFileSync(f, 'utf8');
+    for (const m of t.matchAll(/app\.(post|delete)\(\s*'([^']+)'/g)) {
+      let d = 0, end = m.index;
+      for (let j = t.indexOf('(', m.index); j < Math.min(t.length, m.index + 6000); j++) {
+        if (t[j] === '(') d++; else if (t[j] === ')' && --d === 0) { end = j; break; }
+      }
+      for (const c of t.slice(m.index, end).matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) MUT.add(c[1]);
+    }
+  }
+  assert(MUT.size > 200, `the mutating-route scan found only ${MUT.size} handlers — it is broken, not the routes`);
+
+  // top-level function spans by brace matching, so a literal is credited to the function that really
+  // encloses it. The first cut took the nearest PRECEDING declaration and credited replies to inner
+  // helpers (`uid`, `deadlockToRetry`), which dropped 92% of the corpus and every real finding.
+  const spans = (t) => {
+    const out = [];
+    for (const m of t.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)|^(?:export\s+)?const\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?\(/gm)) {
+      const i = t.indexOf('{', m.index); if (i < 0) continue;
+      let d = 0, end = -1;
+      for (let j = i; j < t.length; j++) { if (t[j] === '{') d++; else if (t[j] === '}' && --d === 0) { end = j; break; } }
+      if (end > 0) out.push({ name: m[1] || m[2], start: m.index, end });
+    }
+    return out;
+  };
+  const MARK = Symbol('sentinel');
+  const mk = () => new Proxy(function () {}, {
+    get: (t, k) => (k === MARK ? true : k === Symbol.toPrimitive ? () => 1 : mk()),
+    apply: () => mk(), construct: () => mk(),
+  });
+  const shapeOf = (lit) => {
+    try {
+      const g = new Proxy({}, { has: () => true, get: (t, k) => (k === Symbol.unscopables ? undefined : mk()) });
+      const o = vm.runInNewContext(`with (g) { (${lit}) }`, { g }, { timeout: 300 });
+      if (!o || typeof o !== 'object') return null;
+      const out = {}; for (const k of Object.keys(o)) out[k] = o[k];
+      return out;
+    } catch { return null; }
+  };
+  const isSentinel = (v) => (typeof v === 'function' || (v && typeof v === 'object')) && v[MARK] === true;
+
+  // the same describe(), with every `return` and every `bits.push` reporting which one fired.
+  const hits = [];
+  const dLines = DESCRIBE.lines.map((l, n) => l
+    .replace(/\breturn (?!;)/g, `return __hit(${DESCRIBE.dStart + n}),`)
+    .replace(/\bbits\.push\(/g, `__bp(${DESCRIBE.dStart + n},bits)(`));
+  const traced = vm.runInNewContext(
+    `((rules, __hit, __bp) => { ${DESCRIBE.helpers.join('\n')}\n${dLines.join('\n')}\n return describe; })`,
+  )(DESCRIBE.rulesBody,
+    (n) => { hits.push(n); return undefined; },
+    (n, b) => (...a) => { hits.push(n); return b.push(...a); });
+
+  const files = [...readdirSync('src').filter((f) => f.endsWith('.js')).map((f) => `src/${f}`),
+    ...readdirSync('src/social').map((f) => `src/social/${f}`)];
+  const claims = new Map();   // branch line → module → { at, line }
+  let corpus = 0;
+  for (const f of files) {
+    const base = f.split('/').pop();
+    const t = readFileSync(f, 'utf8');
+    const sp = spans(t);
+    for (const m of t.matchAll(/return\s*\{/g)) {
+      const i = t.indexOf('{', m.index);
+      let d = 0, lit = null;
+      for (let j = i; j < Math.min(t.length, i + 6000); j++) {
+        if (t[j] === '{') d++; else if (t[j] === '}' && --d === 0) { lit = t.slice(i, j + 1); break; }
+      }
+      if (!lit) continue;
+      const fn = (sp.filter((x) => i >= x.start && i <= x.end)[0] || {}).name;
+      if (!fn || !MUT.has(fn)) continue;
+      corpus++;
+      const shape = shapeOf(lit); if (!shape) continue;
+      const keys = Object.keys(shape); if (keys.length < 2) continue;
+      const at = `${base}:${t.slice(0, i).split('\n').length} ${fn}()`;
+      // three sentinel substitutions, because a branch can test the TYPE as well as the presence
+      for (const sent of [1, 'x', [1]]) {
+        const body = {}; for (const k of keys) body[k] = isSentinel(shape[k]) ? sent : shape[k];
+        hits.length = 0;
+        let line; try { line = traced(body); } catch { continue; }
+        for (const h of new Set(hits)) {
+          if (!claims.has(h)) claims.set(h, new Map());
+          if (!claims.get(h).has(base)) claims.get(h).set(base, { at, line });
+        }
+      }
+    }
+  }
+  assert(corpus > 300, `the collision corpus fell to ${corpus} replies — the route-reachability bound `
+    + 'is over-tight and the sweep is measuring almost nothing, which reads exactly like a clean tree');
+  assert(claims.size > 200, `only ${claims.size} describe() branches ever fired — the instrumentation `
+    + 'is broken, not the client');
+
+  // DELIBERATELY SHARED LINES. Each is a decision on the record: the property that makes the line
+  // right for every system that lands on it. A branch NOT in here that two modules reach is either a
+  // new collision or a new shared line — and either way somebody has to say which.
+  const SHARED = new Map([
+    ["return bits.length ? bits.join(' · ')", 'the final catch-all — by design the last resort for every system'],
+    ["if (body.paid > 0 && body.bought === undefined", 'the bare-price catch-all: every obligation that has said nothing else'],
+    ["if (body.cost && body.fixed === undefined", 'the same catch-all on the other field name'],
+    ["return body.collect === 'territory' ?", 'the empty-till family — each collect names its own system in the line'],
+    ["} else if (body.collected && (body.collect === 'business'", 'the pocket collects: the marker enumerates both deliberately'],
+    ['bits.push((body.jailSeconds ?', 'BUSTED is one outcome shared by every crime; the raid adds its own hospital line'],
+    ['bits.push(`${won} ${body.you.score}', 'the score line carries the MARGIN, which is what a manager acts on in any sport'],
+    ["return `${body.op === 'breakout' ?", 'crew disband — each op names itself through `op` (wave 44)'],
+    ['if (body.left === true) return', 'crew leave — same marker, same reason'],
+    ['return body.value >= body.cap', 'the trainer is one man for the fighter and the animal alike'],
+    ['if (body.win === false && body.hospSeconds !== undefined)', 'guards drove you off — the convoy and the port both have guards'],
+    ['if (body && body.hired && body.fee != null) return', "the hired gun is one market; each op sends its own crew/crewMax"],
+    ['if (body.revived) bits.push', 'a revive token absorbs a killing blow the same way in a cell or on the street'],
+    ["if (body.kill) bits.push(`THEY'RE DONE."], // a shank and a shot both end a street
+  ]);
+  const used = new Set();
+  const declared = (src) => { const k = [...SHARED.keys()].find((x) => src.includes(x)); if (k) used.add(k); return !!k; };
+  const bad = [];
+  let sharedSeen = 0;
+  for (const [h, mods] of claims) {
+    if (mods.size < 2) continue;
+    const src = (DESCRIBE.lines[h - DESCRIBE.dStart] || '').trim();
+    if (declared(src)) { sharedSeen++; continue; }
+    bad.push(`\n  ${src.slice(0, 110)}\n    claimed by ${[...mods].map(([m, v]) => `${v.at} → ${JSON.stringify(v.line).slice(0, 70)}`).join('\n                ')}`);
+  }
+  assert(bad.length === 0, 'THE COLLISION LEDGER: a describe() branch is claimed by replies from more '
+    + 'than one system. Either the reply needs a marker naming its OWN system (never the absence of a '
+    + "field — absence holds only until a sibling grows it), or the line is deliberately shared and "
+    + `belongs in SHARED with the reason:${bad.join('')}`);
+  // anti-vacuity, two of them because they fail differently: the first catches a corpus/instrumentation
+  // break (nothing is being compared), the second a SHARED list that has drifted off the branches it
+  // names — a stale key silently stops waiving and a rewritten branch silently stops being governed.
+  const stale = [...SHARED.keys()].filter((k) => !used.has(k));
+  assert(stale.length === 0, `these declarations match no shared branch any more — a rewritten branch `
+    + `silently stops being governed, and a stale key waives nothing:\n  ${stale.join('\n  ')}`);
+  console.log(`  ✓ collision ledger: ${corpus} act()-reachable replies over ${claims.size} describe() `
+    + `branches — ${sharedSeen} deliberately shared, none colliding`);
+}
+
+// ── WAVE 61 — the lines the collision ledger's fixes now produce. The ledger above proves each is
+// claimed by ONE system; these pin what it SAYS, because a marker that routes a reply to a branch
+// saying the wrong thing is the same defect one step later. Synthetic on the exact shapes the
+// servers return (the shapes themselves are what the ledger walks out of src/), because setting up a
+// title bout, a two-family racket raid and a rival's run at sea for one sentence each is a fixture
+// bigger than the wave.
+{
+  const say = (b) => describeFn(b, 200);
+  // the booked card — announce and the accepted callout. `title: true` used to land on VANITY's
+  // title-clear branch and render the boolean: "they call you true now".
+  const bout = say({ ok: true, bout: 'b1', card: 'Kid Malone vs Bo Dunn', titleBout: true, closesSeconds: 1800 });
+  assert(/TITLE FIGHT/.test(bout) && /Kid Malone vs Bo Dunn/.test(bout) && /closes in/i.test(bout),
+    `the accepted callout must name the CARD and when betting closes. Got: ${bout}`);
+  assert(!/they call you/.test(bout), `a booked bout is not a nickname. Got: ${bout}`);
+  assert(/they call you The Undertaker/.test(say({ ok: true, title: 'The Undertaker' })),
+    'the vanity title line still reads for the system it was written for');
+  // buying loan PAPER read as taking over a speakeasy, with $undefined for a price it never sends
+  const paper = say({ ok: true, paper: 'bought', price: 50000, toSeller: 49000, take: 1000, owed: 60000 });
+  assert(/50,000/.test(paper) && /60,000/.test(paper) && !/club/.test(paper) && !/undefined/.test(paper),
+    `buying paper must state what it cost and what the debt now owes YOU. Got: ${paper}`);
+  // the rival racket raid charges no war chest; it read "$undefined out of the war chest"
+  const raid = say({ ok: true, op: 'racket', district: 'docks', win: false, dmg: 12 });
+  assert(!/war chest/.test(raid) && !/undefined/.test(raid) && /12 damage/.test(raid),
+    `a rival racket raid must not bill a war chest it never charges. Got: ${raid}`);
+  assert(/war chest/.test(say({ ok: true, win: false, district: 'docks', dmg: 15, cost: 1200000 })),
+    'the SOV siege — which does charge one — still says so');
+  // piracy fell to the generic WIN, which reads `net`: an $88,000 haul rendered "+$0"
+  const pir = say({ ok: true, op: 'piracy', win: true, take: 88000, route: 'deeprun', routeName: 'The Deep Run' });
+  assert(/88,000/.test(pir) && /The Deep Run/.test(pir) && !/\+\$0\b/.test(pir),
+    `a hijack at sea must state the haul. Got: ${pir}`);
+  // the shared hired-gun line renders crew/crewMax and the heist sent no crewMax
+  const gun = say({ ok: true, id: 'h', job: 'payroll', name: 'Payroll Van', role: 'gun', hired: true, fee: 20000, crew: 2, crewMax: 3, crewNeeded: 1 });
+  assert(/crew 2\/3/.test(gun), `the hired gun states the crew it filled out of. Got: ${gun}`);
+  assert(/crewMax: job\.crew/.test(readFileSync(new URL('../src/heists.js', import.meta.url), 'utf8')),
+    'fillHeist sends crewMax — without it the shared line reads "crew 2/undefined"');
+  // a street race wore a boxing glove (the wave-58 class), and stated its money twice
+  const race = say({ ok: true, game: 'street', win: true, wager: 5000, rake: 250, net: 4750, you: { car: 'x', score: 88 }, them: { score: 80 } });
+  assert(/\u{1F3C1}/u.test(race) && !/\u{1F94A}/u.test(race), `a car race is not a bout. Got: ${race}`);
+  assert(race.match(/4,750/g).length === 1, `the net is stated ONCE, not by every branch that lands. Got: ${race}`);
+  // the club lines hardcoded "the " in front of a name that already carries one (the wave-57 class)
+  const club = say({ ok: true, district: 'neon', paid: 600000, toSeller: 588000, tier: 2, name: 'The Copa' });
+  assert(/over The Copa/.test(club) && !/the The/.test(club), `the article rides with the name. Got: ${club}`);
+  console.log('  ✓ wave 61: eight lines the collision fixes now produce read for their own system');
 }
 
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made

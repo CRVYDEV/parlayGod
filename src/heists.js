@@ -156,7 +156,7 @@ export async function fillHeist(ch, heistId, wantRole, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -HEIST_FILL_FEE, reason: 'heist:hire' });
   await h.track(client, ch.account_id, 'heist_fill', { job: job.id, role });
   return { ok: true, id: heistId, job: job.id, name: job.name, role, hired: true, fee: HEIST_FILL_FEE,
-           crew: members.length + 1, crewNeeded: job.crew - members.length - 1 };
+           crew: members.length + 1, crewMax: job.crew, crewNeeded: job.crew - members.length - 1 };
 }
 
 // LEAVE — a member walks; the LEADER walking disbands the job and takes the stake back whole.

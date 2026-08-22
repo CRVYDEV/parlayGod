@@ -322,7 +322,9 @@ export async function raidRivalRacket(ch, districtId, client, h) {
     ch.health = Math.max(1, Number(ch.health) - CONSTANTS.TERRITORY_RIVAL_FAIL_DMG);
     bus.emit(`gang:${r.owner_gang}`, { type: 'racket_defended', district: districtId });
     await h.track(client, ch.account_id, 'territory_raid', { district: districtId, win: false });
-    return { ok: true, district: districtId, win: false, dmg: CONSTANTS.TERRITORY_RIVAL_FAIL_DMG };
+    // `op` names the system: without it this read as a SOV SIEGE loss — "$undefined out of the war chest",
+    // a bill this raid never charges.
+    return { ok: true, op: 'racket', district: districtId, win: false, dmg: CONSTANTS.TERRITORY_RIVAL_FAIL_DMG };
   }
   const cut = Math.floor(pending * CONSTANTS.TERRITORY_RIVAL_CUT_BPS / 10000);
   // advance the owner's clock so their remaining pending = pending − cut (the shakedown/convoy pattern)
@@ -334,7 +336,7 @@ export async function raidRivalRacket(ch, districtId, client, h) {
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + cut;
   bus.emit(`gang:${r.owner_gang}`, { type: 'racket_raided', district: districtId, lost: cut });
   await h.track(client, ch.account_id, 'territory_raid', { district: districtId, win: true, cut });
-  return { ok: true, district: districtId, win: true, cut };
+  return { ok: true, op: 'racket', district: districtId, win: true, cut };
 }
 
 // ── STEP FIVE — RACKET SPECIALISTS + SPECIAL OPERATIONS ──

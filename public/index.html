@@ -2334,9 +2334,16 @@
       return body.razed
         ? `\u{1F3F0} the walls on ${$dist(body.district)} are RAZED — $${fmt(body.cost)} out of the war chest, +${body.sovPoints} sovereignty. They rebuild from nothing.`
         : `\u{1F3F0} you breached ${$dist(body.district)} — knocked to tier ${body.newTier} for $${fmt(body.cost)}, +${body.sovPoints} sovereignty.`;
-    if (body && body.ok && body.win === false && body.district && body.dmg !== undefined)
+    // scoped on `cost`: the TERRITORY rival raid sends the same {win:false, district, dmg} shape and
+    // charges no war chest, so it read "$undefined out of the war chest" — a bill it never sends.
+    if (body && body.ok && body.win === false && body.district && body.dmg !== undefined && body.cost !== undefined)
       return `\u{1F6E1} the walls on ${$dist(body.district)} held — $${fmt(body.cost)} out of the war chest and you took ${body.dmg} damage. `
         + `Your family can't move on them again today.`;
+    // THE RIVAL RAID — muscle in on another family's operation. Its own line, or it reads as a siege.
+    if (body && body.ok && body.op === 'racket' && body.district)
+      return body.win
+        ? `\u{1F4B0} muscled in on ${$dist(body.district)} — $${fmt(body.cut)} of their take into your family's treasury. They're on alert now.`
+        : `their crew ran you off ${$dist(body.district)} — you took ${body.dmg} damage and nothing came out of the till.`;
     if (body && body.ok && body.against && body.needed !== undefined)
       return `\u{2694} the coalition against ${txt(body.against)} is open — ${body.needed} families in and it arms: half the war chest and a cheaper price on their ground.`;
     if (body && body.ok && body.members !== undefined && body.armed !== undefined)
@@ -2732,6 +2739,11 @@
         body.title ? `they call you ${txt(body.title)} now` : null].filter(Boolean).join(' · ');
       return `\u{1F396} ${txt(body.mission.name)} — ${paid || 'done'}${body.nextMissionSeconds ? ` · next job in ${minsTxt(body.nextMissionSeconds)}` : ''}`;
     }
+    // THE CARD IS BOOKED — announce and the accepted callout both land here. The accepted callout used
+    // to send `title: true`, which the vanity title-clear branch below claimed ("they call you true now").
+    if (body && body.ok && body.bout && body.card)
+      return `\u{1F94A} ${body.titleBout ? 'TITLE FIGHT' : 'the card is booked'} — ${txt(body.card)}. `
+        + `Betting closes in ${minsTxt(body.closesSeconds)}; both fighters are booked until it settles.`;
     if (body && body.ok && 'title' in body && body.tier === undefined)
       return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is ${art(body.name || body.lab, 'a')} now — ${body.cap} units a batch`;
@@ -2766,6 +2778,10 @@
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
+    // hoisted to the head of the accumulator: it was declared 160 lines down, so every branch above
+    // it sat in the TDZ and could not ask whether the money had already been said (the $dist class).
+    // A street race lands the shared score line AND its own checkered line, and both state the net.
+    const saidNet = () => body.net !== undefined && bits.some((b) => b.includes(`$${fmt(Math.abs(body.net))}`));
     // a win/loss response is "specialized" when it carries a game-specific marker — casino (game),
     // races (field/wager), or boxing (opponent/yourFighter/record). The generic WIN line below only
     // fires when NONE of those are present, so casino/race/boxing get exactly their own one-liner
@@ -2777,6 +2793,7 @@
     const spec = body.game || body.field !== undefined || body.wager !== undefined || body.forPinks !== undefined ||
       body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
+      body.op === 'piracy' ||
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     // THE WALLET FORGE — `forged` + `stats` is this reply's own shape (nothing else sends `forged` on an action)
@@ -2866,6 +2883,7 @@
     if ('available' in body && 'optin' in body && 'email' in body) bits.push(!body.optin ? '📭 digest off'
       : body.verified ? "📬 digest on — we'll email you what you missed while you're away"
       : '✉ check your inbox — confirm the address and the digest starts');
+    if (body.op === 'piracy' && body.win === true) bits.push(`\u{1F3F4} took the load off the water — $${fmt(body.take)} off ${art(body.routeName || body.route)}`);
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -2929,7 +2947,7 @@
       // the PvP race sends the same shape but no opponent NAME — say "them" rather than "undefined"
       // ...and the same shape covers three sports, so the ICON follows the game: a greyhound's race
       // came back stamped with a boxing glove, which is the shared-branch cost paid in the wrong unit.
-      const won = body.win ? ((body.game === 'circuit' || body.game === 'race') ? '\u{1F3C1} WON' : '\u{1F94A} WON') : 'lost';
+      const won = body.win ? ((body.game === 'circuit' || body.game === 'race' || body.game === 'street') ? '\u{1F3C1} WON' : '\u{1F94A} WON') : 'lost';
       bits.push(`${won} ${body.you.score}–${body.them.score} vs ${body.them.name || 'them'}${close}${money}`
         + (body.belt ? ' — AND THE BELT' : body.defended ? ' — title DEFENDED' : ''));
     }
@@ -3123,8 +3141,9 @@
     // coin-flip purchase — you could not tell whether one more level would have taken it.
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
       const margin = (body.power !== undefined && body.field !== undefined) ? ` — your ${body.power} vs the field's ${body.field}` : '';
-      bits.push((body.win ? `🏁 took the checkered${margin} — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}`
-                          : `🏁 ate the loss${margin} — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`)
+      const said = saidNet();
+      bits.push((body.win ? `\u{1F3C1} took the checkered${margin}${said ? '' : ` — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}`}`
+                          : `\u{1F3C1} ate the loss${margin}${said ? '' : ` — $${fmt(Math.abs(body.net))}`}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`)
         + (body.nos ? ' · NOS burned' : ''));
     }
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
@@ -3275,13 +3294,13 @@
       body.result === 'win' ? `${body.yourHand} takes it — +$${fmt(body.net)}` :
       `their ${body.theirHand} beat your ${body.yourHand} — −$${fmt(Math.abs(body.net))}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
-    if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
-    if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
+    if (body.paper === 'bought') bits.push(`bought the paper — $${fmt(body.price)} down ($${fmt(body.toSeller)} to the old lender, $${fmt(body.take)} house take). The debt owes YOU $${fmt(body.owed)} now.`);
+    else if (body.toSeller !== undefined) bits.push(`took over ${art(body.name || 'club')} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
+    if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER ${art(body.name || 'club')} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
     // A bout and a race BOTH land the shared score line above, which already states the money — so
     // the result read "+$6,000 · … took $6,000", the same figure twice in one toast. Written as a
     // SCAN of what has already been said rather than a shape test (the heat-echo precedent), so a
     // future branch that mentions the purse cannot reintroduce the echo.
-    const saidNet = () => body.net !== undefined && bits.some((b) => b.includes(`$${fmt(Math.abs(body.net))}`));
     if ((body.opponent !== undefined || body.yourFighter !== undefined) && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourFighter; const m = saidNet() ? '' : ` — ${body.win ? 'took' : 'lost'} $${fmt(Math.abs(body.net))}`; bits.push(`${body.you.name} ${body.win ? 'WINS' : 'dropped it'}${m}${rec ? ` (${rec})` : ''}`); }
     if (body.sire && body.dam && body.speed !== undefined) bits.push(`🐎 ${body.name} is born — out of ${body.dam} by ${body.sire} (speed ${body.speed} / stamina ${body.stamina} / heart ${body.heart})`);
     if (body.stakes && body.form !== undefined && body.racer) bits.push(`${body.racer} is in the stakes (form ${body.form}) — $${fmt(body.buyin)} in, purse $${fmt(body.pool)} (${body.entrants} entered)`);

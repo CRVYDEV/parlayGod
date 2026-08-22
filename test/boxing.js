@@ -276,7 +276,7 @@ await pool.query(`UPDATE fighters SET injured_until=NULL, booked_until=NULL WHER
 await call('POST', `/v1/boxing/callout/${goliath}`, { token: cc.token });
 assert.equal((await call('POST', '/v1/boxing/callout/accept', { token: cc.token })).body.error, 'not_champ', 'only the champion can accept');
 const acc = await call('POST', '/v1/boxing/callout/accept', { token: aa.token });
-assert.equal(acc.code, 200, 'the champ accepts the challenge'); assert.equal(acc.body.title, true, 'it books a TITLE main event');
+assert.equal(acc.code, 200, 'the champ accepts the challenge'); assert.equal(acc.body.titleBout, true, 'it books a TITLE main event'); // titleBout, not title: a bare `title` collided with describe()'s vanity-title branch (the collision ledger)
 const titleBout = acc.body.bout;
 assert.equal((await pool.query('SELECT callout_fighter FROM boxing_title WHERE id=1')).rows[0].callout_fighter, null, 'the callout is consumed into the booked card');
 const meBout = (await call('GET', '/v1/boxing', { token: cc.token })).body.mainEvents.find((m) => m.id === titleBout);
