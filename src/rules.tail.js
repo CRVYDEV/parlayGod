@@ -375,6 +375,17 @@ export const rankIdxOf=(lvl)=>{let i=0;RANKS.forEach((r,j)=>{if(lvl>=r.lvl)i=j;}
 export const cityEventOf=(day)=>CITY_EVENTS[((day%CITY_EVENTS.length)+CITY_EVENTS.length)%CITY_EVENTS.length];
 export const dayOf=(t=Date.now())=>Math.floor(t/86400000);
 
+// AN ARTICLE, WHERE THE NAME MAY ALREADY CARRY ONE. 105 of this game's catalogs hold at least one
+// rung whose name begins with "The" — The Semi, The Compound, The Deep Run, The Volkov Bratva — so a
+// refusal written as `The ${cfg.name} runs …` reads "The The Semi runs $2,000,000" on exactly the
+// apex rung, which is the priciest thing on that screen and therefore the line most worth getting
+// right. Dropping the article instead is the wrong fix and was tried once (wave 10, on the speakeasy
+// tiers): most rungs do NOT begin with "The", and "Panel Van runs $40,000" reads clipped. So the
+// article is applied only when the name does not already supply one — one helper rather than a
+// judgement call per site, or the next catalog that grows a "The …" rung breaks every line naming it.
+// `art(x)` gives "the X"; the caller passes 'a'/'an'/'The' where the sentence wants those instead.
+export const art = (name, a = 'the') => (/^the\s/i.test(String(name ?? '')) ? String(name ?? '') : `${a} ${String(name ?? '')}`);
+
 // MONEY, AS A PLAYER READS IT. A refusal is the most-read line in the game — every time you can't
 // afford something, the server's own sentence is what the client shows (describe() takes body.message
 // first). 158 of them interpolated the raw number, so the retainer read "$150000" and a fighter cost

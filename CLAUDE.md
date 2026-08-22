@@ -16124,6 +16124,49 @@ stretch), the family/commission/law clusters (every refusal reading as a sentenc
 "go there →".
 
 
+**PLAY WAVE 57 — "THE THE SEMI IS IN THE YARD", ON A $2,000,000 PURCHASE AND ITS OWN REFUSAL
+(2026-08-22).** Wave 56 ended by naming the sweep's own root cause — *a route nobody has driven has a
+line nobody has read* — and this wave found the sharper version: **a route the ledger DOES drive, with
+the one rung that cannot show the bug.** The convoy rig has been in the ACTION ledger since wave 45,
+driven with the **Panel Van**; the catalog's apex rung is **The Semi**, and every line naming it
+doubled the article — the $2,000,000 receipt read *"the The Semi is in the yard"*, and the server's own
+refusals read *"The The Semi is for level 42+"* and *"The The Semi runs $2,000,000"*, which is what a
+player actually sees, since `describe()` shows `body.message` FIRST. A driven route is not a read route
+when the fixture picks the case that reads fine either way.
+**IT IS A CLASS, AND THE MEASUREMENT IS WHAT MADE THAT OBVIOUS: 105 of this game's catalogs hold at
+least one rung whose name begins with "The"** — The Compound, The Deep Run, The Syndicate, The Legacy,
+The Gatekeeper, The Gold Cup, The Volkov Bratva. So the question is never "does this catalog have one
+today" but "what happens the day it grows one", and **the public Discord wire was already saying
+"The The Volkov Bratva was routed on the frontier"** on the game's own organic-reach surface. Swept
+both halves: **12 server refusal templates** (convoy ×2, boxing, economy ×2, estate ×3, kitchen ×3,
+port ×2, speakeasy ×2, stable, territory, business ×3, vanity ×2, sov ×2, citywire ×2) and **17 client
+lines**.
+**THE FIX IS ONE HELPER ON EACH SIDE, and dropping the article is the WRONG fix — which is known
+because it was tried.** Wave 10 hit this on the speakeasy tiers and dropped the article there; that
+does not generalise, because most rungs do NOT begin with "The" and *"Panel Van is in the yard"* reads
+clipped. So `art(name)` supplies one only when the name does not (`art(x, 'A')` where the sentence
+wants a different one) — `src/rules.tail.js` beside `usd()`, and MODULE scope on the client, not inside
+`describe()`, because a dozen screens render the same names and a second private copy is how three gate
+predicates ended up with sixty-nine of them.
+**THE GUARD IS THE DURABLE HALF — THE ARTICLE LEDGER** (`test/gates.js`, beside the money ledger and on
+the same corpus): inside a `GameError` message, a hardcoded article before an interpolated
+`.name`/`.title` must go through `art()`. **Narrow on purpose** — a district id, a track word (*"The
+engine is as built as it gets"*), a role id and a money figure all read as an article followed by an
+interpolation and none of them is a name, so a rule wide enough to catch them is a rule people route
+around. **Its anti-vacuity floor had to be rewritten and that is the lesson**: counting VIOLATIONS
+floors at zero the moment the tree is clean, so the check would be measuring nothing forever — the
+corpus is the sentences the rule GOVERNS, i.e. the `art()` calls plus the violations (34 today).
+**Regression: the rig driven for real at BOTH ends**, because the second half is what stops the wave-10
+fix — the article must still APPEAR on a plain name — plus both refusals, with a precondition asserting
+the catalog really carries an article-bearing rung AND a plain one, or the whole block passes over a
+tree where the bug is fully present. Four mutations, each caught at its own named assertion (the client
+helper removed → *"the The Semi is in the yard"*; the server refusal un-arted → caught BOTH by the
+regression and by the ledger, naming the file and line; `art()` reduced to dropping the article → the
+plain-rung assertion; the ledger's narrowing broken → the anti-vacuity floor). One trap re-paid: the
+`next is the ${...}` substitution ate a closing brace and the client stopped PARSING — `node --check`
+on the extracted script after every template-literal edit, for the third time. Driven actions 238 →
+240. Suite green + sim drift-0 + mobile 81/81.
+
 **THE AUDIT PACKET, AND TWO FALSE FACTS IN THE DOCUMENT WHOSE ONLY VALUE IS BEING ACCURATE
 (2026-08-21).** Gate 2 — the third-party review of the contracts AND the off-chain signer — is the one
 outstanding mainnet gate and the one that cannot be patched after the fact, and the scope for it lived

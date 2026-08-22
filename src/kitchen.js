@@ -2,11 +2,7 @@
 // risk, not a recipe. Every formula cites spec §7.10 / prototype v24.
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
-import {
-  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
-  drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
-  makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR,
-  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused, usd } from './rules.js';
+import { DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN, drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf, makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR, labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd, jailed, safeHoused, usd, art } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -22,7 +18,7 @@ export async function buyMakings(ch, drugId, qty, client, h) {
   if (!d) throw new GameError('bad_drug', 'No such line.');
   const n = Math.max(1, Math.floor(Number(qty) || 0));
   if (tradeRankIdx(Number(ch.trade_rep || 0)) < d.unlock)
-    throw new GameError('rank', `The Supplier doesn't show ${d.name} to a ${TRADE_RANKS[tradeRankIdx(Number(ch.trade_rep || 0))].name}. Move more product first.`);
+    throw new GameError('rank', `The Supplier doesn't show ${d.name} to ${art(TRADE_RANKS[tradeRankIdx(Number(ch.trade_rep || 0))].name, 'a')}. Move more product first.`);
   const unit = Math.round(makingsPriceOf(drugId) * (cityEventOf(dayOf()).mkMult || 1));
   const cost = unit * n;
   if (Number(ch.cash) < cost) throw new GameError('cash', `${n} units of makings run ${usd(cost)} right now.`);
@@ -37,8 +33,8 @@ export async function upgradeLab(ch, client, h) {
   const curIdx = ch.lab ? KITCHENS.findIndex((k) => k.id === ch.lab) : -1;
   const next = KITCHENS[curIdx + 1];
   if (!next) throw new GameError('maxed', 'The Cathedral is as high as chemistry goes.');
-  if (Number(ch.cash) < next.cost) throw new GameError('cash', `The ${next.name} runs ${usd(next.cost)}.`);
-  if (Number(h.acct.omr) < (next.omr || 0)) throw new GameError('omr', `The ${next.name} also takes ${next.omr} $OMR.`);
+  if (Number(ch.cash) < next.cost) throw new GameError('cash', `${art(next.name, 'The')} runs ${usd(next.cost)}.`);
+  if (Number(h.acct.omr) < (next.omr || 0)) throw new GameError('omr', `${art(next.name, 'The')} also takes ${next.omr} $OMR.`);
   ch.cash = Number(ch.cash) - next.cost;
   ch.lab = next.id;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: `lab:${next.id}` });
@@ -307,7 +303,7 @@ export async function upgradeModule(ch, modId, client, h) {
   if (!ch.lab) throw new GameError('no_lab', 'Fit a Kitchen before you soup it up.');
   const col = `lab_${modId}`;
   const level = Number(ch[col] || 0);
-  if (level >= KITCHEN.MODULE_MAX) throw new GameError('maxed', `The ${mod.name} is as far as it goes.`);
+  if (level >= KITCHEN.MODULE_MAX) throw new GameError('maxed', `${art(mod.name, 'The')} is as far as it goes.`);
   const labIdx = KITCHENS.findIndex((k) => k.id === ch.lab);
   const { cash, omr } = labModuleCost(modId, level, labIdx);
   if (Number(ch.cash) < cash) throw new GameError('cash', `The next ${mod.name} level runs ${usd(cash)}.`);

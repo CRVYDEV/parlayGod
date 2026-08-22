@@ -5318,6 +5318,76 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
     `WAVE 56: "1 units of freight" was the wrong plural and named nothing. Got: ${JSON.stringify(megaLine)}`);
 }
 
+// ── WAVE 57: "THE THE SEMI IS IN THE YARD." A catalog name may carry its own article — 105 of this
+// game's catalogs hold at least one rung that begins with "The" — so a line written as `the ${name}`
+// doubles it, and it does so on exactly the APEX rung, which is the priciest thing on its screen. The
+// $2,000,000 rig read "the The Semi is in the yard"; the server's own refusals read "The The Semi is
+// for level 42+" and "The The Semi runs $2,000,000".
+//
+// It survived every earlier wave for the recorded reason: the ledger DOES drive the rig — with the
+// Panel Van, the one rung that cannot show the bug. A driven route is not a read route if the fixture
+// picks the case that reads fine either way. So this drives BOTH ends, and the second half is the one
+// that matters: the article must still APPEAR on a name that does not supply its own, or the fix is
+// wave 10's (drop the article outright) which reads clipped everywhere else.
+{
+  const apex = CONVOY.RIGS.filter((r) => /^the\s/i.test(r.name)).slice(-1)[0];
+  const plain = CONVOY.RIGS.filter((r) => !/^the\s/i.test(r.name))[0];
+  // A precondition, not a decoration: with no article-bearing rung in the catalog this whole block
+  // passes over a tree where the bug is fully present, which reads exactly like a clean bill of health.
+  assert(apex && plain, 'WAVE 57: the rig catalog must carry BOTH an article-bearing rung and a plain ' +
+    'one, or neither half of the doubled-article rule is under test');
+
+  const mk57 = async (n) => {
+    const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=900000000, respect=5000000, loc='docks' WHERE id=$1", [id]);
+    return { t, id };
+  };
+  const drive57 = async (t, url, label) => {
+    const r = await inject('POST', url, t, null);
+    assert.equal(r.code, 200, `WAVE 57 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    const line = String(describeFn(r.body, 200));
+    said.set(`${url}#${label}`, line);
+    return { r, line };
+  };
+
+  // ONE rig per character, so the two rungs need two fixtures.
+  const rich = await mk57('Ledger Apex ');
+  const apexDrive = await drive57(rich.t, `/v1/convoy/rig/${apex.id}`, 'buy the apex rig');
+  assert.equal(apexDrive.r.body.name, apex.name,
+    'WAVE 57 fixture: the server did not sell the article-bearing rung, so the doubled article is untested');
+  assert(!/\bthe\s+the\s/i.test(apexDrive.line),
+    `WAVE 57: a name that already carries "The" must not be given a second one — the apex rig read ` +
+    `"the The Semi is in the yard". Got: ${JSON.stringify(apexDrive.line)}`);
+  assert(apexDrive.line.includes(apex.name),
+    `WAVE 57: the line must still NAME the rig. Got: ${JSON.stringify(apexDrive.line)}`);
+
+  const poor = await mk57('Ledger Plain ');
+  const plainDrive = await drive57(poor.t, `/v1/convoy/rig/${plain.id}`, 'buy the plain rig');
+  assert(new RegExp(`\\bthe ${plain.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(plainDrive.line),
+    `WAVE 57: the article must still appear on a name that does NOT supply one — dropping it outright ` +
+    `is the wave-10 fix and reads clipped ("Panel Van is in the yard"). Got: ${JSON.stringify(plainDrive.line)}`);
+
+  // THE SERVER'S OWN REFUSALS, which a player reads far more often than the receipt: describe() shows
+  // body.message first, so these ARE the line. Driven from a fixture that can afford neither.
+  const broke = await mk57('Ledger Broke ');
+  await app.pool.query('UPDATE characters SET cash=100, respect=100 WHERE id=$1', [broke.id]);
+  const lvl = await inject('POST', `/v1/convoy/rig/${apex.id}`, broke.t, null);
+  assert.equal(lvl.body.error, 'level', `WAVE 57 fixture: expected the level refusal (${JSON.stringify(lvl.body)})`);
+  assert(!/\bthe\s+the\s/i.test(lvl.body.message),
+    `WAVE 57: the level refusal doubled the article. Got: ${JSON.stringify(lvl.body.message)}`);
+  await app.pool.query('UPDATE characters SET respect=5000000 WHERE id=$1', [broke.id]);
+  const cash = await inject('POST', `/v1/convoy/rig/${apex.id}`, broke.t, null);
+  assert.equal(cash.body.error, 'cash', `WAVE 57 fixture: expected the cash refusal (${JSON.stringify(cash.body)})`);
+  assert(!/\bthe\s+the\s/i.test(cash.body.message),
+    `WAVE 57: the cash refusal doubled the article. Got: ${JSON.stringify(cash.body.message)}`);
+  assert(cash.body.message.includes(apex.name),
+    `WAVE 57: the refusal must name the rung it refused. Got: ${JSON.stringify(cash.body.message)}`);
+}
+
 // ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
 // every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
 // upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED

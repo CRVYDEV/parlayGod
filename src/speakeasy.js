@@ -5,7 +5,7 @@
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
 import { GameError, bus, skillMult, bumpMastery } from './game.js';
-import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS, isMade , jailed, hospitalized, safeHoused, usd } from './rules.js';
+import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS, isMade, jailed, hospitalized, safeHoused, usd, art } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -146,7 +146,7 @@ export async function upgradeSpeakeasy(ch, client, h) {
   if (raid.raided) return { ok: true, district: row.district_id, raid };
   if (isShut(row)) throw new GameError('shut', 'The place is dark — wait out the shutter before you renovate.');
   const pending = accruedIncome(row);
-  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `The ${next.name} runs ${usd(next.cost)} to build out.`);
+  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `${art(next.name, 'The')} runs ${usd(next.cost)} to build out.`);
   ch.cash = Number(ch.cash) + pending - next.cost;
   // the prestige floor climbs to the new tier (never drops below what rounds/bottles already earned)
   const prestige = Math.max(Number(row.prestige), next.prestige);
@@ -409,7 +409,7 @@ export async function applyDecor(ch, styleId, client, h) {
     const need = styleUnlockOf(style); // a renown threshold → an EARNED style; undefined → a bought (Store) style
     if (need != null) {
       const renown = await renownOfChar(client, ch.id);
-      if (renown < need) throw new GameError('renown', `The ${decorStyleOf(style)} style unlocks at ${need} renown — be seen more.`);
+      if (renown < need) throw new GameError('renown', `${art(decorStyleOf(style), 'The')} style unlocks at ${need} renown — be seen more.`);
     } else {
       const owned = (await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [ch.account_id, style])).rows[0];
       if (!owned) throw new GameError('locked', "You don't own that decor style — buy it in the Store.");

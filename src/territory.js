@@ -8,8 +8,7 @@
 // tradeable-NFT layer (minted_onchain) is dormant/deferred, the M6 pattern.
 import { postPower } from './roster.js';
 import { GameError, bus } from './game.js';
-import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3, jailed, hospitalized, safeHoused, usd } from './rules.js';
+import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost, territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3, jailed, hospitalized, safeHoused, usd, art } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 
@@ -159,7 +158,7 @@ export async function upgradeRacket(ch, districtId, client, h) {
   const next = territoryTierOf(Number(r.tier) + 1);
   if (!next) throw new GameError('maxed', 'That operation already runs at full strength.');
   if (isCold(r)) throw new GameError('cold', 'That operation is dark — pay its pad before you pour money into it.');
-  if (Number(g.treasury) < next.cost) throw new GameError('treasury', `The ${next.name} takes ${usd(next.cost)} from the treasury.`);
+  if (Number(g.treasury) < next.cost) throw new GameError('treasury', `${art(next.name, 'The')} takes ${usd(next.cost)} from the treasury.`);
   // SIGN-OFF Tier 5 (parity with the speakeasy's resolve-raid-before-upgrade fix): upgrading BANKS the
   // pending income, so without this a boss watching the Bureau heat climb could bank the take through an
   // upgrade and never face the crackdown roll that `collectTerritory` runs. Resolve it here on the same

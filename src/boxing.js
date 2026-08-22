@@ -8,7 +8,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
 import { recordEventResult } from './events.js';
-import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx , jailed, hospitalized, usd } from './rules.js';
+import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx, jailed, hospitalized, usd, art } from './rules.js';
 
 const injured = (f) => f.injured_until && new Date(f.injured_until) > new Date();
 const onCooldown = (f) => f.exhib_at && new Date(f.exhib_at) > new Date();
@@ -267,7 +267,7 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
   if (injured(f)) throw new GameError('injured', 'Your fighter is laid up — let them heal.');
   if (booked(f)) throw new GameError('booked', "That fighter is booked on a main event card.");
   if (onCooldown(f)) throw new GameError('cooldown', `${f.name} needs to rest before another exhibition.`);
-  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The ${tier.name} card runs a ${usd(tier.fee)} sanction fee.`);
+  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `${art(tier.name, 'The')} card runs a ${usd(tier.fee)} sanction fee.`);
   // the sanction fee burns win or lose
   ch.cash = Number(ch.cash) - tier.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'boxing:fee' });

@@ -9,6 +9,8 @@
 // names + event the streets feed already shows everyone; it never carries an exact dollar figure (the
 // info-economy rule / the anti-precise-kill-EV rule), so a public channel can't be scanned for wealth.
 
+import { art } from './rules.js';
+
 // The curated dramatic set: streets event type → a formatter over its (public) payload. Anything NOT
 // in this map is silently dropped — the wire is a highlight reel, not the full feed. Each line is
 // deliberately punchy and screenshot-friendly; none references money.
@@ -23,8 +25,8 @@ const WIRE = {
   ticker_ballot: (e) => e.ticker ? (e.decidedBy === 'chamber'
     ? `📈 The Commission set the day's buy: **${e.ticker}** (${e.votes} ${e.votes === 1 ? 'family' : 'families'} voted).`
     : `📈 The chamber was silent — the day's buy defaults to **${e.ticker}**.`) : null,
-  frontier_seized: (e) => e.gang ? `🌆 The **${e.gang}** family routed the ${e.npc} and planted their flag.`
-    : `🌆 The ${e.npc} cartel was routed on the frontier.`,
+  frontier_seized: (e) => e.gang ? `🌆 The **${e.gang}** family routed ${art(e.npc)} and planted their flag.`
+    : `🌆 ${art(e.npc, 'The')} was routed on the frontier.`,
   megaproject_complete: (e) => `🏛️ The city raised **${e.monument}** — its architect: **${e.architect}**. It stands forever.`,
   // THE FIRSTS — the one class of achievement where "somebody else got there" is itself the content:
   // it tells the whole channel a race just ENDED and can never be entered again.

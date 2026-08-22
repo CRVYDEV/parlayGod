@@ -10,7 +10,7 @@
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
 import { GameError, cleanText } from './game.js';
-import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf, carOf } from './rules.js';
+import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf, carOf, art } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
@@ -98,7 +98,7 @@ export async function buySeal(ch, client, h) {
   const next = GANG_SEALS.find((s) => s.tier === Number(g.seal || 0) + 1);
   if (!next) throw new GameError('maxed', 'The family already bears the highest seal there is.');
   if (Number(g.omr_reserve) < next.omr)
-    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+    throw new GameError('reserve', `${art(next.name, 'The')} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, seal = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
   await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'vanity:gang:seal', counterparty: g.id });
   if (h.owned.gang) { h.owned.gang.seal = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }
@@ -120,7 +120,7 @@ export async function buyFoundation(ch, client, h) {
   const next = FOUNDATION.TIERS.find((t) => t.tier === Number(g.foundation || 0) + 1);
   if (!next) throw new GameError('maxed', 'The family is already the highest pillar of the community there is.');
   if (Number(g.omr_reserve) < next.omr)
-    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+    throw new GameError('reserve', `${art(next.name, 'The')} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, foundation = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
   await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'foundation:tier', counterparty: g.id });
   if (h.owned.gang) { h.owned.gang.foundation = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }
